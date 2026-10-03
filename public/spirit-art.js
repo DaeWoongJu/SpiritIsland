@@ -55,46 +55,215 @@ const SpiritArt = (() => {
     beasteyes: (P, R, n, c = '#ff6a2a') => Array.from({ length: n }, () => { const x = 20 + R() * 280; const y = 50 + R() * 90; return `${M.glow(P, x, y, 7, c, 0.7)}<ellipse cx="${x - 5}" cy="${y}" rx="3" ry="2" fill="${c}"/><ellipse cx="${x + 5}" cy="${y}" rx="3" ry="2" fill="${c}"/>`; }).join(''),
   };
 
-  // ───── 정령별 구성 ─────
-  // [하늘 위 색, 하늘 아래 색], 그림 함수
+  // ───── 생물 / 정령 캐릭터 ─────
+  const f1 = (n) => n.toFixed(1);
+  const C = {
+    eyes: (P, x1, y1, x2, y2, r, c) => `${M.glow(P, (x1 + x2) / 2, (y1 + y2) / 2, r * 5, c, 0.45)}<ellipse cx="${x1}" cy="${y1}" rx="${r * 1.3}" ry="${r}" fill="${c}"/><ellipse cx="${x2}" cy="${y2}" rx="${r * 1.3}" ry="${r}" fill="${c}"/><circle cx="${x1}" cy="${y1}" r="${r * 0.35}" fill="#fff"/><circle cx="${x2}" cy="${y2}" r="${r * 0.35}" fill="#fff"/>`,
+    aura: (P, cx, cy, r, c) => M.glow(P, cx, cy, r, c, 0.35),
+
+    /** 날개를 펼친 새: style 'feather' | 'jag'(번개) | 'flame' */
+    bird: (P, { cx, cy, span = 230, c, edge, eye = '#fff7b0', style = 'feather', tail = true }) => {
+      const half = span / 2;
+      const tipX = cx - half; const tipY = cy - span * 0.26;
+      const pts = [];
+      const N = 7;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const x = tipX + (cx - 12 - tipX) * t;
+        const y = tipY + (cy + 18 - tipY) * t + Math.sin(t * Math.PI) * 18;
+        const out = style === 'jag' ? (i % 2 ? 14 : -4) : style === 'flame' ? (i % 2 ? 22 : 0) : 10;
+        pts.push([x, y, out]);
+      }
+      let edgeD = '';
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1]; const [x, y, o] = pts[i];
+        if (style === 'feather') edgeD += `Q${f1((x0 + x) / 2)} ${f1((y0 + y) / 2 + o)} ${f1(x)} ${f1(y)}`;
+        else edgeD += `L${f1((x0 + x) / 2)} ${f1((y0 + y) / 2 + o)}L${f1(x)} ${f1(y)}`;
+      }
+      const wing = `M${cx - 6} ${cy - 4}Q${cx - half * 0.45} ${cy - span * 0.42} ${tipX} ${tipY}${edgeD}Z`;
+      const lines = Array.from({ length: 4 }, (_, i) => { const t = (i + 1) / 5; return `<path d="M${cx - 8} ${cy}Q${f1(cx - half * t * 0.6)} ${f1(cy - 20 - t * 10)} ${f1(cx - half * t)} ${f1(cy - 8 + t * 18)}" stroke="${edge}" stroke-width="1.6" fill="none" opacity=".6"/>`; }).join('');
+      const one = `<path d="${wing}" fill="${c}"/>${lines}`;
+      return `${C.aura(P, cx, cy, span * 0.35, edge)}
+        <g>${one}</g><g transform="translate(${2 * cx} 0) scale(-1 1)">${one}</g>
+        ${tail ? `<path d="M${cx - 10} ${cy + 22}L${cx - 24} ${cy + 58}L${cx} ${cy + 46}L${cx + 24} ${cy + 58}L${cx + 10} ${cy + 22}Z" fill="${c}"/>` : ''}
+        <ellipse cx="${cx}" cy="${cy + 8}" rx="13" ry="26" fill="${c}"/>
+        <circle cx="${cx}" cy="${cy - 22}" r="11" fill="${c}"/>
+        <path d="M${cx - 4} ${cy - 18}L${cx} ${cy - 6}L${cx + 4} ${cy - 18}Z" fill="${edge}"/>
+        ${C.eyes(P, cx - 5, cy - 25, cx + 5, cy - 25, 2.2, eye)}`;
+    },
+
+    /** 옆모습 네발짐승 (오른쪽을 봄) */
+    beast: (P, { cx, base, len = 130, h = 80, c, edge, eye = '#ffd86b', head = 'fox', tail = 'bushy', antlers = false, horns = false, tailColor = null, marks = null }) => {
+      const bx = cx - len * 0.1; const by = base - h * 0.55; const rx = len * 0.38; const ry = h * 0.26;
+      const legW = Math.max(6, len * 0.06);
+      const legs = [-0.7, -0.45, 0.45, 0.7].map((k) => `<rect x="${f1(bx + rx * k - legW / 2)}" y="${f1(by)}" width="${f1(legW)}" height="${f1(base - by)}" rx="${f1(legW / 2)}" fill="${c}"/>`).join('');
+      const hx = bx + rx * 0.95; const hy = by - ry * 0.9;
+      let headSvg = '';
+      const neck = `<path d="M${f1(bx + rx * 0.5)} ${f1(by - ry * 0.5)}L${f1(hx - 6)} ${f1(hy - 4)}L${f1(hx + 10)} ${f1(hy + 8)}L${f1(bx + rx * 0.9)} ${f1(by + ry * 0.3)}Z" fill="${c}"/>`;
+      if (head === 'fox' || head === 'wolf' || head === 'cat') {
+        const snout = head === 'cat' ? 14 : 24;
+        headSvg = `<path d="M${f1(hx - 12)} ${f1(hy)}Q${f1(hx)} ${f1(hy - 16)} ${f1(hx + 12)} ${f1(hy - 6)}L${f1(hx + 12 + snout)} ${f1(hy + 4)}L${f1(hx + 8)} ${f1(hy + 14)}Q${f1(hx - 8)} ${f1(hy + 14)} ${f1(hx - 12)} ${f1(hy)}Z" fill="${c}"/>
+          <path d="M${f1(hx - 8)} ${f1(hy - 6)}L${f1(hx - 6)} ${f1(hy - (head === 'cat' ? 20 : 26))}L${f1(hx + 4)} ${f1(hy - 10)}Z" fill="${c}"/><path d="M${f1(hx + 2)} ${f1(hy - 9)}L${f1(hx + 8)} ${f1(hy - (head === 'cat' ? 22 : 28))}L${f1(hx + 14)} ${f1(hy - 7)}Z" fill="${c}"/>
+          ${C.eyes(P, hx + 6, hy - 1, hx + 6, hy - 1, 2.6, eye)}`;
+      } else if (head === 'stag') {
+        headSvg = `<path d="M${f1(hx - 10)} ${f1(hy)}Q${f1(hx)} ${f1(hy - 12)} ${f1(hx + 10)} ${f1(hy - 4)}L${f1(hx + 26)} ${f1(hy + 10)}L${f1(hx + 18)} ${f1(hy + 16)}Q${f1(hx - 6)} ${f1(hy + 14)} ${f1(hx - 10)} ${f1(hy)}Z" fill="${c}"/>${C.eyes(P, hx + 6, hy, hx + 6, hy, 2.4, eye)}`;
+      } else if (head === 'boar' || head === 'bear') {
+        headSvg = `<path d="M${f1(hx - 16)} ${f1(hy - 6)}Q${f1(hx)} ${f1(hy - 24)} ${f1(hx + 18)} ${f1(hy - 6)}L${f1(hx + 30)} ${f1(hy + 8)}L${f1(hx + 24)} ${f1(hy + 22)}Q${f1(hx)} ${f1(hy + 26)} ${f1(hx - 16)} ${f1(hy + 10)}Z" fill="${c}"/>
+          ${head === 'bear' ? `<circle cx="${f1(hx - 6)}" cy="${f1(hy - 16)}" r="7" fill="${c}"/>` : `<path d="M${f1(hx + 20)} ${f1(hy + 14)}Q${f1(hx + 34)} ${f1(hy + 10)} ${f1(hx + 30)} ${f1(hy - 4)}" stroke="#f3ead6" stroke-width="3.5" fill="none" stroke-linecap="round"/>`}
+          ${C.eyes(P, hx + 8, hy - 2, hx + 8, hy - 2, 3, eye)}`;
+      } else if (head === 'elephant') {
+        headSvg = `<circle cx="${f1(hx + 4)}" cy="${f1(hy + 2)}" r="22" fill="${c}"/><path d="M${f1(hx + 18)} ${f1(hy + 8)}Q${f1(hx + 34)} ${f1(hy + 30)} ${f1(hx + 26)} ${f1(base - 6)}" stroke="${c}" stroke-width="10" fill="none" stroke-linecap="round"/>
+          <ellipse cx="${f1(hx - 8)}" cy="${f1(hy + 4)}" rx="14" ry="20" fill="${edge}" opacity=".35"/><path d="M${f1(hx + 14)} ${f1(hy + 16)}Q${f1(hx + 30)} ${f1(hy + 22)} ${f1(hx + 36)} ${f1(hy + 12)}" stroke="#f3ead6" stroke-width="3" fill="none"/>${C.eyes(P, hx + 10, hy - 4, hx + 10, hy - 4, 2.4, eye)}`;
+      }
+      let ant = '';
+      if (antlers) {
+        const branch = (s) => `<path d="M${f1(hx + s * 2)} ${f1(hy - 8)}L${f1(hx + s * 10)} ${f1(hy - 40)}M${f1(hx + s * 6)} ${f1(hy - 24)}L${f1(hx + s * 20)} ${f1(hy - 34)}M${f1(hx + s * 9)} ${f1(hy - 34)}L${f1(hx + s * 2)} ${f1(hy - 50)}M${f1(hx + s * 10)} ${f1(hy - 40)}L${f1(hx + s * 24)} ${f1(hy - 52)}" stroke="${antlers}" stroke-width="3.5" stroke-linecap="round" fill="none"/>`;
+        ant = branch(1) + branch(-0.6);
+      }
+      if (horns) ant += `<path d="M${f1(hx - 8)} ${f1(hy - 14)}Q${f1(hx - 24)} ${f1(hy - 30)} ${f1(hx - 8)} ${f1(hy - 40)}" stroke="${horns}" stroke-width="6" fill="none" stroke-linecap="round"/>`;
+      const tx = bx - rx * 0.95; const ty = by - ry * 0.3;
+      const tc = tailColor || c;
+      let tailSvg = '';
+      if (tail === 'bushy') tailSvg = `<path d="M${f1(tx + 6)} ${f1(ty)}Q${f1(tx - 40)} ${f1(ty - 10)} ${f1(tx - 46)} ${f1(ty - 40)}Q${f1(tx - 20)} ${f1(ty - 26)} ${f1(tx + 8)} ${f1(ty + 10)}Z" fill="${tc}"/>`;
+      else if (tail === 'flame') tailSvg = `<path d="M${f1(tx + 6)} ${f1(ty)}C${f1(tx - 30)} ${f1(ty + 4)} ${f1(tx - 50)} ${f1(ty - 30)} ${f1(tx - 40)} ${f1(ty - 64)}C${f1(tx - 34)} ${f1(ty - 40)} ${f1(tx - 20)} ${f1(ty - 44)} ${f1(tx - 18)} ${f1(ty - 58)}C${f1(tx - 4)} ${f1(ty - 36)} ${f1(tx + 6)} ${f1(ty - 20)} ${f1(tx + 8)} ${f1(ty + 8)}Z" fill="${tc}"/>${M.glow(P, tx - 26, ty - 30, 24, tc, 0.5)}`;
+      else if (tail === 'thin') tailSvg = `<path d="M${f1(tx + 6)} ${f1(ty)}Q${f1(tx - 30)} ${f1(ty + 4)} ${f1(tx - 34)} ${f1(ty - 26)}" stroke="${tc}" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+      else if (tail === 'long') tailSvg = `<path d="M${f1(tx + 6)} ${f1(ty)}Q${f1(tx - 50)} ${f1(ty + 30)} ${f1(tx - 70)} ${f1(base - 4)}" stroke="${tc}" stroke-width="9" fill="none" stroke-linecap="round"/>`;
+      const markSvg = marks ? `<g fill="${marks}" opacity=".8">${[-0.4, 0, 0.4].map((k) => `<path d="M${f1(bx + rx * k - 4)} ${f1(by - ry * 0.8)}q4 10 0 18q8 -9 0 -18z"/>`).join('')}</g>` : '';
+      return `${C.aura(P, bx, by, len * 0.55, edge)}${tailSvg}${legs}<ellipse cx="${f1(bx)}" cy="${f1(by)}" rx="${f1(rx)}" ry="${f1(ry)}" fill="${c}"/>${markSvg}<path d="M${f1(bx - rx * 0.8)} ${f1(by - ry * 0.6)}Q${f1(bx)} ${f1(by - ry * 1.2)} ${f1(bx + rx * 0.7)} ${f1(by - ry * 0.7)}" stroke="${edge}" stroke-width="2" fill="none" opacity=".7"/>${neck}${ant}${headSvg}`;
+    },
+
+    /** 정령 인간형: lower 'robe' | 'tornado' | 'roots' | 'mist', arms 'up'|'out'|'down', item 'spear'|'lantern'|'flame'|'staff'|null, crown */
+    spirit: (P, { cx, base = 178, h = 140, c, edge, eye = '#fff', lower = 'robe', arms = 'out', item = null, crown = null, itemColor = '#ffd86b', bulky = false, marks = null }) => {
+      const top = base - h; const headR = h * (bulky ? 0.11 : 0.085); const hy = top + headR; const sh = hy + headR + h * 0.05;
+      const w = h * (bulky ? 0.32 : 0.2);
+      let body;
+      if (lower === 'tornado') body = `<path d="M${f1(cx - w)} ${f1(sh)}Q${f1(cx)} ${f1(sh - 8)} ${f1(cx + w)} ${f1(sh)}L${f1(cx + w * 0.7)} ${f1(sh + h * 0.3)}Q${f1(cx + w * 1.4)} ${f1(sh + h * 0.45)} ${f1(cx + 4)} ${f1(base)}Q${f1(cx - w * 1.5)} ${f1(sh + h * 0.5)} ${f1(cx - w * 0.7)} ${f1(sh + h * 0.3)}Z" fill="${c}"/>${M.swirl(P, cx, base - 30, 34, edge, 0.6)}`;
+      else if (lower === 'roots') body = `<path d="M${f1(cx - w)} ${f1(sh)}L${f1(cx + w)} ${f1(sh)}L${f1(cx + w * 0.8)} ${f1(base - 20)}L${f1(cx + w * 1.8)} ${f1(base)}L${f1(cx + w * 0.3)} ${f1(base - 10)}L${f1(cx)} ${f1(base + 2)}L${f1(cx - w * 0.3)} ${f1(base - 10)}L${f1(cx - w * 1.8)} ${f1(base)}L${f1(cx - w * 0.8)} ${f1(base - 20)}Z" fill="${c}"/>`;
+      else if (lower === 'mist') body = `<path d="M${f1(cx - w)} ${f1(sh)}Q${f1(cx)} ${f1(sh - 8)} ${f1(cx + w)} ${f1(sh)}Q${f1(cx + w * 1.6)} ${f1(sh + h * 0.4)} ${f1(cx + w * 0.9)} ${f1(base - 26)}Q${f1(cx + w * 0.4)} ${f1(base - 6)} ${f1(cx)} ${f1(base - 30)}Q${f1(cx - w * 0.4)} ${f1(base - 4)} ${f1(cx - w * 0.9)} ${f1(base - 24)}Q${f1(cx - w * 1.6)} ${f1(sh + h * 0.4)} ${f1(cx - w)} ${f1(sh)}Z" fill="${c}" opacity=".9"/>`;
+      else body = `<path d="M${f1(cx - w)} ${f1(sh)}Q${f1(cx)} ${f1(sh - 8)} ${f1(cx + w)} ${f1(sh)}L${f1(cx + w * 1.5)} ${f1(base)}Q${f1(cx + w * 0.75)} ${f1(base - 8)} ${f1(cx)} ${f1(base)}Q${f1(cx - w * 0.75)} ${f1(base - 8)} ${f1(cx - w * 1.5)} ${f1(base)}Z" fill="${c}"/>`;
+      const armW = bulky ? 12 : 7;
+      const handL = arms === 'up' ? [cx - w * 2.2, sh - h * 0.3] : arms === 'down' ? [cx - w * 1.4, sh + h * 0.38] : [cx - w * 2.4, sh + h * 0.1];
+      const handR = arms === 'up' ? [cx + w * 2.2, sh - h * 0.3] : arms === 'down' ? [cx + w * 1.4, sh + h * 0.38] : [cx + w * 2.4, sh + h * 0.1];
+      const arm = (hand, s) => `<path d="M${f1(cx + s * w * 0.8)} ${f1(sh + 4)}Q${f1((cx + hand[0]) / 2 + s * 6)} ${f1(sh + 12)} ${f1(hand[0])} ${f1(hand[1])}" stroke="${c}" stroke-width="${armW}" fill="none" stroke-linecap="round"/>`;
+      let itemSvg = '';
+      const [ix, iy] = handR;
+      if (item === 'spear') itemSvg = `<path d="M${f1(ix)} ${f1(iy - 60)}L${f1(ix)} ${f1(iy + 70)}" stroke="#3a2a18" stroke-width="3"/><path d="M${f1(ix - 5)} ${f1(iy - 58)}L${f1(ix)} ${f1(iy - 76)}L${f1(ix + 5)} ${f1(iy - 58)}Z" fill="${itemColor}"/>${M.glow(P, ix, iy - 66, 12, itemColor, 0.7)}`;
+      else if (item === 'staff') itemSvg = `<path d="M${f1(ix)} ${f1(iy - 50)}L${f1(ix)} ${f1(base)}" stroke="#4a3420" stroke-width="4"/>${M.glow(P, ix, iy - 54, 14, itemColor, 0.8)}<circle cx="${f1(ix)}" cy="${f1(iy - 54)}" r="5" fill="${itemColor}"/>`;
+      else if (item === 'lantern') itemSvg = `<path d="M${f1(ix)} ${f1(iy)}L${f1(ix)} ${f1(iy + 14)}" stroke="#3a2a18" stroke-width="2"/>${M.glow(P, ix, iy + 22, 20, itemColor, 0.8)}<rect x="${f1(ix - 6)}" y="${f1(iy + 14)}" width="12" height="16" rx="3" fill="${itemColor}"/>`;
+      else if (item === 'flame') itemSvg = M.flame(P, ix, iy - 2, 0.5, itemColor, '#fff3c0');
+      let crownSvg = '';
+      if (crown === 'antlers') crownSvg = `<path d="M${f1(cx - 4)} ${f1(top + 4)}L${f1(cx - 16)} ${f1(top - 22)}M${f1(cx - 10)} ${f1(top - 10)}L${f1(cx - 24)} ${f1(top - 12)}M${f1(cx + 4)} ${f1(top + 4)}L${f1(cx + 16)} ${f1(top - 22)}M${f1(cx + 10)} ${f1(top - 10)}L${f1(cx + 24)} ${f1(top - 12)}" stroke="${edge}" stroke-width="3" stroke-linecap="round"/>`;
+      else if (crown === 'flame') crownSvg = M.flame(P, cx, top + 6, 0.55, itemColor, '#fff3c0');
+      else if (crown === 'leaves') crownSvg = `<g fill="${edge}">${[-2, -1, 0, 1, 2].map((k) => `<ellipse cx="${f1(cx + k * 9)}" cy="${f1(top - 2 - (2 - Math.abs(k)) * 4)}" rx="5" ry="11" transform="rotate(${k * 22} ${f1(cx + k * 9)} ${f1(top + 4)})"/>`).join('')}</g>`;
+      else if (crown === 'stars') crownSvg = [-1, 0, 1].map((k) => `${M.glow(P, cx + k * 14, top - 8 - (k === 0 ? 6 : 0), 6, '#fff', 0.8)}<path d="M${f1(cx + k * 14)} ${f1(top - 16 - (k === 0 ? 6 : 0))}l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z" fill="#fff"/>`).join('');
+      else if (crown === 'horns') crownSvg = `<path d="M${f1(cx - 8)} ${f1(top + 6)}Q${f1(cx - 26)} ${f1(top - 4)} ${f1(cx - 20)} ${f1(top - 22)}M${f1(cx + 8)} ${f1(top + 6)}Q${f1(cx + 26)} ${f1(top - 4)} ${f1(cx + 20)} ${f1(top - 22)}" stroke="${edge}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+      else if (crown === 'halo') crownSvg = `<ellipse cx="${cx}" cy="${f1(top - 4)}" rx="${f1(headR * 1.6)}" ry="${f1(headR * 0.45)}" fill="none" stroke="${edge}" stroke-width="2.5"/>`;
+      const markSvg = marks ? `<g stroke="${marks}" stroke-width="2" fill="none" opacity=".8"><path d="M${f1(cx - w * 0.5)} ${f1(sh + 14)}q${f1(w * 0.5)} 12 ${f1(w)} 0"/><path d="M${f1(cx)} ${f1(sh + 20)}v${f1(h * 0.3)}"/><path d="M${f1(cx - w * 0.6)} ${f1(sh + h * 0.3)}q${f1(w * 0.6)} -10 ${f1(w * 1.2)} 0"/></g>` : '';
+      return `${C.aura(P, cx, base - h * 0.5, h * 0.6, edge)}${arm(handL, -1)}${arm(handR, 1)}${body}${markSvg}<circle cx="${cx}" cy="${f1(hy)}" r="${f1(headR)}" fill="${c}"/>${crownSvg}${C.eyes(P, cx - headR * 0.4, hy, cx + headR * 0.4, hy, Math.max(1.6, headR * 0.17), eye)}${itemSvg}`;
+    },
+
+    /** 물결치는 뱀/용. pts: 몸통이 지나는 점들, 머리는 마지막 점 */
+    serpent: (P, { pts, width = 22, c, edge, eye = '#ffe66b', fins = false, teeth = false }) => {
+      let d = `M${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1]; const [x, y] = pts[i]; d += `Q${f1(x0 + (x - x0) * 0.5)} ${f1(y0 - 22 * (i % 2 ? 1 : -1))} ${x} ${y}`; }
+      const [hx, hy] = pts[pts.length - 1];
+      const [px] = pts[pts.length - 2];
+      const dir = hx >= px ? 1 : -1;
+      const head = `<path d="M${hx - dir * 8} ${hy - width * 0.7}Q${hx + dir * width * 1.4} ${hy - width * 0.8} ${hx + dir * width * 1.9} ${hy}Q${hx + dir * width * 1.2} ${hy + width * 0.8} ${hx - dir * 8} ${hy + width * 0.6}Z" fill="${c}"/>`;
+      const jaw = teeth ? `<g fill="#f3ead6">${[0, 1, 2].map((k) => `<path d="M${f1(hx + dir * (8 + k * 9))} ${f1(hy + 2)}l${dir * 3} 8 ${dir * 3} -8z"/>`).join('')}</g>` : '';
+      const finSvg = fins ? pts.slice(1, -1).map(([x, y]) => `<path d="M${x - 8} ${y - width * 0.4}L${x} ${y - width * 1.3}L${x + 8} ${y - width * 0.4}Z" fill="${edge}" opacity=".85"/>`).join('') : '';
+      return `${C.aura(P, hx, hy, 60, edge)}<path d="${d}" stroke="${c}" stroke-width="${width}" fill="none" stroke-linecap="round"/><path d="${d}" stroke="${edge}" stroke-width="2" fill="none" stroke-dasharray="3 9" opacity=".7"/>${finSvg}${head}${jaw}${C.eyes(P, hx + dir * width * 0.6, hy - width * 0.3, hx + dir * width * 0.6, hy - width * 0.3, 2.6, eye)}`;
+    },
+
+    octopus: (P, { cx, cy, c, edge, eye }) => `${C.aura(P, cx, cy, 80, edge)}${[-3, -2, -1, 0, 1, 2, 3].map((k) => `<path d="M${cx + k * 9} ${cy + 20}Q${cx + k * 34} ${cy + 50} ${cx + k * 30 + (k % 2 ? 20 : -20)} ${cy + 90}" stroke="${c}" stroke-width="${12 - Math.abs(k)}" fill="none" stroke-linecap="round"/>`).join('')}<ellipse cx="${cx}" cy="${cy - 10}" rx="42" ry="46" fill="${c}"/><g fill="${edge}" opacity=".5">${[0, 1, 2, 3].map((k) => `<circle cx="${cx - 20 + k * 13}" cy="${cy - 34 + (k % 2) * 8}" r="3"/>`).join('')}</g>${C.eyes(P, cx - 16, cy + 6, cx + 16, cy + 6, 5, eye)}`,
+    moth: (P, { cx, cy, c, edge, eye }) => `${C.aura(P, cx, cy, 90, edge)}${[1, -1].map((s) => `<path d="M${cx} ${cy}C${cx + s * 40} ${cy - 80} ${cx + s * 120} ${cy - 70} ${cx + s * 110} ${cy - 10}C${cx + s * 100} ${cy + 20} ${cx + s * 40} ${cy + 10} ${cx} ${cy}Z" fill="${c}"/><path d="M${cx} ${cy + 4}C${cx + s * 30} ${cy + 20} ${cx + s * 80} ${cy + 30} ${cx + s * 60} ${cy + 60}C${cx + s * 30} ${cy + 70} ${cx + s * 10} ${cy + 30} ${cx} ${cy + 4}Z" fill="${c}"/>${C.eyes(P, cx + s * 70, cy - 30, cx + s * 70, cy - 30, 9, eye)}<circle cx="${cx + s * 70}" cy="${cy - 30}" r="18" fill="none" stroke="${edge}" stroke-width="2" opacity=".7"/>`).join('')}<ellipse cx="${cx}" cy="${cy + 10}" rx="7" ry="34" fill="${c}"/><path d="M${cx - 3} ${cy - 20}Q${cx - 20} ${cy - 50} ${cx - 26} ${cy - 46}M${cx + 3} ${cy - 20}Q${cx + 20} ${cy - 50} ${cx + 26} ${cy - 46}" stroke="${edge}" stroke-width="2" fill="none"/>`,
+    tortoise: (P, { cx, base, c, edge, eye }) => `${C.aura(P, cx, base - 40, 90, edge)}${[-50, -20, 20, 50].map((x) => `<rect x="${cx + x - 9}" y="${base - 30}" width="18" height="30" rx="8" fill="${c}"/>`).join('')}<path d="M${cx - 80} ${base - 26}Q${cx} ${base - 130} ${cx + 80} ${base - 26}Z" fill="${c}"/><g stroke="${edge}" stroke-width="2.5" fill="none" opacity=".75"><path d="M${cx - 40} ${base - 30}L${cx - 30} ${base - 70}L${cx + 30} ${base - 70}L${cx + 40} ${base - 30}"/><path d="M${cx - 30} ${base - 70}L${cx} ${base - 92}L${cx + 30} ${base - 70}"/></g><path d="M${cx + 70} ${base - 30}Q${cx + 100} ${base - 50} ${cx + 110} ${base - 40}Q${cx + 112} ${base - 22} ${cx + 82} ${base - 18}Z" fill="${c}"/>${C.eyes(P, cx + 100, base - 38, cx + 100, base - 38, 2.6, eye)}${M.glow(P, cx, base - 120, 20, edge, 0.4)}`,
+    whale: (P, { cx, cy, c, edge, eye }) => `${C.aura(P, cx, cy, 100, edge)}<path d="M${cx - 120} ${cy - 10}Q${cx - 140} ${cy - 40} ${cx - 150} ${cy - 30}Q${cx - 140} ${cy - 10} ${cx - 150} ${cy + 10}Q${cx - 135} ${cy + 6} ${cx - 120} ${cy}Q${cx - 40} ${cy + 46} ${cx + 60} ${cy + 30}Q${cx + 110} ${cy + 20} ${cx + 110} ${cy - 6}Q${cx + 90} ${cy - 50} ${cx} ${cy - 44}Q${cx - 70} ${cy - 40} ${cx - 120} ${cy - 10}Z" fill="${c}"/><path d="M${cx - 20} ${cy + 30}Q${cx} ${cy + 64} ${cx + 20} ${cy + 34}" fill="${c}"/><g stroke="${edge}" stroke-width="1.6" opacity=".6">${[0, 1, 2, 3].map((k) => `<path d="M${cx + 30 + k * 12} ${cy + 22}q4 -8 2 -16" fill="none"/>`).join('')}</g>${C.eyes(P, cx + 70, cy - 6, cx + 70, cy - 6, 3, eye)}`,
+    frog: (P, { cx, base, c, edge, eye }) => `${C.aura(P, cx, base - 40, 90, edge)}<ellipse cx="${cx}" cy="${base - 34}" rx="70" ry="38" fill="${c}"/><ellipse cx="${cx - 60}" cy="${base - 10}" rx="30" ry="12" fill="${c}"/><ellipse cx="${cx + 60}" cy="${base - 10}" rx="30" ry="12" fill="${c}"/><circle cx="${cx - 32}" cy="${base - 72}" r="18" fill="${c}"/><circle cx="${cx + 32}" cy="${base - 72}" r="18" fill="${c}"/>${C.eyes(P, cx - 32, base - 74, cx + 32, base - 74, 8, eye)}<path d="M${cx - 44} ${base - 40}Q${cx} ${base - 20} ${cx + 44} ${base - 40}" stroke="${edge}" stroke-width="3" fill="none"/><g fill="${edge}" opacity=".5">${[0, 1, 2, 3, 4].map((k) => `<circle cx="${cx - 40 + k * 20}" cy="${base - 52 + (k % 2) * 10}" r="4"/>`).join('')}</g>`,
+    owl: (P, { cx, cy, c, edge, eye }) => `${C.aura(P, cx, cy, 90, edge)}<path d="M${cx - 50} ${cy - 40}L${cx - 40} ${cy - 70}L${cx - 20} ${cy - 50}Q${cx} ${cy - 56} ${cx + 20} ${cy - 50}L${cx + 40} ${cy - 70}L${cx + 50} ${cy - 40}Q${cx + 66} ${cy + 30} ${cx} ${cy + 70}Q${cx - 66} ${cy + 30} ${cx - 50} ${cy - 40}Z" fill="${c}"/><circle cx="${cx - 22}" cy="${cy - 22}" r="20" fill="${edge}" opacity=".35"/><circle cx="${cx + 22}" cy="${cy - 22}" r="20" fill="${edge}" opacity=".35"/>${C.eyes(P, cx - 22, cy - 22, cx + 22, cy - 22, 9, eye)}<path d="M${cx - 5} ${cy - 6}L${cx} ${cy + 6}L${cx + 5} ${cy - 6}Z" fill="${edge}"/><g stroke="${edge}" stroke-width="1.8" fill="none" opacity=".55">${[0, 1, 2].map((k) => `<path d="M${cx - 24 + k * 6} ${cy + 20 + k * 10}q${24 - k * 6} 8 ${48 - k * 12} 0"/>`).join('')}</g>`,
+    heron: (P, { cx, base, c, edge, eye }) => `${C.aura(P, cx, base - 70, 80, edge)}<path d="M${cx - 4} ${base - 60}L${cx - 10} ${base}M${cx + 6} ${base - 60}L${cx + 10} ${base}" stroke="${c}" stroke-width="3"/><path d="M${cx - 40} ${base - 80}Q${cx} ${base - 110} ${cx + 30} ${base - 86}Q${cx + 20} ${base - 56} ${cx - 10} ${base - 58}Q${cx - 34} ${base - 60} ${cx - 40} ${base - 80}Z" fill="${c}"/><path d="M${cx + 24} ${base - 88}Q${cx + 46} ${base - 120} ${cx + 30} ${base - 140}Q${cx + 26} ${base - 148} ${cx + 36} ${base - 150}" stroke="${c}" stroke-width="7" fill="none" stroke-linecap="round"/><path d="M${cx + 38} ${base - 152}L${cx + 66} ${base - 146}L${cx + 38} ${base - 144}Z" fill="${edge}"/>${C.eyes(P, cx + 37, base - 151, cx + 37, base - 151, 2, eye)}`,
+    swarm: (P, R, { cx, cy, c }) => { const birds = []; for (let i = 0; i < 260; i++) { const a = R() * Math.PI * 2; const r = R(); const x = cx + Math.cos(a) * r * 140 * (Math.abs(Math.sin(a)) < 0.35 ? 1 : 0.4); const y = cy + Math.sin(a) * r * 55 - Math.abs(Math.cos(a)) * r * 38; const s = 2 + R() * 3; birds.push(`<path d="M${f1(x - s)} ${f1(y)}q${f1(s / 2)} ${f1(-s * 0.7)} ${f1(s)} 0q${f1(s / 2)} ${f1(-s * 0.7)} ${f1(s)} 0" stroke="${c}" stroke-width="1.6" fill="none"/>`); } return birds.join(''); },
+    worm: (P, { cx, base, c, edge }) => `${C.aura(P, cx, base - 70, 90, edge)}<path d="M${cx - 30} ${base}Q${cx - 40} ${base - 90} ${cx + 10} ${base - 120}L${cx + 46} ${base - 100}Q${cx + 30} ${base - 50} ${cx + 30} ${base}Z" fill="${c}"/>${[0, 1, 2, 3].map((k) => `<path d="M${cx - 34 + k * 3} ${base - 20 - k * 25}q30 -6 60 4" stroke="${edge}" stroke-width="2" fill="none" opacity=".5"/>`).join('')}<ellipse cx="${cx + 28}" cy="${base - 112}" rx="26" ry="16" fill="#2a0a06" transform="rotate(30 ${cx + 28} ${base - 112})"/><g fill="#f3ead6">${Array.from({ length: 10 }, (_, k) => { const a = (k / 10) * Math.PI * 2; const x = cx + 28 + Math.cos(a) * 22; const y = base - 112 + Math.sin(a) * 13; return `<path d="M${f1(x)} ${f1(y)}L${f1(x - Math.cos(a) * 9)} ${f1(y - Math.sin(a) * 6)}L${f1(x + 3)} ${f1(y + 2)}Z"/>`; }).join('')}</g>`,
+    treant: (P, { cx, base, c, edge, eye }) => `${C.aura(P, cx, base - 80, 100, edge)}<path d="M${cx - 30} ${base}L${cx - 22} ${base - 100}L${cx + 22} ${base - 100}L${cx + 30} ${base}Z" fill="#4a3420"/><path d="M${cx - 22} ${base - 80}Q${cx - 60} ${base - 90} ${cx - 76} ${base - 120}M${cx + 22} ${base - 84}Q${cx + 60} ${base - 96} ${cx + 80} ${base - 126}" stroke="#4a3420" stroke-width="9" fill="none" stroke-linecap="round"/><circle cx="${cx}" cy="${base - 130}" r="44" fill="${c}"/><circle cx="${cx - 70}" cy="${base - 128}" r="22" fill="${c}"/><circle cx="${cx + 74}" cy="${base - 134}" r="24" fill="${c}"/><circle cx="${cx - 26}" cy="${base - 150}" r="22" fill="${edge}" opacity=".35"/>${C.eyes(P, cx - 10, base - 72, cx + 10, base - 72, 3.2, eye)}<path d="M${cx - 8} ${base - 56}Q${cx} ${base - 50} ${cx + 8} ${base - 56}" stroke="#1a0e06" stroke-width="2.5" fill="none"/>${M.roots(P, rng(7), '#3a2818', 6)}`,
+    ghost: (P, { cx, cy, c, edge, eye, mouth = false }) => `${C.aura(P, cx, cy, 90, edge)}<path d="M${cx - 50} ${cy + 70}Q${cx - 56} ${cy - 10} ${cx - 34} ${cy - 50}Q${cx} ${cy - 84} ${cx + 34} ${cy - 50}Q${cx + 56} ${cy - 10} ${cx + 50} ${cy + 70}Q${cx + 34} ${cy + 50} ${cx + 22} ${cy + 74}Q${cx + 6} ${cy + 50} ${cx - 6} ${cy + 74}Q${cx - 22} ${cy + 50} ${cx - 34} ${cy + 74}Z" fill="${c}"/><path d="M${cx - 48} ${cy}Q${cx - 90} ${cy - 10} ${cx - 104} ${cy - 40}M${cx + 48} ${cy}Q${cx + 90} ${cy - 10} ${cx + 104} ${cy - 40}" stroke="${c}" stroke-width="12" fill="none" stroke-linecap="round"/>${C.eyes(P, cx - 16, cy - 26, cx + 16, cy - 26, 5, eye)}${mouth ? `<ellipse cx="${cx}" cy="${cy}" rx="10" ry="16" fill="#0a0612"/>` : ''}`,
+  };
+
+  // ───── 정령별 구성 [하늘 위, 하늘 아래], 배경, 캐릭터 ─────
   const ART = {
-    lightning: [['#1a1f3a', '#5a4a8a'], (P, R) => M.stars(P, R, 25) + M.mountains(P, R, 150, '#262238', 6, 50) + M.bolt(P, 170, 10, 1.4) + M.bolt(P, 70, 40, 0.7, '#e8dcff') + M.swirl(P, 250, 60, 40, '#e8dcff', 0.4)],
-    river: [['#ffcf7a', '#6fb7d8'], (P) => M.sun(P, 240, 50, 22) + M.ground(P, 110, '#4f8a4a') + M.waves(P, 120, '#3d8fc0', 4, 7) + M.glow(P, 160, 130, 60, '#fff2c0', 0.25)],
-    earth: [['#5a4a3a', '#a8865a'], (P, R) => M.snowpeak(P, 160, 160, 110, 120, '#6e5a46') + M.snowpeak(P, 60, 170, 70, 70, '#5a4a3a') + M.snowpeak(P, 260, 170, 80, 85, '#5f4c3a') + M.ground(P, 155, '#3e5a2e') + M.canopy(P, R, 170, 6, '#3f7a35', '#2e6a2a')],
-    shadows: [['#0e0a1a', '#3a1a4a'], (P, R) => M.stars(P, R, 15, '#d8b8ff') + M.moon(P, 250, 45, 20, '#e8d8ff') + M.flame(P, 150, 165, 1.6, '#9b51e0', '#e8a0ff') + M.mist(P, R, '#6a3a8a', 6)],
-    thunder: [['#3a2410', '#c86a2a'], (P, R) => M.sun(P, 230, 55, 18, '#ffb04a') + M.ground(P, 140, '#4a2a14') + M.figures(P, [60, 100, 140, 180, 220, 260], 168) + M.bolt(P, 160, 0, 0.6, '#ffe7a0')],
-    ocean: [['#0a2a48', '#2a6aa0'], (P, R) => M.stars(P, R, 12) + M.moon(P, 60, 40, 14) + M.waves(P, 95, '#1e5f96', 5, 9) + M.tentacles(P, R, '#0f3a66')],
-    bringer: [['#10081e', '#4a2a6a'], (P, R) => M.stars(P, R, 45, '#f0d8ff') + M.moon(P, 160, 70, 34, '#f0e0ff') + M.mist(P, R, '#c86bd8', 7) + M.eye(P, 70, 120, 0.8, '#e080ff') + M.eye(P, 250, 110, 0.6, '#e080ff')],
-    green: [['#9ad86a', '#2e7a35'], (P, R) => M.sun(P, 260, 35, 16, '#fff3a0') + M.canopy(P, R, 175, 10, '#3f9a46', '#2e7a35') + M.vines(P, R, '#5fc35a', 8)],
-    keeper: [['#0e2a1a', '#2e6a40'], (P, R) => M.pines(P, R, 180, 14, '#0f3a1e') + M.bigtree(P, 160, 180, '#1f5a2e') + M.beasteyes(P, R, 3, '#ffd86b')],
-    wildfire: [['#2a0a04', '#c8401c'], (P, R) => M.ground(P, 150, '#1a0a04') + M.flame(P, 160, 165, 2.2) + M.flame(P, 70, 170, 1.1) + M.flame(P, 255, 172, 1.2) + M.stars(P, R, 25, '#ffb070')],
-    stone: [['#4a4f56', '#9aa0a6'], (P, R) => M.snowpeak(P, 160, 150, 140, 110, '#6c6a66') + M.boulders(P, R, 160, '#5a5854') + M.glow(P, 160, 80, 30, '#fff', 0.12)],
-    volcano: [['#1a0806', '#7a2a14'], (P, R) => M.stars(P, R, 15, '#ffb070') + M.volcano(P, 160, 180) + M.cracks(P, R, '#ff7a2a', 4)],
-    fangs: [['#0e1a0a', '#2a4a1a'], (P, R) => M.canopy(P, R, 180, 9, '#1f3a14', '#2a4a1a') + M.fangs(P, 160, 90, 1.2) + M.beasteyes(P, R, 3)],
-    serpent: [['#14200e', '#4a6a2a'], (P, R) => M.ground(P, 120, '#2a3a1a') + M.serpent(P, '#5d8a2a', 130) + M.glow(P, 300, 116, 14, '#ffd84a', 0.5)],
-    downpour: [['#2a3a4a', '#6a8aa0'], (P, R) => M.rain(P, R, '#d8ecff', 90) + M.waves(P, 140, '#3a6a8a', 3, 4) + M.mist(P, R, '#dfe8f0', 5)],
-    finder: [['#2a2418', '#8a7a52'], (P, R) => M.stars(P, R, 30, '#fff3c8') + M.constellation(P, R, '#fff3c8') + M.ground(P, 140, '#4a3e28') + M.path(P) + M.footprints(P, R)],
-    trickster: [['#3a2a08', '#c8962a'], (P, R) => M.mask(P, 160, 85, 1) + M.birds(P, R, 5, '#3a2a08') + M.flame(P, 50, 170, 0.6) + M.flame(P, 280, 168, 0.5)],
-    lure: [['#0a1a10', '#1f4a2a'], (P, R) => M.pines(P, R, 180, 18, '#0a2414') + M.path(P, '#bfe3a0') + M.glow(P, 165, 55, 26, '#c8ffb0', 0.6) + M.beasteyes(P, R, 2, '#c8ffb0')],
-    manyminds: [['#c8a06a', '#5a8ab0'], (P, R) => M.birds(P, R, 40, '#2a1e10') + M.ground(P, 155, '#6a5a3a')],
-    memory: [['#1e1838', '#5a4a8a'], (P, R) => M.stars(P, R, 30) + M.spiral(P, 160, 85) + M.boulders(P, R, 175, '#3a3458')],
-    mist: [['#8a9aaa', '#d0dbe6'], (P, R) => M.pines(P, R, 180, 12, '#6a7a88') + M.mist(P, R, '#ffffff', 12)],
-    starlight: [['#05081a', '#1a2a5a'], (P, R) => M.stars(P, R, 70) + M.constellation(P, R) + M.glow(P, 160, 90, 40, '#9fb4ff', 0.5) + M.shards(P, R, '#cfd8ff')],
-    fractured: [['#1a1028', '#6a4a8a'], (P, R) => M.stars(P, R, 25) + M.sun(P, 100, 70, 22, '#ffe0a0') + M.moon(P, 220, 70, 24) + M.shards(P, R) + M.hourglass(P, 160, 120, 0.7)],
-    vengeance: [['#1a0408', '#6a1428'], (P, R) => M.ground(P, 150, '#2a0a10') + M.flame(P, 160, 120, 1.4, '#c81e3f', '#ff8a5a') + M.skull(P, 160, 145, 0.8) + M.mist(P, R, '#6a2a3a', 6)],
-    teeth: [['#2a1408', '#7a3b2e'], (P, R) => M.teeth(P, 130) + M.glow(P, 160, 150, 40, '#ff6a2a', 0.3) + M.cracks(P, R, '#3a1a10', 3)],
-    eyes: [['#0a1a0a', '#2a4a1a'], (P, R) => M.canopy(P, R, 180, 12, '#1a3a12', '#2a5a1e') + M.eye(P, 90, 70, 0.8, '#c8ff6a') + M.eye(P, 220, 60, 0.6, '#c8ff6a') + M.eye(P, 160, 120, 0.5, '#c8ff6a')],
-    mud: [['#3a3220', '#7a6a42'], (P, R) => M.ground(P, 110, '#4a3e26') + M.bubbles(P, R, '#a89a6a', 18) + M.mist(P, R, '#a8a080', 5) + M.vines(P, R, '#3a5a2a', 3)],
-    heat: [['#c8642a', '#ffd89a'], (P, R) => M.sun(P, 160, 50, 26, '#fff3c0') + M.haze(P) + M.dunes(P, 140, '#d9a24a', '#c8862a') + M.snowpeak(P, 60, 150, 50, 50, '#a86a3a')],
-    whirlwind: [['#ffd86b', '#7ab8e8'], (P, R) => M.sun(P, 260, 40, 18, '#fff6c0') + M.swirl(P, 140, 95, 70, '#ffffff', 0.85) + M.swirl(P, 140, 95, 40, '#ffe7a0', 0.6) + M.ground(P, 165, '#c8a86a')],
-    darkness: [['#05040a', '#1e1430'], (P, R) => M.stars(P, R, 10, '#8a7aaa') + M.mist(P, R, '#2a1e44', 8) + M.eye(P, 120, 90, 0.7, '#b8a0ff') + M.eye(P, 200, 90, 0.7, '#b8a0ff')],
-    earthquakes: [['#3a2a1a', '#a0784e'], (P, R) => M.snowpeak(P, 90, 150, 80, 80, '#6a543a') + M.snowpeak(P, 230, 150, 90, 95, '#5a4630') + M.ground(P, 145, '#4a3a26') + M.cracks(P, R, '#ffb060', 6) + M.figures(P, [160], 150, '#2a1a0a')],
-    behemoth: [['#1a0a04', '#5a2410'], (P, R) => M.ground(P, 150, '#2a1408') + `<path d="M40 150C60 70 120 40 160 40S260 70 280 150Z" fill="#3a1a0c"/>` + M.eye(P, 125, 85, 0.7, '#ff7a2a') + M.eye(P, 195, 85, 0.7, '#ff7a2a') + M.flame(P, 160, 175, 0.6)],
-    hearth: [['#2a1a10', '#8a5a2a'], (P, R) => M.stars(P, R, 15, '#ffd8a0') + M.ground(P, 150, '#3a2614') + M.hut(P, 110, 158) + M.hut(P, 215, 160) + M.flame(P, 163, 165, 0.9) + M.figures(P, [70, 260], 165)],
-    gaze: [['#ff9a2a', '#ffe08a'], (P, R) => M.sun(P, 160, 70, 34, '#fff3b0') + M.eye(P, 160, 70, 0.9, '#c86a00') + M.dunes(P, 150, '#d99a3a', '#c8862a')],
-    roots: [['#1a3a1a', '#4a8a3a'], (P, R) => M.bigtree(P, 160, 150, '#2f6b2f') + M.roots(P, R) + M.canopy(P, R, 180, 5, '#2a5a24', '#1e4a1a')],
-    voice: [['#1a1030', '#5a3a8a'], (P, R) => M.stars(P, R, 20) + M.arcs(P, 160, 85) + M.mist(P, R, '#9370db', 6)],
-    wounded: [['#1a0a10', '#4a1a2a'], (P, R) => M.waves(P, 120, '#6a1a2a', 4, 6) + M.drop(P, 160, 70, 1.1) + M.glow(P, 160, 140, 50, '#ff5a6a', 0.2)],
+    lightning: [['#141833', '#4a3a7a'], (P, R) => M.stars(P, R, 25) + M.mountains(P, R, 165, '#1e1a30', 6, 40) + M.bolt(P, 50, 30, 0.5, '#e8dcff') + M.bolt(P, 280, 20, 0.45, '#e8dcff'),
+      (P) => C.bird(P, { cx: 160, cy: 82, span: 250, c: '#3a3460', edge: '#fff3a0', eye: '#fff7b0', style: 'jag' })],
+    river: [['#ffcf7a', '#6fb7d8'], (P) => M.sun(P, 270, 35, 16) + M.ground(P, 125, '#4f8a4a') + M.waves(P, 135, '#3d8fc0', 3, 6),
+      (P) => C.serpent(P, { pts: [[20, 150], [80, 120], [140, 140], [200, 100], [250, 80]], width: 20, c: '#2f86c0', edge: '#cfefff', eye: '#fff6c0', fins: true })],
+    earth: [['#5a4a3a', '#a8865a'], (P, R) => M.snowpeak(P, 60, 160, 70, 70, '#5a4a3a') + M.snowpeak(P, 270, 160, 70, 80, '#5f4c3a') + M.ground(P, 165, '#3e5a2e'),
+      (P) => C.beast(P, { cx: 165, base: 172, len: 150, h: 130, c: '#6e5a46', edge: '#8fd06a', eye: '#b8ff7a', head: 'bear', tail: 'none', marks: '#5a9a3a' })],
+    shadows: [['#0e0a1a', '#3a1a4a'], (P, R) => M.stars(P, R, 15, '#d8b8ff') + M.moon(P, 270, 35, 14, '#e8d8ff') + M.mist(P, R, '#6a3a8a', 5),
+      (P) => C.beast(P, { cx: 175, base: 168, len: 140, h: 85, c: '#2a1438', edge: '#c88aff', eye: '#e8a0ff', head: 'fox', tail: 'flame', tailColor: '#9b51e0' })],
+    thunder: [['#3a2410', '#c86a2a'], (P) => M.sun(P, 260, 40, 14, '#ffb04a') + M.ground(P, 150, '#4a2a14') + M.figures(P, [40, 70, 250, 280], 172),
+      (P) => C.spirit(P, { cx: 160, base: 172, h: 150, c: '#5a3418', edge: '#ffd27a', eye: '#fff3b0', arms: 'up', item: 'spear', crown: 'horns', itemColor: '#ffe7a0', marks: '#ffb04a' })],
+    ocean: [['#0a2a48', '#2a6aa0'], (P, R) => M.stars(P, R, 12) + M.moon(P, 50, 35, 12),
+      (P) => C.octopus(P, { cx: 160, cy: 80, c: '#1b4f80', edge: '#7fd0ff', eye: '#fff3a0' }) + M.waves(P, 130, '#1e5f96', 3, 8, 0.85)],
+    bringer: [['#10081e', '#4a2a6a'], (P, R) => M.stars(P, R, 50, '#f0d8ff') + M.mist(P, R, '#c86bd8', 5),
+      (P) => C.moth(P, { cx: 160, cy: 95, c: '#4a2a6a', edge: '#f0b8ff', eye: '#ffd8ff' })],
+    green: [['#9ad86a', '#2e7a35'], (P, R) => M.sun(P, 270, 30, 14, '#fff3a0') + M.canopy(P, R, 180, 8, '#3f9a46', '#2e7a35'),
+      (P, R) => C.spirit(P, { cx: 160, base: 178, h: 150, c: '#2f7a30', edge: '#b8ff8a', eye: '#f3ffb0', arms: 'out', crown: 'leaves', lower: 'roots', marks: '#8ae06a' }) + M.vines(P, R, '#5fc35a', 4)],
+    keeper: [['#0e2a1a', '#2e6a40'], (P, R) => M.pines(P, R, 180, 14, '#0f3a1e') + M.glow(P, 160, 60, 50, '#c8ffb0', 0.2),
+      (P) => C.beast(P, { cx: 150, base: 172, len: 160, h: 110, c: '#2a4a2a', edge: '#c8ffb0', eye: '#e8ffb0', head: 'stag', tail: 'none', antlers: '#7aa86a' })],
+    wildfire: [['#2a0a04', '#c8401c'], (P, R) => M.ground(P, 160, '#1a0a04') + M.flame(P, 40, 176, 0.6) + M.flame(P, 285, 176, 0.7) + M.stars(P, R, 20, '#ffb070'),
+      (P) => C.bird(P, { cx: 160, cy: 72, span: 250, c: '#e2531e', edge: '#ffd27a', eye: '#fff6d0', style: 'flame' })],
+    stone: [['#4a4f56', '#9aa0a6'], (P, R) => M.snowpeak(P, 60, 150, 70, 70, '#6c6a66') + M.ground(P, 160, '#5a5854'),
+      (P) => C.tortoise(P, { cx: 150, base: 172, c: '#6e6a64', edge: '#d8f0ff', eye: '#cfeaff' })],
+    volcano: [['#1a0806', '#7a2a14'], (P, R) => M.stars(P, R, 15, '#ffb070') + M.volcano(P, 270, 190, '#3a1a10') + M.cracks(P, R, '#ff7a2a', 3),
+      (P) => C.spirit(P, { cx: 140, base: 178, h: 150, c: '#3a1a10', edge: '#ff7a2a', eye: '#ffd27a', arms: 'out', bulky: true, crown: 'flame', itemColor: '#ff7a2a', marks: '#ff7a2a' })],
+    fangs: [['#0e1a0a', '#2a4a1a'], (P, R) => M.canopy(P, R, 180, 8, '#1f3a14', '#2a4a1a') + M.beasteyes(P, R, 2),
+      (P) => C.beast(P, { cx: 165, base: 170, len: 170, h: 90, c: '#2a2010', edge: '#ffb02e', eye: '#ffb02e', head: 'cat', tail: 'long', marks: '#8a6a2a' })],
+    serpent: [['#14200e', '#4a6a2a'], (P) => M.ground(P, 150, '#2a3a1a'),
+      (P) => C.serpent(P, { pts: [[10, 160], [70, 130], [130, 155], [190, 115], [240, 90]], width: 26, c: '#4d7a2a', edge: '#d8f08a', eye: '#ffd84a' })],
+    downpour: [['#2a3a4a', '#6a8aa0'], (P, R) => M.rain(P, R, '#d8ecff', 80) + M.waves(P, 150, '#3a6a8a', 2, 4),
+      (P) => C.whale(P, { cx: 170, cy: 70, c: '#4a6a88', edge: '#d8ecff', eye: '#fff' })],
+    finder: [['#2a2418', '#8a7a52'], (P, R) => M.stars(P, R, 30, '#fff3c8') + M.constellation(P, R, '#fff3c8') + M.ground(P, 160, '#4a3e28') + M.footprints(P, R),
+      (P) => C.beast(P, { cx: 160, base: 168, len: 130, h: 80, c: '#6a5030', edge: '#fff3c8', eye: '#fff3c8', head: 'fox', tail: 'bushy', tailColor: '#c8a050' }) + M.glow(P, 85, 95, 16, '#fff3c8', 0.8)],
+    trickster: [['#3a2a08', '#c8962a'], (P, R) => M.birds(P, R, 5, '#3a2a08') + M.ground(P, 160, '#5a4010') + M.flame(P, 40, 172, 0.5),
+      (P) => C.beast(P, { cx: 160, base: 168, len: 140, h: 85, c: '#8a5a20', edge: '#ffd86b', eye: '#ffe66b', head: 'wolf', tail: 'bushy', tailColor: '#5a3a10' }) + `<path d="M222 82q8 6 16 -2" stroke="#fff" stroke-width="2" fill="none"/>`],
+    lure: [['#0a1a10', '#1f4a2a'], (P, R) => M.pines(P, R, 180, 16, '#0a2414') + M.beasteyes(P, R, 2, '#c8ffb0'),
+      (P) => C.spirit(P, { cx: 160, base: 176, h: 140, c: '#16301e', edge: '#c8ffb0', eye: '#c8ffb0', arms: 'out', item: 'lantern', crown: 'antlers', lower: 'mist', itemColor: '#c8ffb0' })],
+    manyminds: [['#c8a06a', '#5a8ab0'], (P) => M.ground(P, 165, '#6a5a3a'),
+      (P, R) => M.glow(P, 160, 80, 70, '#fff3c8', 0.3) + C.swarm(P, R, { cx: 160, cy: 80, c: '#2a1e10' }) + C.eyes(P, 150, 62, 170, 62, 2.5, '#fff3c8')],
+    memory: [['#1e1838', '#5a4a8a'], (P, R) => M.stars(P, R, 30) + M.spiral(P, 70, 60) + M.ground(P, 165, '#3a3458'),
+      (P) => C.beast(P, { cx: 160, base: 172, len: 170, h: 120, c: '#4a4270', edge: '#d8ccff', eye: '#e8dcff', head: 'elephant', tail: 'thin', marks: '#b8a8ff' })],
+    mist: [['#8a9aaa', '#d0dbe6'], (P, R) => M.pines(P, R, 180, 10, '#6a7a88') + M.mist(P, R, '#ffffff', 8),
+      (P, R) => C.beast(P, { cx: 160, base: 168, len: 150, h: 90, c: '#5a6e86', edge: '#ffffff', eye: '#e8f4ff', head: 'wolf', tail: 'bushy', tailColor: '#7a8ea4' }) + M.mist(P, R, '#ffffff', 5)],
+    starlight: [['#05081a', '#1a2a5a'], (P, R) => M.stars(P, R, 70) + M.shards(P, R, '#cfd8ff'),
+      (P, R) => C.spirit(P, { cx: 160, base: 176, h: 150, c: '#2a3a7a', edge: '#cfd8ff', eye: '#ffffff', arms: 'up', crown: 'stars', lower: 'mist' }) + M.constellation(P, R)],
+    fractured: [['#1a1028', '#6a4a8a'], (P, R) => M.stars(P, R, 25) + M.shards(P, R) + M.sun(P, 50, 40, 12, '#ffe0a0') + M.moon(P, 275, 40, 13),
+      (P) => C.spirit(P, { cx: 160, base: 176, h: 150, c: '#3a2a5a', edge: '#e6d3ff', eye: '#fff', arms: 'out', crown: 'halo', marks: '#e6d3ff' }) + M.hourglass(P, 160, 120, 0.4)],
+    vengeance: [['#1a0408', '#6a1428'], (P, R) => M.ground(P, 160, '#2a0a10') + M.mist(P, R, '#6a2a3a', 5) + M.flame(P, 50, 176, 0.5, '#c81e3f') + M.flame(P, 270, 176, 0.6, '#c81e3f'),
+      (P) => C.bird(P, { cx: 160, cy: 75, span: 230, c: '#1a0a10', edge: '#ff5a5a', eye: '#ff8a5a', style: 'jag' })],
+    teeth: [['#2a1408', '#7a3b2e'], (P, R) => M.dunes(P, 150, '#7a4a2a', '#5a301a') + M.cracks(P, R, '#3a1a10', 3),
+      (P) => C.worm(P, { cx: 140, base: 180, c: '#5a2a1a', edge: '#ff9a5a' })],
+    eyes: [['#0a1a0a', '#2a4a1a'], (P, R) => M.canopy(P, R, 180, 10, '#1a3a12', '#2a5a1e') + M.beasteyes(P, R, 3, '#c8ff6a'),
+      (P) => C.owl(P, { cx: 160, cy: 85, c: '#2a3a1a', edge: '#c8ff6a', eye: '#e8ff8a' })],
+    mud: [['#3a3220', '#7a6a42'], (P, R) => M.ground(P, 140, '#4a3e26') + M.bubbles(P, R, '#a89a6a', 14) + M.vines(P, R, '#3a5a2a', 3),
+      (P) => C.frog(P, { cx: 160, base: 170, c: '#5a5030', edge: '#c8b870', eye: '#ffd84a' })],
+    heat: [['#c8642a', '#ffd89a'], (P) => M.sun(P, 270, 35, 18, '#fff3c0') + M.haze(P) + M.dunes(P, 150, '#d9a24a', '#c8862a'),
+      (P) => C.beast(P, { cx: 160, base: 170, len: 170, h: 60, c: '#a8461a', edge: '#ffd27a', eye: '#fff3a0', head: 'cat', tail: 'long', marks: '#ffb04a' })],
+    whirlwind: [['#ffd86b', '#7ab8e8'], (P) => M.sun(P, 270, 35, 14, '#fff6c0') + M.ground(P, 170, '#c8a86a'),
+      (P) => C.spirit(P, { cx: 160, base: 172, h: 150, c: '#e8f0f8', edge: '#ffe7a0', eye: '#5a8ab0', arms: 'up', lower: 'tornado', crown: 'halo' })],
+    darkness: [['#05040a', '#1e1430'], (P, R) => M.stars(P, R, 10, '#8a7aaa') + M.mist(P, R, '#2a1e44', 6) + M.beasteyes(P, R, 3, '#b8a0ff'),
+      (P) => C.ghost(P, { cx: 160, cy: 90, c: '#140c24', edge: '#8a6aff', eye: '#d8c8ff' })],
+    earthquakes: [['#3a2a1a', '#a0784e'], (P, R) => M.snowpeak(P, 50, 160, 60, 60, '#6a543a') + M.snowpeak(P, 280, 160, 60, 70, '#5a4630') + M.ground(P, 160, '#4a3a26') + M.cracks(P, R, '#ffb060', 5),
+      (P) => C.spirit(P, { cx: 160, base: 170, h: 145, c: '#6a4a2a', edge: '#ffb060', eye: '#fff3c0', arms: 'up', bulky: true, crown: 'horns', marks: '#ffb060' })],
+    behemoth: [['#1a0a04', '#5a2410'], (P) => M.ground(P, 165, '#2a1408') + M.flame(P, 40, 178, 0.5),
+      (P) => C.beast(P, { cx: 150, base: 172, len: 200, h: 120, c: '#3a1a0c', edge: '#ff7a2a', eye: '#ff7a2a', head: 'boar', tail: 'thin', horns: '#c8a080', marks: '#ff7a2a' })],
+    hearth: [['#2a1a10', '#8a5a2a'], (P, R) => M.stars(P, R, 15, '#ffd8a0') + M.ground(P, 155, '#3a2614') + M.hut(P, 60, 165) + M.hut(P, 265, 165),
+      (P) => C.spirit(P, { cx: 160, base: 174, h: 140, c: '#8a4a1e', edge: '#ffc870', eye: '#fff3c0', arms: 'out', item: 'flame', crown: 'halo', itemColor: '#ff9a3a' })],
+    gaze: [['#ff9a2a', '#ffe08a'], (P) => M.sun(P, 160, 45, 26, '#fff3b0') + M.dunes(P, 155, '#d99a3a', '#c8862a'),
+      (P) => C.bird(P, { cx: 160, cy: 85, span: 240, c: '#a85a10', edge: '#fff3b0', eye: '#fff', style: 'feather' })],
+    roots: [['#1a3a1a', '#4a8a3a'], (P, R) => M.canopy(P, R, 180, 4, '#2a5a24', '#1e4a1a'),
+      (P) => C.treant(P, { cx: 160, base: 176, c: '#2f6b2f', edge: '#a8e08a', eye: '#e8ff8a' })],
+    voice: [['#1a1030', '#5a3a8a'], (P, R) => M.stars(P, R, 20) + M.mist(P, R, '#9370db', 5) + M.arcs(P, 160, 70, '#d8c8ff'),
+      (P) => C.ghost(P, { cx: 160, cy: 92, c: '#5a3a8a', edge: '#e8d8ff', eye: '#fff', mouth: true })],
+    wounded: [['#1a0a10', '#4a1a2a'], (P) => M.waves(P, 140, '#6a1a2a', 3, 5) + M.drop(P, 270, 50, 0.5),
+      (P) => C.heron(P, { cx: 140, base: 168, c: '#d8c8c8', edge: '#ff6a7a', eye: '#ff6a7a' })],
   };
 
   function svg(id, cls = '') {
@@ -110,7 +279,8 @@ const SpiritArt = (() => {
         <radialGradient id="${P}v" cx="50%" cy="45%" r="70%"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
       </defs>
       <rect width="${W}" height="${H}" fill="url(#${P}sky)"/>
-      ${art[1](P, R)}
+      <g opacity=".85">${art[1](P, R)}</g>
+      ${art[2](P, R)}
       <rect width="${W}" height="${H}" fill="url(#${P}v)"/>
     </svg>`;
   }
