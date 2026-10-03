@@ -25,9 +25,13 @@ const Sound = (() => {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
+    // 믹스 버스 → 컴프레서 → 메이크업 게인 → 리미터 → 출력
     master = ctx.createDynamicsCompressor();
-    master.threshold.value = -14; master.ratio.value = 3;
-    master.connect(ctx.destination);
+    master.threshold.value = -18; master.ratio.value = 3; master.attack.value = 0.01; master.release.value = 0.25;
+    const makeup = ctx.createGain(); makeup.gain.value = 2.6;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.1;
+    master.connect(makeup); makeup.connect(limiter); limiter.connect(ctx.destination);
     musicBus = ctx.createGain();
     sfxBus = ctx.createGain();
     musicBus.connect(master); sfxBus.connect(master);
@@ -314,9 +318,12 @@ const Sound = (() => {
   }
 
   // 브라우저 정책상 첫 클릭/키 입력 이후에만 소리를 낼 수 있다
-  const unlock = () => { init(); };
-  window.addEventListener('pointerdown', unlock, { capture: true });
-  window.addEventListener('keydown', unlock, { capture: true });
+  const unlock = () => { init(); if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); };
+  for (const ev of ['pointerdown', 'mousedown', 'click', 'touchend', 'keydown']) window.addEventListener(ev, unlock, { capture: true });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && ctx && ctx.state !== 'running') ctx.resume().catch(() => {}); });
 
-  return { play, setMood, set, settings, init, get started() { return !!ctx; } };
+  /** 테스트용: 소리 켜기 버튼에서 호출 */
+  function test() { init(); if (ctx) ctx.resume().then(() => play('victory')).catch(() => {}); }
+
+  return { play, setMood, set, settings, init, test, get started() { return !!ctx; }, get state() { return ctx ? ctx.state : 'none'; } };
 })();

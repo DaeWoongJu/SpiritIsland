@@ -8,7 +8,7 @@ if ! command -v node >/dev/null 2>&1; then
   read -r -p " 엔터를 누르면 창이 닫힙니다..."
   exit 1
 fi
-if [ ! -d node_modules/ws ]; then
+if [ ! -d node_modules/ws ] || [ ! -d node_modules/three ]; then
   echo " 처음 실행이라 필요한 파일을 설치합니다..."
   npm install --omit=dev || { read -r -p " 설치 실패. 엔터를 누르세요..."; exit 1; }
 fi

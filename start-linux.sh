@@ -5,5 +5,5 @@ if ! command -v node >/dev/null 2>&1; then
   echo "[!] Node.js 가 필요합니다: https://nodejs.org"
   exit 1
 fi
-[ -d node_modules/ws ] || npm install --omit=dev || exit 1
+{ [ -d node_modules/ws ] && [ -d node_modules/three ]; } || npm install --omit=dev || exit 1
 node server/index.js --open

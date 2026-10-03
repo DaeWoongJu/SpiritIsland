@@ -183,9 +183,9 @@ class Game extends EventEmitter {
     return this.ask(pid, { type: 'option', title, options, ...extra });
   }
 
-  async askLand(pid, title, options, cancel = false, notes = {}) {
+  async askLand(pid, title, options, cancel = false, notes = {}, extra = {}) {
     if (!options.length) return null;
-    return this.ask(pid, { type: 'land', title, options, cancel, notes });
+    return this.ask(pid, { type: 'land', title, options, cancel, notes, ...extra });
   }
 
   // ───────────── 조각/지역 조회 ─────────────
@@ -345,16 +345,16 @@ class Game extends EventEmitter {
   }
 
   /** 침략자에게 피해 n. 효율적으로 자동 배분. */
-  damageInvaders(landId, n) {
+  damageInvaders(landId, n, types = ['explorer', 'town', 'city']) {
     const l = this.lands[landId];
     const destroyed = { explorer: 0, town: 0, city: 0 };
     let dmg = n;
     if (dmg > 0 && this.invaderCount(landId)) this.log(`${landId}: 침략자에게 피해 ${n}`);
     while (dmg > 0) {
       const pieces = [];
-      l.cities.forEach((hp, i) => pieces.push({ t: 'city', i, hp }));
-      l.towns.forEach((hp, i) => pieces.push({ t: 'town', i, hp }));
-      if (l.explorers) pieces.push({ t: 'explorer', i: 0, hp: 1 });
+      if (types.includes('city')) l.cities.forEach((hp, i) => pieces.push({ t: 'city', i, hp }));
+      if (types.includes('town')) l.towns.forEach((hp, i) => pieces.push({ t: 'town', i, hp }));
+      if (l.explorers && types.includes('explorer')) pieces.push({ t: 'explorer', i: 0, hp: 1 });
       if (!pieces.length) break;
       const killable = pieces.filter((p) => p.hp <= dmg).sort((a, b) => TIER[b.t] - TIER[a.t] || a.hp - b.hp);
       if (killable.length) {
@@ -485,13 +485,22 @@ class Game extends EventEmitter {
 
   addBlight(landId, depth = 0) {
     const l = this.lands[landId];
+    // 만연한 초록: 황폐 대신 존재 1개 파괴
+    for (const pid of this.playerIds) {
+      if (this.spiritDef(pid).blightShield && this.presenceCount(pid, landId) > 0 && this.islandPresence(pid) >= 2) {
+        this.log(`${this.pname(pid)}: 땅을 뒤덮는 초록 — ${landId}에 황폐 대신 존재 1개가 희생됩니다`);
+        this.destroyPresence(pid, landId, 1, '황폐를 대신 받음');
+        this.events.push({ landId, kind: 'shield' });
+        return;
+      }
+    }
     const had = l.blight > 0;
     this.takeBlightFromPool();
     l.blight++;
     this.log(`${landId}: 황폐 추가`);
     this.events.push({ landId, kind: 'blight' });
     for (const pid of this.playerIds) {
-      if (this.presenceCount(pid, landId) > 0) this.destroyPresence(pid, landId, 1, '황폐');
+      if (this.presenceCount(pid, landId) > 0 && !this.spiritDef(pid).blightImmune) this.destroyPresence(pid, landId, 1, '황폐');
     }
     if (had && depth < 20) {
       const target = [...l.adj].sort((a, b) => this.lands[a].blight - this.lands[b].blight || a.localeCompare(b))[0];
@@ -520,6 +529,10 @@ class Game extends EventEmitter {
     this.lands[landId].presence[pid] = cur - k;
     this.spirits[pid].destroyed += k;
     this.log(`${this.pname(pid)}: ${landId}의 존재 ${k}개 파괴${why ? ` (${why})` : ''}`);
+    if (this.spiritDef(pid).erupts && this.invaderCount(landId)) {
+      this.log(`🌋 ${this.pname(pid)}: 분출! ${landId}에 피해 ${2 * k}`);
+      this.damageInvaders(landId, 2 * k);
+    }
     if (this.islandPresence(pid) === 0) this.endGame(false, `${this.pname(pid)}의 존재가 섬에서 모두 사라졌습니다.`);
   }
 
@@ -557,9 +570,9 @@ class Game extends EventEmitter {
       let type = avail[0];
       const opts = avail.map((t) => ({ value: t, label: `${PIECE_NAMES[t]} 밀어내기` }));
       if (upTo) opts.push({ value: '__stop', label: '그만 밀어내기' });
-      if (opts.length > 1) type = await this.askOption(pid, `${landId}에서 밀어낼 조각 선택 (${i + 1}/${max === 99 ? '∞' : max})`, opts, { focus: [landId] });
+      if (opts.length > 1) type = await this.askOption(pid, `${landId}에서 밀어낼 조각 선택 (${i + 1}/${max === 99 ? '∞' : max})`, opts, { focus: [landId], kind: 'push' });
       if (type === '__stop') break;
-      const dest = dests.length === 1 ? dests[0] : await this.askLand(pid, `${PIECE_NAMES[type]}을(를) ${landId}에서 어디로 밀어낼까요?`, dests, false);
+      const dest = dests.length === 1 ? dests[0] : await this.askLand(pid, `${PIECE_NAMES[type]}을(를) ${landId}에서 어디로 밀어낼까요?`, dests, false, {}, { focus: [landId], kind: 'push' });
       this.movePiece(landId, dest, type);
       this.log(`${landId} → ${dest}: ${PIECE_NAMES[type]} 밀어냄`);
       moved.push({ type, to: dest });
@@ -573,11 +586,11 @@ class Game extends EventEmitter {
       const sources = this.lands[landId].adj.filter((a) => types.some((t) => this.count(a, t) > 0));
       if (!sources.length) break;
       const typeLabel = types.map((t) => PIECE_NAMES[t]).join('/');
-      const src = await this.askLand(pid, `${landId}(으)로 ${typeLabel}을(를) 모을 지역 선택 (${i + 1}/${max})${upTo ? ' — 취소 시 그만' : ''}`, sources, upTo);
+      const src = await this.askLand(pid, `${landId}(으)로 ${typeLabel}을(를) 모을 지역 선택 (${i + 1}/${max})${upTo ? ' — 취소 시 그만' : ''}`, sources, upTo, {}, { focus: [landId], kind: 'gather' });
       if (!src) break;
       const avail = types.filter((t) => this.count(src, t) > 0);
       let type = avail[0];
-      if (avail.length > 1) type = await this.askOption(pid, `${src}에서 무엇을 모을까요?`, avail.map((t) => ({ value: t, label: PIECE_NAMES[t] })));
+      if (avail.length > 1) type = await this.askOption(pid, `${src}에서 무엇을 모을까요?`, avail.map((t) => ({ value: t, label: PIECE_NAMES[t] })), { kind: 'gather' });
       this.movePiece(src, landId, type);
       this.log(`${src} → ${landId}: ${PIECE_NAMES[type]} 모음`);
       moved.push({ type, from: src });
@@ -594,7 +607,7 @@ class Game extends EventEmitter {
     if (s.cardRevealed < def.cardTrack.length) opts.push({ value: 'card', label: `카드 트랙 (→ 카드 ${def.cardTrack[s.cardRevealed]}장)` });
     if (s.destroyed > 0) opts.push({ value: 'destroyed', label: `파괴된 존재 (${s.destroyed}개)` });
     if (!opts.length) { this.log(`${this.pname(pid)}: 추가할 존재가 없습니다.`); return false; }
-    const src = opts.length === 1 ? opts[0].value : await this.askOption(pid, `${landId}에 놓을 존재를 어디서 가져올까요?`, opts);
+    const src = opts.length === 1 ? opts[0].value : await this.askOption(pid, `${landId}에 놓을 존재를 어디서 가져올까요?`, opts, { kind: 'presenceSource', focus: [landId] });
     if (src === 'energy') s.energyRevealed++;
     else if (src === 'card') s.cardRevealed++;
     else s.destroyed--;
@@ -622,10 +635,10 @@ class Game extends EventEmitter {
     const kind = forceKind || await this.askOption(pid, '어떤 권능 카드를 얻을까요?', [
       { value: 'minor', label: '소형 권능 (4장 중 1장)' },
       { value: 'major', label: '대형 권능 (4장 중 1장, 카드 1장을 잊어야 함)' },
-    ]);
+    ], { kind: 'gainKind' });
     const drawn = this.drawFrom(kind, 4);
     if (!drawn.length) return;
-    const [pick] = await this.ask(pid, { type: 'cards', title: `${kind === 'minor' ? '소형' : '대형'} 권능 카드 1장을 고르세요`, cards: drawn, min: 1, max: 1 });
+    const [pick] = await this.ask(pid, { type: 'cards', title: `${kind === 'minor' ? '소형' : '대형'} 권능 카드 1장을 고르세요`, cards: drawn, min: 1, max: 1, kind: 'pickCard' });
     this.decks[kind + 'Discard'].push(...drawn.filter((c) => c !== pick));
     const s = this.spirits[pid];
     s.hand.push(pick);
@@ -633,7 +646,7 @@ class Game extends EventEmitter {
     if (kind === 'major') {
       const all = [...s.hand.filter((c) => c !== pick), ...s.discard, ...s.played.map((p) => p.id)];
       if (all.length) {
-        const [f] = await this.ask(pid, { type: 'cards', title: '대형 권능을 얻었습니다. 잊을(영구 제거) 카드 1장을 고르세요', cards: all, min: 1, max: 1 });
+        const [f] = await this.ask(pid, { type: 'cards', title: '대형 권능을 얻었습니다. 잊을(영구 제거) 카드 1장을 고르세요', cards: all, min: 1, max: 1, kind: 'forget' });
         this.forgetCard(pid, f);
       }
     }
@@ -660,7 +673,7 @@ class Game extends EventEmitter {
       const opts = Object.values(this.lands).filter((l) => filter(l, pid) && types.some((t) => this.count(l.id, t) > 0)).map((l) => l.id);
       if (!opts.length) return;
       const typeLabel = types.map((t) => PIECE_NAMES[t]).join('/');
-      const land = await this.askLand(pid, `공포: ${desc} 지역에서 ${typeLabel} ${n}개 제거 — 지역 선택`, opts, false);
+      const land = await this.askLand(pid, `공포: ${desc} 지역에서 ${typeLabel} ${n}개 제거 — 지역 선택`, opts, false, {}, { kind: 'fear' });
       for (let i = 0; i < n; i++) {
         const avail = types.filter((t) => this.count(land, t) > 0);
         if (!avail.length) break;
@@ -674,7 +687,7 @@ class Game extends EventEmitter {
     await Promise.all(this.playerIds.map(async (pid) => {
       const opts = Object.values(this.lands).filter((l) => filter(l, pid) && (l.explorers || l.towns.length)).map((l) => l.id);
       if (!opts.length) return;
-      const land = await this.askLand(pid, `공포: ${desc} 지역에서 탐험가 2개 또는 마을 1개 제거 — 지역 선택`, opts, false);
+      const land = await this.askLand(pid, `공포: ${desc} 지역에서 탐험가 2개 또는 마을 1개 제거 — 지역 선택`, opts, false, {}, { kind: 'fear' });
       const o = [];
       if (this.count(land, 'explorer')) o.push({ value: 'e', label: '탐험가 2개 제거' });
       if (this.count(land, 'town')) o.push({ value: 't', label: '마을 1개 제거' });
@@ -687,7 +700,7 @@ class Game extends EventEmitter {
     await Promise.all(this.playerIds.map(async (pid) => {
       const opts = Object.values(this.lands).filter((l) => filter(l, pid) && types.some((t) => this.count(l.id, t) > 0)).map((l) => l.id);
       if (!opts.length) return;
-      const land = await this.askLand(pid, `공포: ${desc} 지역에서 밀어내기 — 지역 선택 (취소 가능)`, opts, true);
+      const land = await this.askLand(pid, `공포: ${desc} 지역에서 밀어내기 — 지역 선택 (취소 가능)`, opts, true, {}, { kind: 'fear' });
       if (land) await this.push(pid, land, types, n, { upTo: true });
     }));
   }
@@ -696,7 +709,7 @@ class Game extends EventEmitter {
     await Promise.all(this.playerIds.map(async (pid) => {
       const opts = Object.values(this.lands).filter((l) => filter(l, pid) && types.some((t) => this.count(l.id, t) > 0)).map((l) => l.id);
       if (!opts.length) return;
-      const land = await this.askLand(pid, `공포: ${desc} 지역에서 교체 — 지역 선택 (취소 가능)`, opts, true);
+      const land = await this.askLand(pid, `공포: ${desc} 지역에서 교체 — 지역 선택 (취소 가능)`, opts, true, {}, { kind: 'fear' });
       if (!land) return;
       const avail = types.filter((t) => this.count(land, t) > 0);
       const t = avail.length === 1 ? avail[0] : await this.askOption(pid, '무엇을 교체할까요?', avail.map((x) => ({ value: x, label: x === 'city' ? '도시 → 마을' : '마을 → 탐험가' })));
@@ -715,6 +728,17 @@ class Game extends EventEmitter {
   // ───────────── 권능 사용 ─────────────
   makeCtx(pid, power, landId, targetPid) {
     const g = this;
+    const def = this.spiritDef(pid);
+    // 꿈과 악몽: 피해/파괴 대신 공포 (최대 8)
+    const dream = (f) => {
+      const n = Math.min(8, f);
+      if (n > 0) { g.log(`꿈의 세계: 침략자가 악몽에 시달립니다 — 공포 +${n}`); g.addFear(n); }
+      return { count: 0, destroyed: { explorer: 0, town: 0, city: 0 } };
+    };
+    const invaderHp = (types = ['explorer', 'town', 'city']) => {
+      const l = g.lands[landId];
+      return (types.includes('explorer') ? l.explorers : 0) + (types.includes('town') ? l.towns.reduce((a, b) => a + b, 0) : 0) + (types.includes('city') ? l.cities.reduce((a, b) => a + b, 0) : 0);
+    };
     const ctx = {
       game: g,
       pid,
@@ -737,10 +761,34 @@ class Game extends EventEmitter {
       invaderCount: () => g.invaderCount(landId),
       terrainIs: (...ts) => ts.includes(g.lands[landId].terrain),
       hasPresence: () => g.presenceCount(pid, landId) > 0,
-      damage: (n) => g.damageInvaders(landId, n),
-      damageEach: (n, types) => g.damageEach(landId, n, types),
-      destroy: (types, n) => g.destroyInvaders(landId, types, n),
-      destroyAll: (types) => g.destroyAllOf(landId, types),
+      damage: (n, types) => {
+        if (n <= 0) return { count: 0, destroyed: { explorer: 0, town: 0, city: 0 } };
+        // 바다(해안) / 들불(황폐 지역): 권능마다 한 번 피해 +1
+        if (!ctx.bonusUsed && ((def.coastalOnly && g.lands[landId].coastal) || (def.blightImmune && g.lands[landId].blight > 0))) {
+          ctx.bonusUsed = true; n += 1; g.log(`${def.special.name}: 피해 +1`);
+        }
+        if (def.dreamer) return dream(Math.min(n, invaderHp(types)));
+        return g.damageInvaders(landId, n, types);
+      },
+      damageEach: (n, types) => {
+        if (def.dreamer) { dream(types.reduce((a, t) => a + g.count(landId, t), 0)); return 0; }
+        return g.damageEach(landId, n, types);
+      },
+      destroy: (types, n) => {
+        if (def.dreamer) {
+          let f = 0; let k = 0;
+          const order = [...types].sort((a, b) => (TIER[b] || 0) - (TIER[a] || 0));
+          const left = Object.fromEntries(order.map((t) => [t, g.count(landId, t)]));
+          for (let i = 0; i < n; i++) { const t = order.find((x) => left[x] > 0); if (!t) break; left[t]--; f += TIER[t]; k++; }
+          dream(f);
+          return 0;
+        }
+        return g.destroyInvaders(landId, types, n);
+      },
+      destroyAll: (types) => {
+        if (def.dreamer) { dream(types.reduce((a, t) => a + g.count(landId, t) * (TIER[t] || 1), 0)); return 0; }
+        return g.destroyAllOf(landId, types);
+      },
       destroyDahan: (n) => g.destroyDahan(landId, n),
       push: (types, n, upTo = true) => g.push(pid, landId, types, n, { upTo }),
       gather: (types, n, upTo = true) => g.gather(pid, landId, types, n, { upTo }),
@@ -773,7 +821,7 @@ class Game extends EventEmitter {
     const options = [...inRange, ...extra];
     if (!options.length) return false;
     const rangeText = `${t.from === 'sacred' ? '성지' : '존재'}에서 사거리 ${t.range}`;
-    const choice = await this.askLand(pid, `[${power.name}] 대상 지역 선택 (${rangeText})`, options, true, notes);
+    const choice = await this.askLand(pid, `[${power.name}] 대상 지역 선택 (${rangeText})`, options, true, notes, { kind: 'target', power: power.id || null });
     if (choice && extra.includes(choice)) {
       s.energy -= 1;
       this.log(`${this.pname(pid)}: 다한의 그림자 — 에너지 1을 지불하고 ${choice}을(를) 대상으로 합니다`);
@@ -788,7 +836,7 @@ class Game extends EventEmitter {
     if (f === 'self') opts = [pid];
     if (!opts.length) return false;
     if (opts.length === 1) return opts[0];
-    return this.askOption(pid, `[${power.name}] 대상 정령 선택`, [...opts.map((x) => ({ value: x, label: this.pname(x) })), { value: '__cancel', label: '취소' }])
+    return this.askOption(pid, `[${power.name}] 대상 정령 선택`, [...opts.map((x) => ({ value: x, label: this.pname(x) })), { value: '__cancel', label: '취소' }], { kind: 'targetSpirit' })
       .then((v) => (v === '__cancel' ? null : v));
   }
 
@@ -849,10 +897,16 @@ class Game extends EventEmitter {
       const board = this.boardOf[pid];
       const boardLands = Object.values(this.lands).filter((l) => l.board === board);
       for (const rule of def.setup) {
+        if (rule.mostDahan) {
+          const top = [...boardLands].sort((a, b) => b.dahan.length - a.dahan.length || b.num - a.num).slice(0, rule.mostDahan);
+          for (const l of top) l.presence[pid] = (l.presence[pid] || 0) + 1;
+          continue;
+        }
         let land;
         if (rule.num) land = boardLands.find((l) => l.num === rule.num);
         else land = boardLands.filter((l) => l.terrain === rule.terrain).sort((a, b) => b.num - a.num)[0];
         land.presence[pid] = (land.presence[pid] || 0) + rule.count;
+        if (rule.blight) land.blight += rule.blight;
         // 트랙에서 존재를 꺼낸 것이 아니라 시작 존재로 취급
       }
     }
@@ -887,7 +941,7 @@ class Game extends EventEmitter {
     this.changed();
     const plays = this.cardPlays(pid);
     const chosen = await this.ask(pid, {
-      type: 'cards', mode: 'play', title: `사용할 권능 카드를 고르세요 (최대 ${plays}장, 에너지 ${s.energy})`,
+      type: 'cards', mode: 'play', kind: 'play', title: `사용할 권능 카드를 고르세요 (최대 ${plays}장, 에너지 ${s.energy})`,
       cards: [...s.hand], min: 0, max: plays, budget: s.energy,
     });
     for (const id of chosen) {
@@ -920,8 +974,10 @@ class Game extends EventEmitter {
         this.log(`${this.pname(pid)}: 에너지 +${act.n}`);
         break;
       case 'presence': {
-        const opts = this.landsWithinRange(this.presenceLands(pid), act.range);
-        const land = await this.askLand(pid, `존재를 추가할 지역 선택 (존재에서 사거리 ${act.range})`, opts, false);
+        let opts = this.landsWithinRange(this.presenceLands(pid), act.range);
+        if (this.spiritDef(pid).coastalOnly) opts = opts.filter((id) => this.lands[id].coastal);
+        if (!opts.length) { this.log(`${this.pname(pid)}: 존재를 놓을 수 있는 지역이 없습니다`); break; }
+        const land = await this.askLand(pid, `존재를 추가할 지역 선택 (존재에서 사거리 ${act.range})`, opts, false, {}, { kind: 'presenceLand' });
         await this.placePresence(pid, land);
         break;
       }
@@ -1058,18 +1114,26 @@ class Game extends EventEmitter {
   doRavage(land) {
     if (!this.invaderCount(land.id)) return;
     if (this.skipAction(land, 'Ravage')) { this.log(`${land.id}: 약탈하지 않음`); return; }
-    let dmg = land.explorers + 2 * land.towns.length + 3 * land.cities.length;
     let defend = land.defend;
     for (const pid of this.playerIds) {
       if (this.spirits[pid].spiritId === 'earth' && this.isSacred(pid, land.id)) defend += 3;
+      if (this.spiritDef(pid).presenceDefend) defend += this.presenceCount(pid, land.id);
     }
+    const counterBonus = this.playerIds.some((pid) => this.spirits[pid].spiritId === 'thunder' && this.presenceCount(pid, land.id) > 0) ? 1 : 0;
+    if (land.flags.dahanAmbush && land.dahan.length) {
+      const pre = land.dahan.length * (2 + counterBonus);
+      this.log(`${land.id}: 다한의 선제 반격! 피해 ${pre}`);
+      this.damageInvaders(land.id, pre);
+      land.flags.dahanAmbushed = true;
+    }
+    let dmg = land.explorers + 2 * land.towns.length + 3 * land.cities.length;
     dmg = Math.max(0, dmg - defend);
     this.events.push({ landId: land.id, kind: 'ravage' });
     this.log(`${land.id}: 약탈! 피해 ${dmg}${defend ? ` (방어 ${defend})` : ''}`);
     if (dmg >= 2) this.addBlight(land.id);
     if (dmg > 0 && !land.flags.dahanProtected) this.damageDahan(land.id, dmg);
-    if (land.dahan.length) {
-      const counter = land.dahan.length * 2;
+    if (land.dahan.length && !land.flags.dahanAmbushed && this.invaderCount(land.id)) {
+      const counter = land.dahan.length * (2 + counterBonus);
       this.log(`${land.id}: 다한의 반격! 피해 ${counter}`);
       this.damageInvaders(land.id, counter);
     }
@@ -1093,6 +1157,8 @@ class Game extends EventEmitter {
     });
     for (const land of targets) {
       if (this.skipAction(land, 'Explore')) { this.log(`${land.id}: 탐험하지 않음`); continue; }
+      const keeper = this.playerIds.find((pid) => this.spiritDef(pid).forbidExplore && this.isSacred(pid, land.id));
+      if (keeper) { this.log(`${land.id}: 금지된 땅 — 침략자가 들어오지 못합니다`); continue; }
       this.addPieces(land.id, 'explorer', 1);
       this.events.push({ landId: land.id, kind: 'explore' });
       this.log(`${land.id}: 탐험가 도착`);

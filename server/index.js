@@ -15,6 +15,7 @@ const { TERRAIN_NAMES } = require('./game/boards');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const THREE_DIR = path.dirname(path.dirname(require.resolve('three')));
 const MAX_PLAYERS = 4;
 
 // ───────────── 정적 데이터(카탈로그) ─────────────
@@ -22,7 +23,7 @@ const CATALOG = {
   spirits: SPIRITS.map((s) => ({
     id: s.id, name: s.name, en: s.en, color: s.color, complexity: s.complexity, summary: s.summary,
     growth: s.growth.map((g) => g.actions.map(growthLabel)),
-    energyTrack: s.energyTrack, cardTrack: s.cardTrack, special: s.special, setupText: s.setupText, uniques: s.uniques,
+    energyTrack: s.energyTrack, cardTrack: s.cardTrack, special: s.special, setupText: s.setupText, uniques: s.uniques, tip: s.tip || '',
     innates: s.innates.map((i) => ({ id: i.id, name: i.name, speed: i.speed, target: i.target, levels: i.levels })),
   })),
   powers: Object.fromEntries(POWERS.map((p) => [p.id, {
@@ -41,6 +42,18 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
   let p = decodeURIComponent(url.pathname);
+  // 3D 지도용 three.js 를 node_modules 에서 제공
+  if (p.startsWith('/vendor/three/')) {
+    const rel = p.slice('/vendor/three/'.length);
+    const file = path.normalize(path.join(THREE_DIR, rel));
+    if (!file.startsWith(THREE_DIR) || !/^(build|examples[\\/]jsm)[\\/]/.test(path.relative(THREE_DIR, file))) { res.writeHead(403); res.end(); return; }
+    fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+      res.end(data);
+    });
+    return;
+  }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, p));
   if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }

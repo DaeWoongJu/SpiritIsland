@@ -14,6 +14,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&family=Noto+Serif+KR:wght@600;700;900&display=swap">
   <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }</script>
 </head>
 <body>
   <!-- 로비: 이름 입력 / 방 만들기 / 참가 -->
@@ -32,6 +33,7 @@
         </div>
       </div>
       <p class="hint">방을 만든 뒤 4자리 코드를 친구에게 알려주세요.</p>
+      <button class="btn-guide big-guide">📖 처음이세요? 게임 방법 보기</button>
       <button id="btn-install" class="hidden" style="width:100%;margin-top:12px">⬇ 정령섬을 앱으로 설치 (바탕화면 아이콘)</button>
       <div id="conn-status" class="conn">서버 연결 중...</div>
       <div style="text-align:center;margin-top:8px"><button class="btn-sound small">🔊 소리</button></div>
@@ -43,7 +45,7 @@
     <header class="room-header">
       <div class="brand"><svg viewBox="0 0 64 64"><use href="#logo"/></svg>정령섬 대기실</div>
       <div>방 코드 <span id="room-code" class="code"></span> <button id="btn-copy" class="small">초대 링크 복사</button></div>
-      <div style="display:flex;gap:6px"><button class="btn-sound small">🔊 소리</button><button id="btn-leave" class="small">나가기</button></div>
+      <div style="display:flex;gap:6px"><button class="btn-guide small">📖 게임 방법</button><button class="btn-sound small">🔊 소리</button><button id="btn-leave" class="small">나가기</button></div>
     </header>
     <div class="room-body">
       <div class="room-left">
@@ -57,7 +59,8 @@
         <form id="room-chat-form" class="chat-form"><input placeholder="메시지..." maxlength="300"><button>전송</button></form>
       </div>
       <div class="room-right">
-        <h2>정령 선택</h2>
+        <h2>정령 선택 <span class="hint" style="font-family:var(--sans);font-weight:400">— 카드를 눌러 고르세요. 처음이라면 <b style="color:var(--accent)">초보 추천</b> 정령을 골라 보세요.</span></h2>
+        <div id="spirit-filter" class="spirit-filter"></div>
         <div id="spirit-list" class="spirit-list"></div>
       </div>
     </div>
@@ -69,7 +72,19 @@
     <div class="game-body">
       <main class="map-area">
         <div id="prompt" class="prompt"></div>
-        <div class="map-wrap"><svg id="map"></svg></div>
+        <div id="hint" class="hint-bar hidden"></div>
+        <div class="map-wrap">
+          <svg id="map"></svg>
+          <div id="map3d" class="map3d hidden"></div>
+          <div class="map-tools">
+            <button id="btn-view" class="small" title="2D / 3D 지도 전환">🗺 2D 보기</button>
+            <button id="btn-cam" class="small" title="시점 초기화">🎯 시점 초기화</button>
+            <button id="btn-panel" class="small" title="오른쪽 패널 접기/펴기">⇥ 패널 접기</button>
+            <button id="btn-hand" class="small" title="손패 접기/펴기">▾ 손패 접기</button>
+            <button id="btn-full" class="small" title="전체 화면">⛶ 전체 화면</button>
+          </div>
+          <div id="map-help" class="map-help">드래그: 회전 · 휠: 확대 · 우클릭 드래그: 이동</div>
+        </div>
         <div id="legend" class="legend"></div>
       </main>
       <aside class="side">
@@ -114,12 +129,15 @@
     </ul>
     <div class="actions"><button id="btn-help-close" class="primary">닫기</button></div>
   </div></div>
+  <div id="guide" class="modal hidden"><div class="modal-inner guide"></div></div>
   <div id="sound-panel" class="sound-panel hidden"></div>
   <div id="toast" class="toast hidden"></div>
   <div id="tooltip" class="tooltip hidden"></div>
 
   <script src="icons.js"></script>
   <script src="audio.js"></script>
+  <script src="guide.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="map3d.js"></script>
 </body>
 </html>

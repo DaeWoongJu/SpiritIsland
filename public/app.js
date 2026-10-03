@@ -26,7 +26,12 @@ const app = {
   resultDismissed: false,
   chatSeen: 0,
   retry: 0,
+  view3d: readPref('si-3d', '1') === '1',
+  showHints: readPref('si-hints', '1') === '1',
 };
+
+function readPref(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } }
+function writePref(k, v) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } }
 
 // ───────────── 연결 ─────────────
 function connect() {
@@ -75,6 +80,12 @@ function onMessage(msg) {
       app.you = msg.you;
       gameSounds(prevPrompt);
       render();
+      if (!app.guideShown) {
+        app.guideShown = true;
+        let seen = false;
+        try { seen = localStorage.getItem('si-guided') === '1'; } catch { /* 무시 */ }
+        if (!seen) Guide.open(0);
+      }
       break;
     }
     case 'left':
@@ -182,15 +193,23 @@ function renderRoom() {
     ? (allPicked ? `${r.players.length}인 게임을 시작할 수 있습니다.` : '모든 플레이어가 정령을 고르면 시작할 수 있습니다.')
     : '방장이 게임을 시작하기를 기다리는 중...';
 
-  $('#spirit-list').innerHTML = c.spirits.map((s) => {
+  const order = { 낮음: 0, 보통: 1, 높음: 2 };
+  const filters = [['all', '전체'], ['낮음', '쉬움'], ['보통', '보통'], ['높음', '어려움']];
+  app.spiritFilter ||= 'all';
+  $('#spirit-filter').innerHTML = filters.map(([k, n]) => `<button class="small ${app.spiritFilter === k ? 'on' : ''}" data-f="${k}">${n}</button>`).join('') + `<span class="hint">총 ${c.spirits.length}종</span>`;
+  for (const b of document.querySelectorAll('#spirit-filter button')) b.onclick = () => { app.spiritFilter = b.dataset.f; renderRoom(); };
+  const list = [...c.spirits].sort((a, b) => order[a.complexity] - order[b.complexity]).filter((sp) => app.spiritFilter === 'all' || sp.complexity === app.spiritFilter);
+  $('#spirit-list').innerHTML = list.map((s) => {
     const owner = r.players.find((p) => p.spiritId === s.id);
     const mine = owner && owner.id === app.you;
     const pips = (arr) => `<span class="pips">${arr.map((v) => `<span class="pip">${v}</span>`).join('')}</span>`;
     return `<div class="spirit-card ${mine ? 'mine' : ''} ${owner && !mine ? 'taken' : ''}" data-spirit="${s.id}" style="--sc:${s.color}">
       ${owner ? `<span class="owner">${esc(owner.name)}</span>` : ''}
       <h3><span class="spirit-orb"></span>${esc(s.name)}</h3>
-      <div class="en">${esc(s.en)} · 난이도 ${esc(s.complexity)}</div>
-      <div class="sec">${esc(s.summary)}</div>
+      <div class="en">${esc(s.en)}</div>
+      <div class="badges"><span class="badge cx-${order[s.complexity]}">난이도 ${esc(s.complexity)}</span>${s.complexity === '낮음' ? '<span class="badge rec">초보 추천</span>' : ''}</div>
+      <div class="sec summary">${esc(s.summary)}</div>
+      ${s.tip ? `<div class="sec tipbox">💡 ${esc(s.tip)}</div>` : ''}
       <div class="sec"><b>${esc(s.special.name)}</b>: ${esc(s.special.text)}</div>
       <div class="sec"><b>성장</b> (하나 선택)<br>${s.growth.map((g, i) => `${i + 1}. ${g.map(esc).join(' + ')}`).join('<br>')}</div>
       <div class="sec tracks"><span>${pcIcon('energy', 13, '#f3d98b')} 에너지</span>${pips(s.energyTrack)}<span>${pcIcon('card', 13, '#9ed3ff')} 카드 수</span>${pips(s.cardTrack)}</div>
@@ -271,7 +290,8 @@ function renderTopbar() {
   const fearDots = Array.from({ length: f.poolSize }, (_, i) => `<i class="${i < f.generated ? 'on' : ''}"></i>`).join('');
   $('#topbar').innerHTML = `
     <div class="tb-logo"><svg viewBox="0 0 64 64"><use href="#logo"/></svg></div>
-    <div class="tb-box phase"><span class="k">${st.turn}턴</span><span class="v">${PHASE_NAME[st.phase] || st.phase}</span></div>
+    <div class="tb-box phase" title="${PHASE_NAME[st.phase] || ''}"><span class="k">${st.turn}턴 · 지금 단계</span>
+      <div class="phases">${[['growth', '성장·카드'], ['fast', '빠른 권능'], ['invader', '침략자'], ['slow', '느린 권능']].map(([k, n]) => `<span class="ph ${st.phase === k ? 'on' : ''} ph-${k}">${n}</span>`).join('<i>›</i>')}</div></div>
     <div class="tb-box" title="공포가 공포 풀만큼 쌓이면 공포 카드를 얻습니다."><span class="k">공포 ${f.generated}/${f.poolSize} · 획득 카드 ${f.earnedTotal}장${f.pending ? ` (대기 ${f.pending})` : ''}</span><div class="fear-bar">${fearDots}</div></div>
     <div class="tb-box" title="공포 단계에 따라 승리 조건이 쉬워집니다."><span class="k">공포 단계 · 남은 공포 카드</span><span class="v">${pcIcon('fear', 16, '#c9a2ff')} ${f.terrorLevel}단계 · ${f.deckLeft}장</span></div>
     <div class="tb-box" title="${st.blight.flipped ? '황폐해진 섬: 다시 비면 패배' : '건강한 섬: 비면 뒤집힘'}"><span class="k">황폐 카드${st.blight.flipped ? ' (황폐해진 섬!)' : ''}</span><span class="v" style="color:${st.blight.flipped ? 'var(--danger)' : 'inherit'}">${pcIcon('blight', 16, '#e8604f')} ${st.blight.pool}</span></div>
@@ -279,8 +299,7 @@ function renderTopbar() {
     <div class="tb-box"><span class="k">건설 (이번 턴)</span><span class="v">${invCardHTML(st.invader.build)}</span></div>
     <div class="tb-box"><span class="k">침략자 덱</span><span class="v">${st.invader.deckCount}장${st.invader.nextStage ? ` <small class="hint">(다음 ${st.invader.nextStage}단계)</small>` : ''}</span></div>
     <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계)</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
-    ${soundButtonHTML()}
-    <button id="btn-help">❓ 규칙</button>
+    <div class="tb-actions"><button class="btn-guide small">📖 게임 방법</button>${soundButtonHTML()}<button id="btn-help" class="small">❓ 규칙 요약</button></div>
   `;
   $('#btn-help').onclick = () => $('#help').classList.remove('hidden');
 }
@@ -289,6 +308,11 @@ function renderPrompt() {
   const el = $('#prompt');
   const p = app.prompt;
   const st = app.state;
+  const hint = st.result ? '' : p ? promptHint(p, st, app.you) : idleHint(st);
+  $('#hint').classList.toggle('hidden', !hint || !app.showHints);
+  $('#hint').innerHTML = hint ? `<span class="hint-ico">💡</span><span>${hint}</span><button class="hint-x small" title="도움말 숨기기">숨기기</button>` : '';
+  const hx = $('#hint .hint-x');
+  if (hx) hx.onclick = () => { app.showHints = false; try { localStorage.setItem('si-hints', '0'); } catch { /* 무시 */ } renderPrompt(); };
   if (st.result) {
     el.className = 'prompt idle';
     el.innerHTML = `<span class="title">${st.result.win ? '🎉 승리!' : '💀 패배'}</span> ${esc(st.result.reason)} <button id="btn-show-result">결과 보기</button>`;
@@ -413,9 +437,38 @@ function tokenSVG(c, x, y) {
     <use href="#pc-${c.kind}" x="-5.6" y="-5.6" width="11.2" height="11.2" style="color:${st.glyph}"/>${badge(c.n, c.dmg)}</g>`;
 }
 
+function use3D() {
+  return app.view3d && window.Map3D && window.Map3D.supported();
+}
+
 function renderMap() {
   const st = app.state;
   const svg = $('#map');
+  $('#btn-view').textContent = app.view3d ? '🗺 2D 보기' : '🏔 3D 보기';
+  $('#btn-cam').classList.toggle('hidden', !use3D());
+  $('#map-help').classList.toggle('hidden', !use3D());
+  if (use3D()) {
+    svg.classList.add('hidden');
+    $('#map3d').classList.remove('hidden');
+    const ok = window.Map3D.init($('#map3d'), {
+      onClick: (id) => {
+        const p = app.prompt;
+        if (p && p.type === 'land' && p.options.includes(id)) { Sound.play('land'); answer(id); }
+      },
+      onHover: (id, e) => { if (id) showTip(e, landTip(id)); else hideTip(); },
+    });
+    if (ok) {
+      window.Map3D.render(st, app.prompt, {
+        spiritColor: (pid) => spiritOf(pid).def.color,
+        isSacred: (pid, landId) => st.spirits[pid].sacred.includes(landId),
+      });
+      renderLegend();
+      return;
+    }
+    app.view3d = false;
+  }
+  svg.classList.remove('hidden');
+  $('#map3d').classList.add('hidden');
   const pad = 14;
   const W = st.mapSize.width;
   const H = st.mapSize.height;
@@ -475,6 +528,10 @@ function renderMap() {
     poly.onmousemove = moveTip;
     poly.onmouseleave = hideTip;
   }
+  renderLegend();
+}
+
+function renderLegend() {
   const lg = (k, label) => `<span class="lg">${pcIcon(k, 14, TOKEN_STYLE[k] ? TOKEN_STYLE[k].fill : '#ddd')} ${label}</span>`;
   $('#legend').innerHTML = [lg('explorer', '탐험가 1'), lg('town', '마을 2'), lg('city', '도시 3'), lg('dahan', '다한 2'), lg('blight', '황폐'),
     `<span class="lg">${pcIcon('presence', 14, '#f2c94c')} 존재 <span class="hint">(금빛 테두리 = 성지)</span></span>`, lg('shield', '방어'), lg('skip', '행동 건너뜀'),
@@ -673,6 +730,20 @@ function toast(msg, info = false) {
 // ───────────── 기타 UI ─────────────
 function initRoomAndGameUI() {
   $('#btn-leave').onclick = () => send({ t: 'leave' });
+  document.addEventListener('click', (e) => { if (e.target.closest('.btn-guide')) Guide.open(0); });
+  $('#btn-view').onclick = () => { app.view3d = !app.view3d; writePref('si-3d', app.view3d ? '1' : '0'); if (app.state) renderMap(); };
+  $('#btn-cam').onclick = () => window.Map3D && window.Map3D.resetView();
+  const applyLayout = () => {
+    document.body.classList.toggle('side-collapsed', readPref('si-side', '1') === '0');
+    document.body.classList.toggle('hand-collapsed', readPref('si-handv', '1') === '0');
+    $('#btn-panel').textContent = document.body.classList.contains('side-collapsed') ? '⇤ 패널 펴기' : '⇥ 패널 접기';
+    $('#btn-hand').textContent = document.body.classList.contains('hand-collapsed') ? '▴ 손패 펴기' : '▾ 손패 접기';
+  };
+  $('#btn-panel').onclick = () => { writePref('si-side', document.body.classList.contains('side-collapsed') ? '1' : '0'); applyLayout(); };
+  $('#btn-hand').onclick = () => { writePref('si-handv', document.body.classList.contains('hand-collapsed') ? '1' : '0'); applyLayout(); };
+  $('#btn-full').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); };
+  applyLayout();
+  window.addEventListener('map3d-ready', () => { if (app.state) renderMap(); });
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
   $('#help').onclick = (e) => { if (e.target.id === 'help') $('#help').classList.add('hidden'); };
   $('#btn-start').onclick = () => send({ t: 'start' });
@@ -701,6 +772,7 @@ function initRoomAndGameUI() {
     };
   }
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#guide').classList.contains('hidden')) { Guide.close(); return; }
     if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) {
       if (app.state && app.state.result) app.resultDismissed = true; else app.modal.hidden = true;
       closeModal();
@@ -723,7 +795,15 @@ function initSoundUI() {
     <input type="range" id="snd-music-vol" min="0" max="1" step="0.05" value="${st.music}">
     <label class="sp-row"><input type="checkbox" id="snd-sfx" ${st.sfxOn ? 'checked' : ''}> 효과음</label>
     <input type="range" id="snd-sfx-vol" min="0" max="1" step="0.05" value="${st.sfx}">
-    <div class="hint">화면을 한 번 클릭하면 소리가 시작됩니다.</div>`;
+    <button id="snd-test" class="small">🔔 소리 테스트</button>
+    <div class="hint" id="snd-state"></div>`;
+  const stateText = () => {
+    const m = { running: '소리 켜짐 ✓', suspended: '브라우저가 소리를 막고 있어요. 화면을 클릭하세요.', none: '화면을 한 번 클릭하면 소리가 시작됩니다.', closed: '소리 꺼짐' };
+    $('#snd-state').textContent = m[Sound.state] || Sound.state;
+  };
+  $('#snd-test').onclick = () => { Sound.test(); setTimeout(stateText, 300); };
+  setInterval(() => { if (!panel.classList.contains('hidden')) stateText(); }, 1000);
+  stateText();
   $('#snd-music').onchange = (e) => { Sound.init(); Sound.set('musicOn', e.target.checked); updateSoundButtons(); };
   $('#snd-sfx').onchange = (e) => { Sound.set('sfxOn', e.target.checked); updateSoundButtons(); };
   $('#snd-music-vol').oninput = (e) => Sound.set('music', Number(e.target.value));

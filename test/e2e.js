@@ -46,6 +46,8 @@ async function autoPlay(page, label) {
   const mk = async (name) => {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true });
     const page = await ctx.newPage();
+    if (!process.env.SHOW_GUIDE) await page.addInitScript(() => localStorage.setItem('si-guided', '1'));
+    if (!process.env.E2E_3D) await page.addInitScript(() => localStorage.setItem('si-3d', '0'));
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     // 외부 리소스(웹폰트)는 테스트 환경에 따라 막힐 수 있으므로 차단하고, 로컬 리소스 실패만 오류로 본다
     await page.route((u) => !u.href.startsWith(URL), (r) => r.abort());

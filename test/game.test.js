@@ -114,3 +114,68 @@ for (const combo of [['lightning'], ['river', 'earth'], ['shadows', 'lightning']
     }
   });
 }
+
+test('모든 정령 조합 시뮬레이션 (12종)', async () => {
+  const ids = SPIRITS.map((s) => s.id);
+  for (let i = 0; i < ids.length; i++) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const combo = [ids[i], ids[(i + seed) % ids.length]];
+      const g = mkGame(combo, seed * 31 + i);
+      let r = seed * 104729 + i;
+      const rand = () => { r = (r * 16807) % 2147483647; return r / 2147483647; };
+      attachBots(g, rand);
+      const result = await g.run();
+      assert.ok(!result.reason.startsWith('서버 오류'), `${combo.join('+')} seed ${seed}: ${result.reason}`);
+    }
+  }
+});
+
+test('특수 규칙: 만연한 초록은 황폐 대신 존재를 희생', () => {
+  const g = mkGame(['green']);
+  g.setup(); g.phase = 'invader';
+  const land = g.presenceLands('p0')[0];
+  const before = g.lands[land].blight;
+  g.addBlight(land);
+  assert.strictEqual(g.lands[land].blight, before);
+  assert.strictEqual(g.islandPresence('p0'), 1);
+});
+
+test('특수 규칙: 들불의 심장 존재는 황폐로 파괴되지 않음', () => {
+  const g = mkGame(['wildfire']);
+  g.setup(); g.phase = 'invader';
+  const land = g.presenceLands('p0')[0];
+  g.lands[land].blight = 0;
+  g.addBlight(land);
+  assert.strictEqual(g.presenceCount('p0', land), 3);
+});
+
+test('특수 규칙: 금지된 야생의 수호자 성지에는 탐험하지 않음', () => {
+  const g = mkGame(['keeper']);
+  g.setup(); g.phase = 'invader';
+  const land = g.sacredLands('p0')[0];
+  const l = g.lands[land];
+  const before = l.explorers;
+  g.doExplore({ terrains: [l.terrain] });
+  assert.strictEqual(l.explorers, before);
+});
+
+test('특수 규칙: 꿈과 악몽의 피해는 공포로 바뀜', () => {
+  const g = mkGame(['bringer']);
+  g.setup(); g.phase = 'fast';
+  const land = 'A5';
+  g.lands[land].explorers = 2;
+  const ctx = g.makeCtx('p0', { name: 't' }, land, null);
+  const fearBefore = g.fear.generated;
+  ctx.damage(3);
+  assert.strictEqual(g.lands[land].explorers, 2);
+  assert.strictEqual(g.fear.generated, fearBefore + 2);
+});
+
+test('특수 규칙: 화산 존재가 파괴되면 분출 피해', () => {
+  const g = mkGame(['volcano']);
+  g.setup(); g.phase = 'invader';
+  const land = g.presenceLands('p0')[0];
+  g.lands[land].explorers = 3;
+  g.destroyPresence('p0', land, 1, '테스트');
+  assert.strictEqual(g.lands[land].explorers, 1);
+});

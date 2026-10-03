@@ -14,8 +14,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "node_modules\ws" (
-  echo  처음 실행이라 필요한 파일을 설치합니다. 잠시만 기다려 주세요...
+set NEED_INSTALL=0
+if not exist "node_modules\ws" set NEED_INSTALL=1
+if not exist "node_modules\three" set NEED_INSTALL=1
+if "%NEED_INSTALL%"=="1" (
+  echo  필요한 파일을 설치합니다. 잠시만 기다려 주세요...
   call npm install --omit=dev
   if errorlevel 1 (
     echo  [!] 설치에 실패했습니다. 인터넷 연결을 확인하세요.
