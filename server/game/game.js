@@ -49,6 +49,10 @@ class Game extends EventEmitter {
     const settings = opts.settings || {};
     this.settings = settings;
     this.stepDelay = opts.stepDelay || 0; // 침략자 단계를 사람이 볼 수 있도록 잠깐씩 멈추는 시간(ms)
+    this.stepManual = !!opts.stepManual; // true면 모두 "다음"을 누를 때까지 기다림 (stepMaxWait 후 자동 진행)
+    this.stepMaxWait = opts.stepMaxWait || 120000;
+    this.stepNo = 0;
+    this.stepWaiter = null;
     this.tutorial = !!opts.tutorial;
     this.invaderStep = null;
     this.diff = difficultyConfig(settings.difficulty);
@@ -1127,10 +1131,24 @@ class Game extends EventEmitter {
   pause(ms) { return ms > 0 && !this.result ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve(); }
 
   /** 침략자 단계의 현재 진행 상황을 화면에 알림 */
-  async step(kind, card, lands, text) {
-    this.invaderStep = { kind, card: card ? invaderCardName(card) : null, lands, text };
+  async step(kind, card, lands, text, report = null) {
+    const no = ++this.stepNo;
+    this.invaderStep = { kind, card: card ? invaderCardName(card) : null, lands, text, report, no, manual: this.stepManual, acks: [] };
     this.changed();
-    await this.pause(this.stepDelay);
+    if (!this.stepManual || this.result) { await this.pause(this.stepDelay); return; }
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => { this.stepWaiter = null; resolve(); }, this.stepMaxWait);
+      this.stepWaiter = { no, done: () => { clearTimeout(timer); this.stepWaiter = null; resolve(); } };
+    });
+  }
+
+  /** 침략자 단계 설명을 다 봤다고 알림. 모든 정령이 누르면 다음 단계로 */
+  ackStep(pid, no) {
+    const st = this.invaderStep;
+    if (!st || !this.stepWaiter || st.no !== no || this.stepWaiter.no !== no || !this.playerIds.includes(pid)) return;
+    if (!st.acks.includes(pid)) st.acks.push(pid);
+    if (this.playerIds.every((id) => st.acks.includes(id))) this.stepWaiter.done();
+    else this.changed();
   }
 
   /** 이번 턴 침략자가 행동할 지역 예보 */
@@ -1142,6 +1160,8 @@ class Game extends EventEmitter {
       out.build = Object.values(this.lands).filter((l) => this.cardMatches(this.invader.build, l)
         && (this.invaderCount(l.id) > 0 || (d.buildAdjacent && l.adj.reduce((a, id) => a + this.townCityCount(id), 0) >= 2))).map((l) => l.id);
     }
+    out.ravageInfo = {};
+    for (const id of out.ravage) out.ravageInfo[id] = this.ravagePreview(this.lands[id]);
     return out;
   }
 
@@ -1175,10 +1195,10 @@ class Game extends EventEmitter {
       const card = this.invader.ravage;
       this.log(`약탈: [${invaderCardName(card)}]`);
       await this.step('ravage', card, fc.ravage, fc.ravage.length
-        ? `${invaderCardName(card)} 지형에 있는 침략자들이 땅을 공격합니다 (탐험가 1·마을 2·도시 3 피해). 피해가 2 이상이면 황폐가 생기고, 살아남은 다한이 반격합니다.`
+        ? `${invaderCardName(card)} 지형에 있는 침략자들이 땅을 공격합니다. 침략자마다 공격력(탐험가 ${this.diff.explorerDamage}·마을 ${this.diff.townDamage}·도시 ${this.diff.cityDamage})을 모두 더하고 방어를 뺀 만큼 피해를 줍니다. 피해가 2 이상이면 황폐가 생기고, 피해는 다한에게도 가며, 살아남은 다한은 1명당 2씩 반격합니다. 지역마다 계산을 차례로 보여 줄게요.`
         : `${invaderCardName(card)} 지형에 침략자가 없어서 약탈이 일어나지 않습니다.`);
       for (const land of Object.values(this.lands)) {
-        if (this.cardMatches(card, land)) this.doRavage(land);
+        if (this.cardMatches(card, land)) await this.doRavage(land);
       }
     }
     // 건설
@@ -1214,17 +1234,78 @@ class Game extends EventEmitter {
     this.changed();
   }
 
-  doRavage(land) {
-    if (!this.invaderCount(land.id)) return;
-    if (this.skipAction(land, 'Ravage')) { this.log(`${land.id}: 약탈하지 않음`); return; }
+  /** 침략자·다한의 체력과 공격력 (난이도에 따라 공격력이 바뀜) */
+  pieceStats() {
+    const d = this.diff;
+    return {
+      explorer: { hp: HP.explorer, atk: d.explorerDamage }, town: { hp: HP.town, atk: d.townDamage },
+      city: { hp: HP.city, atk: d.cityDamage }, dahan: { hp: HP.dahan, atk: 2 + (d.dahanCounterBonus || 0) },
+    };
+  }
+
+  ravageDefend(land) {
     let defend = land.defend;
     for (const pid of this.playerIds) {
       const def = this.spiritDef(pid);
       if (def.sacredDefend && this.isSacred(pid, land.id)) defend += def.sacredDefend;
       if (def.presenceDefend) defend += def.presenceDefend * this.presenceCount(pid, land.id);
     }
+    return defend;
+  }
+
+  counterBonusAt(land) {
     const here = this.playerIds.filter((pid) => this.presenceCount(pid, land.id) > 0);
-    const counterBonus = Math.max(0, ...here.map((pid) => this.spiritDef(pid).counterBonus || 0));
+    return Math.max(0, ...here.map((pid) => this.spiritDef(pid).counterBonus || 0));
+  }
+
+  /** 약탈 결과를 미리 계산 (상태를 바꾸지 않음) — 화면 예보와 설명용 */
+  ravagePreview(land) {
+    const st = this.pieceStats();
+    const att = { explorer: land.explorers, town: land.towns.length, city: land.cities.length };
+    const raw = att.explorer * st.explorer.atk + att.town * st.town.atk + att.city * st.city.atk;
+    const out = { att, atk: { explorer: st.explorer.atk, town: st.town.atk, city: st.city.atk }, raw, defend: 0, dmg: 0, blight: 0,
+      dahanBefore: land.dahan.length, dahanHp: [...land.dahan], dahanLost: 0, dahanLeft: land.dahan.length, dahanAtk: 2, counter: 0, killed: { explorer: 0, town: 0, city: 0 } };
+    if (!this.invaderCount(land.id)) { out.none = true; return out; }
+    if (this.skipAction(land, 'Ravage')) { out.skipped = true; return out; }
+    const d = this.diff;
+    const here = this.playerIds.filter((pid) => this.presenceCount(pid, land.id) > 0);
+    const protectedDahan = land.flags.dahanProtected || here.some((pid) => this.spiritDef(pid).dahanShield);
+    out.defend = this.ravageDefend(land);
+    out.dahanAtk = 2 + this.counterBonusAt(land);
+    out.dmg = Math.max(0, raw - out.defend);
+    out.blight = out.dmg >= 2 ? (out.dmg >= 6 && d.heavyMining ? 2 : 1) : 0;
+    out.dahanProtected = !!protectedDahan;
+    out.ambush = !!land.flags.dahanAmbush;
+    // 다한 피해: 체력이 낮은 다한부터 쓰러짐
+    const hp = [...land.dahan].sort((x, y) => x - y);
+    let left = out.dmg > 0 && !protectedDahan ? out.dmg + (d.ravageDahanBonus || 0) : 0;
+    out.dahanDmg = left;
+    while (left > 0 && hp.length) { if (hp[0] <= left) { left -= hp.shift(); out.dahanLost++; } else { hp[0] -= left; left = 0; } }
+    out.dahanLeft = out.ambush ? land.dahan.length : hp.length;
+    out.counter = out.dahanLeft * out.dahanAtk;
+    // 반격으로 쓰러질 침략자 (큰 것부터 처치 가능한 만큼)
+    let c = out.counter;
+    const pcs = [...land.cities.map((h) => ['city', h]), ...land.towns.map((h) => ['town', h]), ...Array(land.explorers).fill(['explorer', 1])];
+    for (;;) {
+      const k = pcs.map((x, i) => [x, i]).filter(([x]) => x[1] <= c).sort((a, b2) => TIER[b2[0][0]] - TIER[a[0][0]] || a[0][1] - b2[0][1])[0];
+      if (!k) break;
+      c -= k[0][1]; out.killed[k[0][0]]++; pcs.splice(k[1], 1);
+    }
+    return out;
+  }
+
+  async doRavage(land) {
+    if (!this.invaderCount(land.id)) return;
+    if (this.skipAction(land, 'Ravage')) {
+      this.log(`${land.id}: 약탈하지 않음`);
+      await this.step('ravageLand', null, [land.id], `${land.id}: 권능 효과로 이번 턴 침략자가 약탈하지 않습니다.`, { landId: land.id, skipped: true });
+      return;
+    }
+    const report = this.ravagePreview(land);
+    report.landId = land.id;
+    const defend = report.defend;
+    const here = this.playerIds.filter((pid) => this.presenceCount(pid, land.id) > 0);
+    const counterBonus = this.counterBonusAt(land);
     if (here.some((pid) => this.spiritDef(pid).dahanShield)) land.flags.dahanProtected = true;
     for (const pid of here) {
       const def = this.spiritDef(pid);
@@ -1242,17 +1323,24 @@ class Game extends EventEmitter {
     }
     const d = this.diff;
     let dmg = land.explorers * d.explorerDamage + d.townDamage * land.towns.length + d.cityDamage * land.cities.length;
+    const raw = dmg;
     dmg = Math.max(0, dmg - defend);
     this.events.push({ landId: land.id, kind: 'ravage' });
-    this.log(`${land.id}: 약탈! 피해 ${dmg}${defend ? ` (방어 ${defend})` : ''}`);
-    if (dmg >= 2) this.addBlight(land.id);
-    if (dmg >= 6 && d.heavyMining) { this.log(`${land.id}: 대규모 채굴 — 황폐가 하나 더!`); this.addBlight(land.id); }
-    if (dmg > 0 && !land.flags.dahanProtected) this.damageDahan(land.id, dmg + (d.ravageDahanBonus || 0));
+    this.log(`${land.id}: 약탈! 공격력 합계 ${raw}${defend ? ` − 방어 ${defend}` : ''} = 땅에 피해 ${dmg}`);
+    let blight = 0;
+    if (dmg >= 2) { this.addBlight(land.id); blight++; }
+    if (dmg >= 6 && d.heavyMining) { this.log(`${land.id}: 대규모 채굴 — 황폐가 하나 더!`); this.addBlight(land.id); blight++; }
+    let dahanLost = 0;
+    if (dmg > 0 && !land.flags.dahanProtected) dahanLost = this.damageDahan(land.id, dmg + (d.ravageDahanBonus || 0));
+    let counter = 0;
+    let killed = { explorer: 0, town: 0, city: 0 };
     if (land.dahan.length && !land.flags.dahanAmbushed && this.invaderCount(land.id)) {
-      const counter = land.dahan.length * (2 + counterBonus);
-      this.log(`${land.id}: 다한의 반격! 피해 ${counter}`);
-      this.damageInvaders(land.id, counter);
+      counter = land.dahan.length * (2 + counterBonus);
+      this.log(`${land.id}: 살아남은 다한 ${land.dahan.length}명의 반격! (${land.dahan.length} × ${2 + counterBonus}) = 피해 ${counter}`);
+      killed = this.damageInvaders(land.id, counter).destroyed;
     }
+    Object.assign(report, { raw, dmg, blight, dahanLost, dahanLeft: land.dahan.length, counter, killed, done: true });
+    await this.step('ravageLand', null, [land.id], `${land.id} 약탈 결과`, report);
   }
 
   doBuild(land, force = false) {
@@ -1363,6 +1451,7 @@ class Game extends EventEmitter {
       difficulty: this.diff.label,
       forecast: this.forecast(),
       invaderStep: this.invaderStep,
+      pieceStats: this.pieceStats(),
       tutorial: this.tutorial,
       invaderTrack: { explore: cardInfo(this.invader.lastExplore), discard: this.invader.discard.length },
       boards: this.boardLetters,

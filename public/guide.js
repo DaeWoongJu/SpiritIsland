@@ -182,7 +182,7 @@ function idleHint(st) {
   switch (st.phase) {
     case 'growth': return '모두가 성장과 카드 고르기를 마치면 빠른 권능 단계로 넘어갑니다.';
     case 'fast': return '빠른 권능 단계: 침략자가 움직이기 전에 권능을 씁니다.';
-    case 'invader': return '침략자 단계: 공포 카드 → 약탈 → 건설 → 탐험이 자동으로 진행됩니다. 지도의 빨간 테두리가 약탈된 곳이에요.';
+    case 'invader': return '침략자 단계: 공포 카드 → 약탈 → 건설 → 탐험 순서로 한 단계씩 보여 줍니다. 가운데 안내를 읽고 <b>"다음 ▶"</b>을 누르세요. 약탈은 지역마다 <b>공격력 − 방어 = 피해</b> 계산이 나와요.';
     case 'slow': return '느린 권능 단계: 침략자가 움직인 뒤 권능을 씁니다.';
     default: return '';
   }

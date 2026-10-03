@@ -8,6 +8,9 @@ const TURNS = Number(process.argv[3] || 3);
 const SHOTS = process.env.SHOTS || '';
 
 async function autoPlay(page, label) {
+  // 침략자 단계 안내: "다음" 누르기
+  const ack = page.locator('#inv-banner:not(.hidden) [data-ack]:not([disabled])');
+  if (await ack.count()) { await ack.first().click({ timeout: 2000 }).catch(() => {}); return true; }
   // 현재 프롬프트에 무작위로 응답 (카드 선택 창 포함)
   const modalOpen = await page.locator('#modal:not(.hidden) .card.selectable').count();
   if (modalOpen) {

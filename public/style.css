@@ -590,3 +590,36 @@ body.hand-collapsed .hand-area { display: none; }
 @keyframes v-sail { from { opacity: 0; transform: translateX(-160px); } 30% { opacity: 1; } to { opacity: 1; transform: translateX(0); } }
 @keyframes v-fly-out { from { opacity: 1; transform: none; } 30% { transform: translateY(-30px) scale(1.15); } to { opacity: 0; transform: translate(320px, 220px) scale(.8); } }
 @media (prefers-reduced-motion: reduce) { .va { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }
+
+/* ───── 약탈 계산 / 전투 규칙 ───── */
+.inv-banner.ib-ravage { border-color: #ff6a5a; background: linear-gradient(180deg, #2a0f0cf2, #1a0908f2); box-shadow: 0 10px 40px #000c, 0 0 30px #ff4d4d55; }
+.inv-banner.ib-wide { width: min(720px, 94%); text-align: left; }
+.inv-banner.ib-wide .ib-title { text-align: center; }
+.ib-foot { margin-top: 6px; text-align: right; }
+.rv { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.rv-row { display: flex; gap: 10px; align-items: baseline; padding: 4px 8px; border-radius: 8px; background: #0006; font-size: 13.5px; line-height: 1.5; color: #f0e4d0; }
+.rv-row.bad { background: #5a141088; }
+.rv-row.ok { background: #1a4a2c88; }
+.rv-k { flex: 0 0 9.5em; color: #ffe0a0; }
+.rv-t { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.rv-t svg { vertical-align: middle; }
+.rv-n { color: #fff; font-size: 15px; }
+.tip-rv { margin-top: 6px; min-width: 330px; }
+.tip-rv .rv-row { font-size: 12px; }
+.tip-rv .rv-k { flex-basis: 8.5em; }
+.lg-st { color: #ffe0a0; font-weight: 700; font-size: 11.5px; }
+.lg-combat { padding: 2px 10px !important; border-color: #ff6a5a !important; color: #ffb0a0 !important; }
+.modal-inner.combat { max-width: 820px; }
+.combat-tbl { width: 100%; border-collapse: collapse; margin: 6px 0; }
+.combat-tbl th, .combat-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; }
+.combat-tbl td.c { text-align: center; font-weight: 800; font-size: 16px; white-space: nowrap; }
+.combat-tbl td svg { vertical-align: middle; }
+.combat-steps li { margin: 4px 0; line-height: 1.6; }
+.combat-ex { margin: 10px 0; padding: 10px 12px; border: 1px solid #5b4d2c; border-radius: 12px; background: #0b1110; }
+.combat-ex h4 { margin: 0 0 4px; color: var(--gold2); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+@media (max-width: 640px) { .rv-row { flex-direction: column; gap: 0; } .rv-k { flex-basis: auto; } }
+#combat { z-index: 56; }
+.ib-next-row { margin-top: 10px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.ib-next { font-size: 15px; padding: 8px 20px; animation: ibpulse 1.6s ease-in-out infinite; }
+@keyframes ibpulse { 50% { box-shadow: 0 0 18px #e9c46a; } }
+.inv-banner button, .inv-banner .ib-next-row, .inv-banner .ib-foot { pointer-events: auto; }

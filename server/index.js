@@ -56,6 +56,7 @@ const CATALOG = {
 const DEFAULT_SETTINGS = () => ({
   expansions: EXPANSIONS.map((e) => e.id),
   map: { layout: 'auto', boards: 'ordered', extraBoard: false },
+  pace: 'manual', // 침략자 단계 진행: manual(모두 '다음'을 눌러야 진행) / slow / normal
   difficulty: { preset: 'normal', adversary: null, level: 0 },
 });
 
@@ -77,6 +78,7 @@ function cleanSettings(input, prev) {
     if (d.adversary === null || ADVERSARIES.some((a) => a.id === d.adversary)) out.difficulty.adversary = d.adversary;
     if (Number.isInteger(d.level) && d.level >= 0 && d.level <= 6) out.difficulty.level = d.level;
   }
+  if (['manual', 'slow', 'normal'].includes(input.pace)) out.pace = input.pace;
   const adv = ADVERSARIES.find((a) => a.id === out.difficulty.adversary);
   if (adv && !out.expansions.includes(adv.exp)) out.difficulty.adversary = null;
   if (!out.difficulty.adversary) out.difficulty.level = 0;
@@ -186,7 +188,8 @@ function startGame(room) {
   }
   const game = new Game(room.seats.map((x) => ({ id: x.id, name: x.name, spiritId: x.spiritId })), {
     settings: room.settings,
-    stepDelay: room.tutorial ? 2800 : 1500,
+    stepDelay: { slow: 5000, normal: 2500 }[room.settings.pace] || 1500,
+    stepManual: room.tutorial || !room.settings.pace || room.settings.pace === 'manual',
     tutorial: !!room.tutorial,
     seed: room.tutorial ? 20261003 : undefined,
   });
@@ -355,6 +358,15 @@ wss.on('connection', (ws) => {
         if (err) { fail(err); sendState(room, player); }
         break;
       }
+      case 'ackStep': {
+        if (!room || !room.game || !player) return;
+        for (const seat of room.seats) {
+          // 내 좌석 + 접속이 끊긴 사람의 좌석은 대신 확인
+          const owner = room.players.find((x) => x.id === seat.owner);
+          if (seat.owner === player.id || !owner || !owner.ws) room.game.ackStep(seat.id, msg.no);
+        }
+        break;
+      }
       case 'backToLobby': {
         if (!room || !room.game) return;
         if (room.hostId !== player.id) return fail('방장만 할 수 있습니다.');
@@ -380,6 +392,8 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     if (room && player && player.ws === ws) {
       player.ws = null;
+      const g = room.game;
+      if (g && g.invaderStep && g.stepWaiter && room.players.some((x) => x.ws)) for (const seat of room.seats) if (seat.owner === player.id) g.ackStep(seat.id, g.invaderStep.no);
       broadcastRoom(room);
     }
   });

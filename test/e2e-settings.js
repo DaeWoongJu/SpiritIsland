@@ -44,6 +44,7 @@ const SHOTS = process.env.SHOTS || '';
   const seats = await page.locator('#seat-bar .seat').count();
   const diff = await page.textContent('#topbar');
   let steps = 0;
+  let acks = 0;
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline && steps < 40) {
     if (await page.locator('.result').count()) break;
@@ -53,6 +54,8 @@ const SHOTS = process.env.SHOTS || '';
       if (await c.count()) await c.first().click({ timeout: 2000 }).catch(() => {});
       if (await modal.isEnabled().catch(() => false)) { await modal.click({ timeout: 2000 }).catch(() => {}); steps++; continue; }
     }
+    const ack = page.locator('#inv-banner:not(.hidden) [data-ack]:not([disabled])');
+    if (await ack.count()) { await ack.first().click({ timeout: 2000 }).catch(() => {}); acks++; await page.waitForTimeout(80); continue; }
     const land = page.locator('#prompt button[data-land]');
     if (await land.count()) { await land.first().click({ timeout: 2000 }).catch(() => {}); steps++; await page.waitForTimeout(80); continue; }
     const opt = page.locator('#prompt button[data-i]');
@@ -61,7 +64,7 @@ const SHOTS = process.env.SHOTS || '';
   }
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/settings-game.png` });
   await browser.close();
-  console.log(`좌석 ${seats}개, 응답 ${steps}회, 난이도 표시: ${/어려움 · 브란덴부르크-프로이센 3레벨/.test(diff)}`);
+  console.log(`좌석 ${seats}개, 응답 ${steps}회, 다음 ${acks}회, 난이도 표시: ${/어려움 · 브란덴부르크-프로이센 3레벨/.test(diff)}`);
   if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
   if (seats !== 2 || steps < 8 || !/브란덴부르크-프로이센 3레벨/.test(diff)) process.exit(1);
   console.log('E2E 설정 OK');

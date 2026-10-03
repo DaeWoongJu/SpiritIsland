@@ -299,6 +299,13 @@ function renderSettings(isHost, total) {
       <label class="set-check"><input type="checkbox" id="set-extra" ${st.map.extraBoard ? 'checked' : ''} ${dis}> 추가 보드 +1 <span class="hint">(더 넓은 섬, 더 많은 침략자 — 어려워짐)</span></label>
       <div class="hint">보드 ${boards}개${boards > 4 ? ' · 5개 이상은 자동으로 세로 배치' : ''}</div>
     </div>
+    <div class="set-group"><div class="set-title">⏱ 침략자 단계 진행</div>
+      <label class="set-row">진행 방식 <select id="set-pace" ${dis}>
+        <option value="manual" ${(st.pace || 'manual') === 'manual' ? 'selected' : ''}>직접 넘기기 — 모두 "다음"을 눌러야 진행 (추천)</option>
+        <option value="slow" ${st.pace === 'slow' ? 'selected' : ''}>자동 · 느리게 (단계마다 5초)</option>
+        <option value="normal" ${st.pace === 'normal' ? 'selected' : ''}>자동 · 보통 (단계마다 2.5초)</option></select></label>
+      <div class="hint">약탈·건설·탐험을 하나씩 보여 줍니다. 익숙해지면 자동으로 바꾸세요.</div>
+    </div>
     <div class="set-group"><div class="set-title">⚔ 난이도</div>
       <div class="preset-row">${c.presets.map((p) => `<button class="small preset ${st.difficulty.preset === p.id ? 'on' : ''}" data-preset="${p.id}" ${dis} title="${esc(p.desc)}">${esc(p.name)}</button>`).join('')}</div>
       <div class="hint">${esc(preset ? preset.desc : '')}</div>
@@ -321,6 +328,7 @@ function renderSettings(isHost, total) {
   $('#set-layout').onchange = (e) => push((n) => { n.map.layout = e.target.value; });
   $('#set-boards').onchange = (e) => push((n) => { n.map.boards = e.target.value; });
   $('#set-extra').onchange = (e) => push((n) => { n.map.extraBoard = e.target.checked; });
+  $('#set-pace').onchange = (e) => push((n) => { n.pace = e.target.value; });
   for (const b of document.querySelectorAll('#room-settings [data-preset]')) b.onclick = () => push((n) => { n.difficulty.preset = b.dataset.preset; });
   $('#set-adv').onchange = (e) => push((n) => { n.difficulty.adversary = e.target.value || null; n.difficulty.level = e.target.value ? Math.max(1, n.difficulty.level) : 0; });
   const lv = $('#set-level');
@@ -380,14 +388,107 @@ function renderSeatBar() {
   }
 }
 
+const PIECE_KO = { explorer: '탐험가', town: '마을', city: '도시', dahan: '다한' };
+function pieceIco(k, size = 15) { return pcIcon(k, size, TOKEN_STYLE[k] ? TOKEN_STYLE[k].fill : '#ddd'); }
+function killedText(k) {
+  const parts = ['city', 'town', 'explorer'].filter((t) => k && k[t]).map((t) => `${PIECE_KO[t]} ${k[t]}`);
+  return parts.length ? parts.join(', ') + ' 쓰러뜨림' : '아무도 쓰러뜨리지 못함';
+}
+
+/** 약탈 계산 과정을 한 줄씩 보여 주는 HTML. preview=true면 "예상" 문구 */
+function ravageBreakdown(r, preview) {
+  if (r.none) return '<div class="rv"><div class="rv-row">침략자가 없어서 약탈이 일어나지 않아요.</div></div>';
+  if (r.skipped) return '<div class="rv"><div class="rv-row ok">권능 효과로 이번 턴 약탈하지 않아요. 🛡</div></div>';
+  const terms = ['explorer', 'town', 'city'].filter((t) => r.att[t]).map((t) => `<span class="rv-t">${pieceIco(t)} ${PIECE_KO[t]} ${r.att[t]} × 공격력 ${r.atk[t]}</span>`);
+  const will = preview ? '예정' : '';
+  const rows = [];
+  rows.push(`<div class="rv-row"><b class="rv-k">① 침략자 공격력</b><span>${terms.join(' + ')} = <b class="rv-n">${r.raw}</b></span></div>`);
+  rows.push(`<div class="rv-row"><b class="rv-k">② 방어</b><span>${r.defend ? `🛡 ${r.raw} − ${r.defend} = <b class="rv-n">${r.dmg}</b>` : '없음 (방어 0)'}</span></div>`);
+  rows.push(`<div class="rv-row ${r.blight ? 'bad' : 'ok'}"><b class="rv-k">③ 땅에 피해 ${r.dmg}</b><span>${r.blight ? `피해가 2 이상 → <b>황폐 +${r.blight}</b> ${will}` : '피해가 2 미만 → 황폐 없음 👍'}</span></div>`);
+  let dahan;
+  if (!r.dahanBefore) dahan = '이 지역에 다한이 없어요.';
+  else if (r.dahanProtected) dahan = `다한 ${r.dahanBefore}명은 정령의 보호로 피해를 받지 않아요.`;
+  else if (!r.dmg) dahan = `피해가 0이라 다한 ${r.dahanBefore}명 모두 무사해요.`;
+  else dahan = `같은 피해 ${r.dahanDmg != null ? r.dahanDmg : r.dmg}을 다한이 받아요. 다한 체력은 1명당 ❤2 → ${r.dahanBefore}명 중 <b>${r.dahanLost}명 쓰러짐</b>${r.dahanLost < r.dahanBefore ? `, ${r.dahanBefore - r.dahanLost}명 생존` : ''}`;
+  rows.push(`<div class="rv-row ${r.dahanLost ? 'bad' : ''}"><b class="rv-k">④ ${pieceIco('dahan')} 다한</b><span>${dahan}</span></div>`);
+  let ctr;
+  if (r.ambush) ctr = '다한이 먼저 기습 반격했어요!';
+  else if (!r.dahanLeft) ctr = r.dahanBefore ? '살아남은 다한이 없어 반격하지 못해요.' : '반격할 다한이 없어요.';
+  else ctr = `살아남은 다한 ${r.dahanLeft}명 × 반격력 ${r.dahanAtk} = 피해 <b class="rv-n">${r.counter}</b> → ${killedText(r.killed)}`;
+  rows.push(`<div class="rv-row ${r.counter ? 'ok' : ''}"><b class="rv-k">⑤ 다한의 반격</b><span>${ctr}</span></div>`);
+  return `<div class="rv">${rows.join('')}</div>`;
+}
+
+function openCombatHelp() {
+  const st = (app.state && app.state.pieceStats) || { explorer: { hp: 1, atk: 1 }, town: { hp: 2, atk: 2 }, city: { hp: 3, atk: 3 }, dahan: { hp: 2, atk: 2 } };
+  const row = (k, note) => `<tr><td>${pieceIco(k, 22)} <b>${PIECE_KO[k]}</b></td><td class="c">${st[k].hp}</td><td class="c">${st[k].atk}</td><td>${note}</td></tr>`;
+  const ex = { att: { explorer: 1, town: 1, city: 0 }, atk: { explorer: st.explorer.atk, town: st.town.atk, city: st.city.atk }, defend: 0, dahanBefore: 2, dahanAtk: st.dahan.atk };
+  ex.raw = ex.att.explorer * ex.atk.explorer + ex.att.town * ex.atk.town; ex.dmg = ex.raw; ex.blight = ex.dmg >= 2 ? 1 : 0;
+  ex.dahanLost = Math.min(2, Math.floor(ex.dmg / st.dahan.hp)); ex.dahanLeft = 2 - ex.dahanLost; ex.counter = ex.dahanLeft * st.dahan.atk;
+  ex.killed = { explorer: 0, town: 0, city: 0 };
+  { let c = ex.counter; if (c >= st.town.hp) { ex.killed.town = 1; c -= st.town.hp; } if (c >= 1) ex.killed.explorer = 1; }
+  const ex2 = { ...ex, defend: 3, dmg: Math.max(0, ex.raw - 3) }; ex2.blight = ex2.dmg >= 2 ? 1 : 0; ex2.dahanLost = Math.min(2, Math.floor(ex2.dmg / st.dahan.hp)); ex2.dahanLeft = 2 - ex2.dahanLost; ex2.counter = ex2.dahanLeft * st.dahan.atk;
+  ex2.killed = { explorer: 0, town: 0, city: 0 }; { let c = ex2.counter; if (c >= st.town.hp) { ex2.killed.town = 1; c -= st.town.hp; } if (c >= 1) ex2.killed.explorer = 1; }
+  $('#combat .combat-body').innerHTML = `
+    <h3>조각마다 체력과 공격력이 있어요</h3>
+    <table class="combat-tbl"><tr><th>조각</th><th>체력 ❤</th><th>공격력</th><th>설명</th></tr>
+      ${row('explorer', '피해 1이면 쓰러짐. 약탈할 때 땅을 1만큼 공격')}
+      ${row('town', '피해 2가 필요. 쓰러뜨리면 공포 +1')}
+      ${row('city', '피해 3이 필요. 쓰러뜨리면 공포 +2')}
+      ${row('dahan', '<b>우리 편</b>. 약탈 피해를 같이 받고, 살아남으면 반격')}</table>
+    <p class="hint">체력: 이만큼 피해를 받으면 쓰러집니다. 덜 받은 피해는 그 턴 동안만 남고 턴이 끝나면 회복돼요. · 공격력: 약탈(침략자) 또는 반격(다한) 때 주는 피해. 난이도(적대 세력)에 따라 침략자 공격력이 더 높을 수 있어요.</p>
+    <h3>약탈은 이렇게 계산해요</h3>
+    <ol class="combat-steps">
+      <li><b>공격력 합계</b>: 그 지역 침략자들의 공격력을 모두 더합니다.</li>
+      <li><b>방어</b>: 권능이나 정령 능력으로 얻은 🛡 방어만큼 뺍니다. 남은 값이 <b>땅에 주는 피해</b>예요.</li>
+      <li><b>황폐</b>: 땅에 피해가 <b>2 이상</b>이면 황폐 1개가 놓입니다. (이미 황폐가 있으면 옆 지역으로 번지고, 그 지역 존재 1개가 사라져요)</li>
+      <li><b>다한이 다침</b>: 같은 피해가 다한에게도 갑니다. 다한은 1명당 ❤${st.dahan.hp}이라 피해 ${st.dahan.hp}마다 1명씩 쓰러져요.</li>
+      <li><b>다한의 반격</b>: 살아남은 다한 1명당 피해 ${st.dahan.atk}씩, 모두 합쳐 침략자에게 반격합니다. (큰 침략자부터 쓰러뜨릴 수 있는 만큼)</li>
+    </ol>
+    <div class="combat-ex"><h4>예시 ① ${pieceIco('explorer')} 탐험가 1 + ${pieceIco('town')} 마을 1 vs ${pieceIco('dahan')} 다한 2 (방어 없음)</h4>${ravageBreakdown(ex, true)}</div>
+    <div class="combat-ex"><h4>예시 ② 같은 지역에 🛡 방어 3을 걸었다면</h4>${ravageBreakdown(ex2, true)}</div>
+    <h3>그래서 어떻게 막나요?</h3>
+    <ul>
+      <li><b>침략자 줄이기</b>: 피해 권능으로 약탈 전에(빠른 권능) 쓰러뜨리거나, 밀어내기로 다른 곳으로 보내요.</li>
+      <li><b>방어 올리기</b>: 피해가 1 이하가 되면 황폐도 안 생기고 다한도 무사 → 다한이 전부 반격!</li>
+      <li><b>다한 모으기</b>: 다한이 많을수록 반격이 세져요. 다한 3명이면 반격 피해 ${st.dahan.atk * 3}.</li>
+      <li>지도에서 <span class="fc-chip ravage">⚔ 약탈 예정</span> 지역에 마우스를 올리면 이번 턴 <b>예상 계산</b>이 나와요.</li>
+    </ul>`;
+  $('#combat').classList.remove('hidden');
+}
+
+function stepFoot(step) {
+  if (!step.manual) return '';
+  const total = app.state.players.length;
+  const acks = step.acks || [];
+  const mine = (app.mySeats || [app.you]).every((id) => acks.includes(id));
+  return `<div class="ib-next-row">${mine ? `<span class="hint">다른 플레이어를 기다리는 중… (${acks.length}/${total})</span>` : `<button class="primary ib-next" data-ack="${step.no}">다 봤어요, 다음 ▶</button>${total > 1 ? `<span class="hint">${acks.length}/${total}명 확인</span>` : ''}<span class="hint">(Enter 키)</span>`}</div>`;
+}
+function bindStepFoot(b) {
+  const btn = b.querySelector('[data-ack]');
+  if (btn) btn.onclick = () => { Sound.play('click'); send({ t: 'ackStep', no: Number(btn.dataset.ack) }); btn.disabled = true; };
+}
+
 function renderInvaderBanner() {
   const b = $('#inv-banner');
   const step = app.state.invaderStep;
   if (!step || app.state.result) { b.classList.add('hidden'); return; }
-  const meta = { fear: ['😱', '공포 카드'], ravage: ['⚔', '약탈'], build: ['🏠', '건설'], explore: ['🧭', '탐험'], advance: ['➡', '카드 이동'] }[step.kind] || ['•', ''];
+  const meta = { fear: ['😱', '공포 카드'], ravage: ['⚔', '약탈'], ravageLand: ['⚔', '약탈'], build: ['🏠', '건설'], explore: ['🧭', '탐험'], advance: ['➡', '카드 이동'] }[step.kind] || ['•', ''];
+  if (step.kind === 'ravageLand' && step.report) {
+    const r = step.report;
+    const l = app.state.lands[r.landId];
+    b.className = 'inv-banner ib-ravage ib-wide';
+    b.innerHTML = `<div class="ib-title">⚔ 약탈 계산 — ${r.landId} ${l ? esc(app.catalog.terrains[l.terrain]) : ''}</div>
+      ${r.skipped ? `<div class="ib-text">${esc(step.text)}</div>` : ravageBreakdown(r, false)}
+      <div class="ib-foot"><button class="small" data-combat>⚔ 전투 계산법 자세히</button></div>${stepFoot(step)}`;
+    b.querySelector('[data-combat]').onclick = openCombatHelp;
+    bindStepFoot(b);
+    return;
+  }
   b.className = `inv-banner ib-${step.kind}`;
   b.innerHTML = `<div class="ib-title">${meta[0]} 침략자 단계 — ${meta[1]}${step.card ? ` <span class="ib-card">[${esc(step.card)}]</span>` : ''}</div>
-    <div class="ib-text">${esc(step.text)}</div>${step.lands && step.lands.length ? `<div class="ib-lands">${step.lands.map((id) => `<span>${id}</span>`).join('')}</div>` : ''}`;
+    <div class="ib-text">${esc(step.text)}</div>${step.lands && step.lands.length ? `<div class="ib-lands">${step.lands.map((id) => `<span>${id}</span>`).join('')}</div>` : ''}${stepFoot(step)}`;
+  bindStepFoot(b);
 }
 
 function renderGame() {
@@ -630,7 +731,7 @@ function renderMap() {
     if (dim) html += `<polygon points="${ptsStr(l.poly)}" fill="#05080c" opacity=".45" pointer-events="none"/>`;
     if (ev[l.id]) html += `<polygon class="ev ev-${ev[l.id]}" points="${ptsStr(l.poly)}"/>`;
     const stepLands = st.invaderStep && st.invaderStep.lands ? st.invaderStep.lands : [];
-    if (stepLands.includes(l.id)) html += `<polygon class="fc fc-now fc-${st.invaderStep.kind}" points="${ptsStr(l.poly)}"/>`;
+    if (stepLands.includes(l.id)) html += `<polygon class="fc fc-now fc-${st.invaderStep.kind === 'ravageLand' ? 'ravage' : st.invaderStep.kind}" points="${ptsStr(l.poly)}"/>`;
     else if (st.phase !== 'invader' && st.forecast) {
       if (st.forecast.ravage.includes(l.id)) html += `<polygon class="fc fc-ravage" points="${ptsStr(l.poly)}"/>`;
       else if (st.forecast.build.includes(l.id)) html += `<polygon class="fc fc-build" points="${ptsStr(l.poly)}"/>`;
@@ -649,7 +750,11 @@ function renderMap() {
       <use href="#tr-${l.terrain}" x="${-lw / 2 + 3}" y="-5" width="9" height="9" style="color:#e9d8a6"/>
       <text x="${-lw / 2 + 14}" y="2.6" class="plaque-t">${l.id}</text><text x="${-lw / 2 + 28}" y="2.4" class="plaque-s">${name}</text></g>`;
     const fcTag = st.phase !== 'invader' && st.forecast ? (st.forecast.ravage.includes(l.id) ? ['⚔ 약탈 예정', '#ff4d4d'] : st.forecast.build.includes(l.id) ? ['🏠 건설 예정', '#ffb547'] : null) : null;
-    if (fcTag) html += `<g transform="translate(${cx},${cy - 38})" pointer-events="none"><rect x="-26" y="-7" width="52" height="13" rx="6.5" fill="${fcTag[1]}" opacity=".92"/><text x="0" y="2.6" text-anchor="middle" class="plaque-t" fill="#1a0a04" style="fill:#1a0a04">${fcTag[0]}</text></g>`;
+    const rvi = fcTag && st.forecast.ravageInfo && st.forecast.ravageInfo[l.id];
+    if (rvi && !rvi.skipped) fcTag[0] = `⚔ 약탈 피해 ${rvi.dmg}${rvi.blight ? ' → 황폐!' : ' (황폐 없음)'}`;
+    else if (rvi && rvi.skipped) fcTag[0] = '⚔ 약탈 막음 🛡';
+    const tw = fcTag ? Math.max(52, fcTag[0].length * 5.6 + 8) : 0;
+    if (fcTag) html += `<g transform="translate(${cx},${cy - 38})" pointer-events="none"><rect x="${-tw / 2}" y="-7" width="${tw}" height="13" rx="6.5" fill="${fcTag[1]}" opacity=".92"/><text x="0" y="2.6" text-anchor="middle" class="plaque-t" fill="#1a0a04" style="fill:#1a0a04">${fcTag[0]}</text></g>`;
     const toks = landPieces(l);
     const perRow = 4;
     const sp = 19;
@@ -673,24 +778,30 @@ function renderMap() {
 
 function renderLegend() {
   const lg = (k, label) => `<span class="lg">${pcIcon(k, 14, TOKEN_STYLE[k] ? TOKEN_STYLE[k].fill : '#ddd')} ${label}</span>`;
-  $('#legend').innerHTML = [lg('explorer', '탐험가 1'), lg('town', '마을 2'), lg('city', '도시 3'), lg('dahan', '다한 2'), lg('blight', '황폐'),
+  const ps = app.state.pieceStats || { explorer: { hp: 1, atk: 1 }, town: { hp: 2, atk: 2 }, city: { hp: 3, atk: 3 }, dahan: { hp: 2, atk: 2 } };
+  const st = (k) => `${PIECE_KO[k]} <span class="lg-st">체력 ${ps[k].hp} · ${k === 'dahan' ? '반격' : '공격'} ${ps[k].atk}</span>`;
+  $('#legend').innerHTML = ['<button class="small lg-combat" data-combat>⚔ 전투 계산법</button>', lg('explorer', st('explorer')), lg('town', st('town')), lg('city', st('city')), lg('dahan', st('dahan')), lg('blight', '황폐'),
     `<span class="lg">${pcIcon('presence', 14, '#f2c94c')} 존재 <span class="hint">(금빛 테두리 = 성지)</span></span>`, lg('shield', '방어'), lg('skip', '행동 건너뜀'),
     '<span class="lg"><i class="sw sw-dmg"></i>손상</span>', '<span class="lg"><i class="sw sw-ravage"></i>약탈</span>', '<span class="lg"><i class="sw sw-build"></i>건설</span>', '<span class="lg"><i class="sw sw-explore"></i>탐험</span>'].join('');
+  $('#legend [data-combat]').onclick = openCombatHelp;
 }
 
 function landTip(id) {
   const l = app.state.lands[id];
   const t = app.catalog.terrains[l.terrain];
   const parts = [`<b>${id} — ${t}${l.coastal ? ' (해안)' : ' (내륙)'}</b>`];
-  if (l.cities.length) parts.push(`도시 ${l.cities.length} (체력 ${l.cities.join(', ')})`);
-  if (l.towns.length) parts.push(`마을 ${l.towns.length} (체력 ${l.towns.join(', ')})`);
-  if (l.explorers) parts.push(`탐험가 ${l.explorers}`);
-  if (l.dahan.length) parts.push(`다한 ${l.dahan.length} (체력 ${l.dahan.join(', ')})`);
+  const ps = app.state.pieceStats || { explorer: { atk: 1 }, town: { atk: 2 }, city: { atk: 3 }, dahan: { atk: 2 } };
+  if (l.cities.length) parts.push(`${pieceIco('city', 13)} 도시 ${l.cities.length} — 남은 체력 ❤${l.cities.join(', ❤')} · 공격력 ${ps.city.atk}`);
+  if (l.towns.length) parts.push(`${pieceIco('town', 13)} 마을 ${l.towns.length} — 남은 체력 ❤${l.towns.join(', ❤')} · 공격력 ${ps.town.atk}`);
+  if (l.explorers) parts.push(`${pieceIco('explorer', 13)} 탐험가 ${l.explorers} — 체력 ❤1 · 공격력 ${ps.explorer.atk}`);
+  if (l.dahan.length) parts.push(`${pieceIco('dahan', 13)} 다한 ${l.dahan.length} (우리 편) — 남은 체력 ❤${l.dahan.join(', ❤')} · 반격력 ${ps.dahan.atk}`);
   if (l.blight) parts.push(`황폐 ${l.blight}`);
   for (const [pid, n] of Object.entries(l.presence)) if (n) { const { def, player, s } = spiritOf(pid); parts.push(`<span style="color:${def.color}">● ${esc(player.name)} 존재 ${n}${s.sacred.includes(id) ? ' (성지)' : ''}</span>`); }
   if (l.defend) parts.push(`방어 ${l.defend}`);
   if (l.skip) parts.push('이번 턴 침략자 행동 건너뜀');
   if (l.dahanProtected) parts.push('다한이 약탈 피해를 받지 않음');
+  const rv = app.state.phase !== 'invader' && app.state.forecast && app.state.forecast.ravageInfo && app.state.forecast.ravageInfo[id];
+  if (rv) parts.push(`<div class="tip-rv"><b style="color:#ff8a7a">⚔ 이번 턴 약탈 예상 (지금 상태 그대로라면)</b>${ravageBreakdown(rv, true)}</div>`);
   parts.push(`<span class="hint">인접: ${l.adj.join(', ')}</span>`);
   const note = app.prompt && app.prompt.type === 'land' && app.prompt.notes && app.prompt.notes[id];
   if (note) parts.push(`<span style="color:var(--accent2)">${esc(note)}</span>`);
@@ -890,6 +1001,8 @@ function initRoomAndGameUI() {
   applyLayout();
   window.addEventListener('map3d-ready', () => { if (app.state) renderMap(); });
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
+  $('#btn-combat-close').onclick = () => $('#combat').classList.add('hidden');
+  $('#combat').onclick = (e) => { if (e.target.id === 'combat') $('#combat').classList.add('hidden'); };
   $('#help').onclick = (e) => { if (e.target.id === 'help') $('#help').classList.add('hidden'); };
   $('#btn-start').onclick = () => send({ t: 'start' });
   $('#btn-copy').onclick = async () => {
@@ -917,7 +1030,12 @@ function initRoomAndGameUI() {
     };
   }
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !/INPUT|TEXTAREA|SELECT|BUTTON/.test((document.activeElement || {}).tagName || '')) {
+      const ack = document.querySelector('#inv-banner:not(.hidden) [data-ack]:not([disabled])');
+      if (ack) { ack.click(); e.preventDefault(); return; }
+    }
     if (e.key === 'Escape' && RuleVideo.isOpen()) { RuleVideo.close(); return; }
+    if (e.key === 'Escape' && !$('#combat').classList.contains('hidden')) { $('#combat').classList.add('hidden'); return; }
     if (e.key === 'Escape' && SpiritBoard.isOpen()) { SpiritBoard.close(); return; }
     if (e.key === 'Escape' && !$('#guide').classList.contains('hidden')) { Guide.close(); return; }
     if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) {

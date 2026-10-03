@@ -22,6 +22,7 @@ const Tutorial = (() => {
   let shown = false;
   let off = false;
   let lastSpot = null;
+  let sawRavage = false;
   const names = (ids) => (ids && ids.length ? ids.join(', ') : '없음');
   const card = (st, which) => (st.invader[which] ? st.invader[which].name : '없음');
   const has = (ctx, id) => ctx.st.spirits[app.you] && ctx.st.spirits[app.you].hand.includes(id);
@@ -65,7 +66,7 @@ const Tutorial = (() => {
       text: () => '더 쓸 빠른 권능이 없으면 <b>"빠른 권능 단계 종료"</b>를 누르세요. 그러면 침략자가 움직입니다.' },
     { type: 'action', spot: '.map-wrap', title: '⑫ 침략자 단계를 지켜보세요',
       when: (ctx) => ctx.phase === 'invader',
-      text: () => '이제 침략자 차례예요. 할 일은 없으니 <b>화면 가운데 안내</b>를 따라 지켜보세요.<br>① 공포 카드(모은 경우) → ② <b>약탈</b> → ③ <b>건설</b> → ④ <b>탐험</b>(새 카드) → ⑤ 카드가 한 칸씩 이동<br>권능으로 막은 지역에서는 아무 일도 일어나지 않아요.' },
+      text: () => '이제 침략자 차례예요. <b>화면 가운데 안내</b>를 읽고 <b>"다 봤어요, 다음 ▶"</b>(또는 Enter)를 누르면 다음 단계로 넘어가요. 천천히 읽으셔도 됩니다.<br>① 공포 카드(모은 경우) → ② <b>약탈</b> → ③ <b>건설</b> → ④ <b>탐험</b>(새 카드) → ⑤ 카드가 한 칸씩 이동<br>권능으로 막은 지역에서는 아무 일도 일어나지 않아요.' },
     { type: 'action', spot: '#prompt', title: '⑬ 느린 권능',
       when: (ctx) => ctx.kind === 'power' && ctx.phase === 'slow',
       text: () => '<b>느린 권능 단계</b>: 침략자가 움직인 뒤에 쓰는 권능입니다. 느린 카드를 냈다면 지금 쓰고, 없으면 <b>"느린 권능 단계 종료"</b>를 누르세요.<br>그다음 <b>시간 흐름</b>: 사용한 카드는 버림 더미로 가고 다음 턴이 시작돼요.' },
@@ -75,8 +76,11 @@ const Tutorial = (() => {
         <span class="fc-chip ravage">⚔ 약탈 예정</span> <b>${names(ctx.st.forecast.ravage)}</b> — 이 지역의 침략자가 이번 턴 땅을 공격합니다. 피해가 2 이상이면 <b>황폐</b>가 생겨요!<br>
         막는 방법: 피해로 침략자 없애기(파괴의 의식), 방어 올리기(치유되는 땅의 수호), 밀어내기·모으기(풍요로운 대지의 이끌림).<br>
         손패가 비었다면 이번 성장에서 <b>"카드 모두 회수"</b>를 고르세요.` },
+    { type: 'action', spot: '#inv-banner', title: '⑮ 약탈은 이렇게 계산돼요',
+      when: (ctx) => !!(ctx.st.invaderStep && ctx.st.invaderStep.kind === 'ravageLand'),
+      text: () => '가운데 빨간 상자가 <b>약탈 계산</b>이에요. 위에서부터 읽으세요.<br>① 침략자마다 <b>공격력</b>(탐험가 1·마을 2·도시 3)을 더하고<br>② <b>방어 🛡</b>를 빼면 = 땅에 주는 피해<br>③ 피해가 <b>2 이상</b>이면 황폐<br>④ 같은 피해를 <b>다한</b>도 받아요 (다한 1명 = <b>체력 ❤2</b>)<br>⑤ 살아남은 다한 1명당 <b>피해 2</b>씩 반격!<br>그래서 <b>다한이 많고 침략자가 적은 곳</b>은 안전하고, 침략자가 많은 곳은 미리 줄이거나 방어를 걸어야 해요. 아래 범례의 <b>⚔ 전투 계산법</b> 버튼으로 언제든 다시 볼 수 있어요.' },
     { type: 'info', title: '🎉 기본은 다 배웠어요!',
-      when: (ctx) => ctx.turn >= 2,
+      when: (ctx) => (ctx.turn >= 3 || (ctx.turn >= 2 && sawRavage)) && ctx.phase !== 'invader',
       text: () => '이제 자유롭게 해 보세요. 기억할 것:<br>1. 매 턴 <b>진행표</b>와 지도의 <b>⚔ 약탈 예정</b>을 확인<br>2. <b>빠른 권능</b>으로 약탈 전에 막기<br>3. 존재를 늘려 에너지와 카드 수 키우기<br>4. 마을·도시를 파괴하면 <b>공포</b>가 쌓여 승리가 가까워져요<br>막히면 금색 상자 아래 💡 도움말과 위쪽 📖 게임 방법을 보세요.' },
   ];
 
@@ -108,6 +112,7 @@ const Tutorial = (() => {
   function update(st, p) {
     if (!st || !st.tutorial || off || st.result) { if ($('#coach')) render(null); return; }
     const ctx = ctxOf(st, p);
+    if (st.invaderStep && st.invaderStep.kind === 'ravageLand') sawRavage = true;
     for (let guard = 0; guard < STEPS.length; guard++) {
       const step = STEPS[idx];
       if (!step) { render(null); return; }
@@ -131,5 +136,5 @@ const Tutorial = (() => {
     }
   }
 
-  return { update, reset: () => { idx = 0; shown = false; off = false; } };
+  return { update, reset: () => { idx = 0; shown = false; off = false; sawRavage = false; } };
 })();

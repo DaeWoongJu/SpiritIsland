@@ -387,7 +387,7 @@ function applyHighlights() {
     L.topMat.emissive.set(sel ? '#ffcf5a' : S.focus.has(id) ? '#ff9a3a' : '#000000');
     L.topMat.emissiveIntensity = sel ? 0.25 : S.focus.has(id) ? 0.3 : 0;
     L.group.position.y = (S.hover === id && sel) ? 2 : 0;
-    const ev = (S.fc && S.fc[id] && S.fc[id].replace('now-', '')) || (S.events && S.events[id]);
+    const ev = (S.fc && S.fc[id] && S.fc[id].replace('now-', '').replace('ravageLand', 'ravage')) || (S.events && S.events[id]);
     const col = { ravage: '#ff3b30', build: '#ffb547', explore: '#f0f6ff', shield: '#6fcf97', fear: '#c9a2ff' }[ev];
     if (!sel && S.fc && S.fc[id]) { L.topMat.emissive.set(col || '#000000'); L.topMat.emissiveIntensity = S.fc[id].startsWith('now') ? 0.35 : 0.14; }
     L.edge.material.color.set(sel ? '#ffe08a' : col || '#000000');
@@ -444,7 +444,9 @@ function buildPieces(state, info) {
     });
     const fk = S.fc && S.fc[l.id];
     if (fk === 'ravage' || fk === 'build') {
-      const t = textSprite(fk === 'ravage' ? '⚔ 이번 턴 약탈 예정' : '🏠 이번 턴 건설 예정', { bg: fk === 'ravage' ? 'rgba(200,40,30,0.95)' : 'rgba(210,140,40,0.95)', fg: '#fff', size: 0.85 });
+      const rvi = fk === 'ravage' && state.forecast && state.forecast.ravageInfo && state.forecast.ravageInfo[l.id];
+      const rvTxt = rvi ? (rvi.skipped ? '⚔ 약탈 막음 🛡' : `⚔ 약탈 피해 ${rvi.dmg}${rvi.blight ? ' → 황폐!' : ' (황폐 없음)'}`) : '⚔ 이번 턴 약탈 예정';
+      const t = textSprite(fk === 'ravage' ? rvTxt : '🏠 이번 턴 건설 예정', { bg: fk === 'ravage' ? 'rgba(200,40,30,0.95)' : 'rgba(210,140,40,0.95)', fg: '#fff', size: 0.85 });
       t.position.set(cx, top + 34, cz - 18);
       S.labels.add(t);
     }

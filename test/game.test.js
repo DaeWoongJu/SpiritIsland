@@ -215,3 +215,43 @@ test('난이도: 모든 적대 세력 6레벨로 게임이 끝까지 진행', as
     assert.ok(!r.reason.startsWith('서버 오류'), `${adv.id}: ${r.reason}`);
   }
 });
+
+test('약탈 미리보기: 계산 결과가 실제 약탈과 같음', async () => {
+  const g = mkGame(['shadows']);
+  g.setup();
+  g.phase = 'invader';
+  const l = g.lands.A7;
+  l.explorers = 1; l.towns = [2]; l.cities = []; l.dahan = [2, 2]; l.blight = 0; l.presence = {}; l.defend = 0;
+  const pv = g.ravagePreview(l);
+  assert.deepStrictEqual([pv.raw, pv.defend, pv.dmg, pv.blight, pv.dahanLost, pv.dahanLeft, pv.counter], [3, 0, 3, 1, 1, 1, 2]);
+  assert.strictEqual(pv.killed.town, 1);
+  l.defend = 3;
+  const pv2 = g.ravagePreview(l);
+  assert.deepStrictEqual([pv2.dmg, pv2.blight, pv2.dahanLost, pv2.counter], [0, 0, 0, 4]);
+  assert.deepStrictEqual(pv2.killed, { explorer: 1, town: 1, city: 0 });
+  l.defend = 0;
+  await g.doRavage(l);
+  assert.strictEqual(g.invaderStep.kind, 'ravageLand');
+  const r = g.invaderStep.report;
+  assert.deepStrictEqual([r.raw, r.dmg, r.blight, r.dahanLost, r.counter, r.killed.town], [3, 3, 1, 1, 2, 1]);
+  assert.strictEqual(l.towns.length, 0);
+  assert.strictEqual(l.explorers, 1);
+});
+
+test('침략자 단계: 직접 넘기기면 모두 다음을 눌러야 진행', async () => {
+  const g = new Game([{ id: 'p0', name: 'A', spiritId: 'earth' }, { id: 'p1', name: 'B', spiritId: 'river' }], { seed: 3, stepManual: true });
+  g.setup();
+  let done = false;
+  const pr = g.step('build', null, [], '테스트').then(() => { done = true; });
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(done, false);
+  g.ackStep('p0', g.invaderStep.no);
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(done, false, '한 명만 눌렀을 때는 대기');
+  g.ackStep('p1', g.invaderStep.no - 1); // 지난 단계 번호는 무시
+  await new Promise((r) => setImmediate(r));
+  assert.strictEqual(done, false);
+  g.ackStep('p1', g.invaderStep.no);
+  await pr;
+  assert.strictEqual(done, true);
+});
