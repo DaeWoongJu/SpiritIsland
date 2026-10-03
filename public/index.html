@@ -34,6 +34,7 @@
       <p class="hint">방을 만든 뒤 4자리 코드를 친구에게 알려주세요.</p>
       <button id="btn-install" class="hidden" style="width:100%;margin-top:12px">⬇ 정령섬을 앱으로 설치 (바탕화면 아이콘)</button>
       <div id="conn-status" class="conn">서버 연결 중...</div>
+      <div style="text-align:center;margin-top:8px"><button class="btn-sound small">🔊 소리</button></div>
     </div>
   </section>
 
@@ -42,7 +43,7 @@
     <header class="room-header">
       <div class="brand"><svg viewBox="0 0 64 64"><use href="#logo"/></svg>정령섬 대기실</div>
       <div>방 코드 <span id="room-code" class="code"></span> <button id="btn-copy" class="small">초대 링크 복사</button></div>
-      <div><button id="btn-leave" class="small">나가기</button></div>
+      <div style="display:flex;gap:6px"><button class="btn-sound small">🔊 소리</button><button id="btn-leave" class="small">나가기</button></div>
     </header>
     <div class="room-body">
       <div class="room-left">
@@ -113,10 +114,12 @@
     </ul>
     <div class="actions"><button id="btn-help-close" class="primary">닫기</button></div>
   </div></div>
+  <div id="sound-panel" class="sound-panel hidden"></div>
   <div id="toast" class="toast hidden"></div>
   <div id="tooltip" class="tooltip hidden"></div>
 
   <script src="icons.js"></script>
+  <script src="audio.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

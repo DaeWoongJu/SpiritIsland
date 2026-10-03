@@ -302,3 +302,10 @@ h2::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg
   .room-left { width: 100%; }
   .stat-row { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ───── 소리 설정 ───── */
+.sound-panel { position: fixed; z-index: 80; width: 220px; padding: 12px 14px; border-radius: 12px; background: linear-gradient(180deg, #1a2422, #0f1716); border: 1px solid #5b4d2c; box-shadow: 0 14px 34px #000c; display: flex; flex-direction: column; gap: 6px; }
+.sound-panel .sp-title { font-family: var(--serif); color: var(--gold2); font-weight: 700; }
+.sound-panel .sp-row { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.sound-panel input[type=range] { width: 100%; accent-color: var(--gold); padding: 0; box-shadow: none; }
+.sound-panel input[type=checkbox] { accent-color: var(--gold); width: 16px; height: 16px; }

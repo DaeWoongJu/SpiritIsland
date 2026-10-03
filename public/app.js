@@ -61,26 +61,68 @@ function onMessage(msg) {
       app.lan = msg.lan || [];
       break;
     case 'room':
+      if (app.room && msg.room.chat.length > app.room.chat.length && msg.room.chat[msg.room.chat.length - 1].from !== myName()) Sound.play('chat');
       app.room = msg.room;
+      if (!msg.room.started) Sound.setMood('calm');
       app.you = msg.you;
       if (!msg.room.started) { app.state = null; app.prompt = null; app.resultDismissed = false; }
       render();
       break;
-    case 'state':
+    case 'state': {
+      const prevPrompt = app.prompt;
       app.state = msg.state;
       app.prompt = msg.prompt;
       app.you = msg.you;
+      gameSounds(prevPrompt);
       render();
       break;
+    }
     case 'left':
       app.room = null; app.state = null; app.prompt = null;
       render();
       break;
     case 'error':
+      Sound.play('error');
       toast(msg.msg);
       break;
     default:
   }
+}
+
+function myName() {
+  const me = app.room && app.room.players.find((p) => p.id === app.you);
+  return me ? me.name : null;
+}
+
+// ───────────── 사운드 연결 ─────────────
+const LOG_SOUNDS = [
+  [/공포 카드 획득/, 'fearCard'],
+  [/약탈!/, 'ravage'],
+  [/황폐 추가/, 'blight'],
+  [/: (마을|도시) 파괴|각 침략자에게 피해 \d+ \(파괴 [1-9]/, 'destroy'],
+  [/(마을|도시) 건설/, 'build'],
+  [/탐험가 도착/, 'explore'],
+  [/존재 추가/, 'presence'],
+  [/^공포 \+/, 'fear'],
+  [/카드 \d+장 사용 — (?!없음)/, 'cardPlay'],
+  [/^(══|── )/, 'phase'],
+];
+
+function gameSounds(prevPrompt) {
+  const st = app.state;
+  if (!st) return;
+  const lastSeq = st.log.length ? st.log[st.log.length - 1].seq : 0;
+  if (app.logSeq == null || lastSeq < app.logSeq) { app.logSeq = lastSeq; } else {
+    const fresh = st.log.filter((l) => l.seq > app.logSeq);
+    app.logSeq = lastSeq;
+    const kinds = [];
+    for (const l of fresh) for (const [re, k] of LOG_SOUNDS) if (re.test(l.msg) && !kinds.includes(k)) kinds.push(k);
+    kinds.slice(0, 4).forEach((k, i) => setTimeout(() => Sound.play(k), i * 170));
+  }
+  Sound.setMood(st.phase === 'invader' ? 'tense' : 'calm');
+  if (st.result && !app.resultSounded) { app.resultSounded = true; Sound.play(st.result.win ? 'victory' : 'defeat'); }
+  if (!st.result) app.resultSounded = false;
+  if (app.prompt && !prevPrompt) Sound.play('turn');
 }
 
 function answer(value) {
@@ -237,6 +279,7 @@ function renderTopbar() {
     <div class="tb-box"><span class="k">건설 (이번 턴)</span><span class="v">${invCardHTML(st.invader.build)}</span></div>
     <div class="tb-box"><span class="k">침략자 덱</span><span class="v">${st.invader.deckCount}장${st.invader.nextStage ? ` <small class="hint">(다음 ${st.invader.nextStage}단계)</small>` : ''}</span></div>
     <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계)</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
+    ${soundButtonHTML()}
     <button id="btn-help">❓ 규칙</button>
   `;
   $('#btn-help').onclick = () => $('#help').classList.remove('hidden');
@@ -427,7 +470,7 @@ function renderMap() {
   svg.innerHTML = html;
   for (const poly of svg.querySelectorAll('polygon.land')) {
     const id = poly.dataset.land;
-    poly.onclick = () => { if (selectable.has(id)) answer(id); };
+    poly.onclick = () => { if (selectable.has(id)) { Sound.play('land'); answer(id); } };
     poly.onmouseenter = (e) => showTip(e, landTip(id));
     poly.onmousemove = moveTip;
     poly.onmouseleave = hideTip;
@@ -580,6 +623,7 @@ function renderModal() {
   for (const el of inner.querySelectorAll('.card')) {
     el.onclick = () => {
       const id = el.dataset.card;
+      Sound.play('select');
       if (sel.includes(id)) app.modal.selected = sel.filter((x) => x !== id);
       else if (!el.classList.contains('disabled')) {
         if (!isPlay && p.max === 1) app.modal.selected = [id];
@@ -664,6 +708,43 @@ function initRoomAndGameUI() {
   });
 }
 
+// 사운드 설정 패널
+function initSoundUI() {
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b && !b.closest('#sound-panel')) Sound.play('click');
+    if (e.target.closest('.btn-sound')) { toggleSoundPanel(e.target.closest('.btn-sound')); return; }
+    if (!e.target.closest('#sound-panel')) $('#sound-panel').classList.add('hidden');
+  });
+  const panel = $('#sound-panel');
+  const st = Sound.settings;
+  panel.innerHTML = `<div class="sp-title">소리 설정</div>
+    <label class="sp-row"><input type="checkbox" id="snd-music" ${st.musicOn ? 'checked' : ''}> 배경음악</label>
+    <input type="range" id="snd-music-vol" min="0" max="1" step="0.05" value="${st.music}">
+    <label class="sp-row"><input type="checkbox" id="snd-sfx" ${st.sfxOn ? 'checked' : ''}> 효과음</label>
+    <input type="range" id="snd-sfx-vol" min="0" max="1" step="0.05" value="${st.sfx}">
+    <div class="hint">화면을 한 번 클릭하면 소리가 시작됩니다.</div>`;
+  $('#snd-music').onchange = (e) => { Sound.init(); Sound.set('musicOn', e.target.checked); updateSoundButtons(); };
+  $('#snd-sfx').onchange = (e) => { Sound.set('sfxOn', e.target.checked); updateSoundButtons(); };
+  $('#snd-music-vol').oninput = (e) => Sound.set('music', Number(e.target.value));
+  $('#snd-sfx-vol').oninput = (e) => { Sound.set('sfx', Number(e.target.value)); Sound.play('select'); };
+  updateSoundButtons();
+}
+function toggleSoundPanel(btn) {
+  const panel = $('#sound-panel');
+  const r = btn.getBoundingClientRect();
+  panel.style.top = `${r.bottom + 8}px`;
+  panel.style.left = `${Math.max(8, Math.min(window.innerWidth - 230, r.right - 220))}px`;
+  panel.classList.toggle('hidden');
+}
+function soundButtonHTML() {
+  const on = Sound.settings.musicOn || Sound.settings.sfxOn;
+  return `<button class="btn-sound small" title="소리 설정">${on ? '🔊' : '🔇'} 소리</button>`;
+}
+function updateSoundButtons() {
+  for (const b of document.querySelectorAll('.btn-sound')) b.outerHTML = soundButtonHTML();
+}
+
 // 앱 설치 (바탕화면/작업표시줄 아이콘)
 let installEvent = null;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -685,4 +766,5 @@ function initInstall() {
 initHome();
 initRoomAndGameUI();
 initInstall();
+initSoundUI();
 connect();

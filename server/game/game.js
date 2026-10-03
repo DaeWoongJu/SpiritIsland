@@ -112,7 +112,8 @@ class Game extends EventEmitter {
   }
 
   log(msg) {
-    this.logLines.push({ turn: this.turn, msg });
+    this.logSeq = (this.logSeq || 0) + 1;
+    this.logLines.push({ seq: this.logSeq, turn: this.turn, msg });
     if (this.logLines.length > 300) this.logLines.shift();
     this.changed();
   }

@@ -1,0 +1,25 @@
+#pragma code_page(65001)
+#include <winver.h>
+1 ICON "../public/icons/icon.ico"
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "041204B0"
+    BEGIN
+      VALUE "FileDescription", "정령섬 온라인"
+      VALUE "ProductName", "정령섬 온라인 (Spirit Island Online)"
+      VALUE "FileVersion", "1.0.0"
+      VALUE "ProductVersion", "1.0.0"
+      VALUE "OriginalFilename", "정령섬.exe"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0412, 1200
+  END
+END

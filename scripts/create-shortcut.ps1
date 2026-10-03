@@ -1,6 +1,7 @@
 ﻿# 바탕화면과 시작 메뉴에 "정령섬" 바로가기(아이콘)를 만든다.
 $root = Split-Path -Parent $PSScriptRoot
-$target = Join-Path $root 'start-windows.bat'
+$target = Join-Path $root '정령섬.exe'
+if (-not (Test-Path $target)) { $target = Join-Path $root 'start-windows.bat' }
 $icon = Join-Path $root 'public\icons\icon.ico'
 $shell = New-Object -ComObject WScript.Shell
 $places = @(
