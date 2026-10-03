@@ -126,6 +126,26 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show) {
     return 1;
   }
 
+  // 자동 업데이트: 서버를 켜기 전에 GitHub 에서 새 버전을 확인한다 (실패해도 계속 진행)
+  wchar_t ps1[MAX_PATH], params[MAX_PATH * 2];
+  swprintf(ps1, MAX_PATH, L"%ls\\scripts\\update.ps1", dir);
+  if (GetFileAttributesW(ps1) != INVALID_FILE_ATTRIBUTES) {
+    swprintf(params, MAX_PATH * 2, L"-NoProfile -ExecutionPolicy Bypass -File \"%ls\"", ps1);
+    SHELLEXECUTEINFOW sei;
+    ZeroMemory(&sei, sizeof(sei));
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"open";
+    sei.lpFile = L"powershell.exe";
+    sei.lpParameters = params;
+    sei.lpDirectory = dir;
+    sei.nShow = SW_SHOWNORMAL;
+    if (ShellExecuteExW(&sei) && sei.hProcess) {
+      WaitForSingleObject(sei.hProcess, 5 * 60 * 1000);
+      CloseHandle(sei.hProcess);
+    }
+  }
+
   wchar_t bat[MAX_PATH];
   if (swprintf(bat, MAX_PATH, L"%ls\\start-windows.bat", dir) < 0) return 1;
   if (GetFileAttributesW(bat) == INVALID_FILE_ATTRIBUTES) {
