@@ -847,8 +847,13 @@ function spiritPanel(pid) {
   const growth = def.growth.map((g, i) => `<div class="${s.growthChoice === i ? 'chosen' : ''}">${i + 1}. ${g.map(esc).join(' + ')}</div>`).join('');
   const innates = def.innates.map((inn) => {
     const lv = s.innateLevels[inn.id] || 0;
-    return `<div class="innate ${inn.speed}"><b>${esc(inn.name)}</b> <span class="hint">(내재 · ${inn.speed === 'fast' ? '빠름' : '느림'} · ${esc(targetText(inn.target))})${s.innatesUsed[inn.id] ? ' · 사용함' : ''}</span>
-      ${inn.levels.map((l, i) => `<div class="lv ${i < lv ? 'met' : ''}"><span class="lv-els">${Object.entries(l.el).map(([e, n]) => elRep(e, n, 13)).join('')}</span> ${esc(l.text)}</div>`).join('')}</div>`;
+    const now = innateNow(inn, lv);
+    const need = innateNeed(inn, lv, s.elements);
+    const status = s.innatesUsed[inn.id] ? '<div class="inn-now used">✔ 이번 턴에 사용했어요</div>'
+      : lv ? `<div class="inn-now on">✨ 지금 쓸 수 있어요 (${lv}단계): <b>${esc(now)}</b>${need ? `<br><span class="hint">다음 단계까지: ${esc(need)}</span>` : ''}</div>`
+        : `<div class="inn-now off">🔒 아직 못 써요 — 이번 턴에 낸 카드의 원소가 부족해요<br><span class="hint">1단계 조건: ${esc(need)}</span></div>`;
+    return `<div class="innate ${inn.speed}"><b>${esc(inn.name)}</b> <span class="hint">(내재 · ${inn.speed === 'fast' ? '빠름' : '느림'} · ${esc(targetText(inn.target))})</span>
+      ${inn.levels.map((l, i) => `<div class="lv ${i < lv ? 'met' : ''}"><span class="lv-n">${i + 1}단계</span><span class="lv-els">${Object.entries(l.el).map(([e, n]) => elRep(e, n, 13)).join('')}</span> ${esc(l.text)}</div>`).join('')}${status}</div>`;
   }).join('');
   const played = s.played.map((p) => `<span data-card-tip="${p.id}">${cardHTML(p.id, { mini: true, used: p.used, elements: s.elements })}</span>`).join('');
   const handList = pid === app.you ? '' : `<div class="pile">손패: ${s.hand.map((id) => `<span data-card-tip="${id}" style="text-decoration:underline dotted">${esc(app.catalog.powers[id].name)}</span>`).join(', ') || '없음'}</div>`;
@@ -870,7 +875,10 @@ function spiritPanel(pid) {
     ${trackHTML(`${pcIcon('card', 12, '#9ed3ff')}카드`, def.cardTrack, s.cardRevealed, def.color)}
     <div class="special"><b>${esc(def.special.name)}</b>: ${esc(def.special.text)}</div>
     <h2>성장 옵션</h2><div class="growth-opts">${growth}</div>
-    <h2>내재 권능</h2>${innates}
+    <h2>내재 권능</h2>
+    <div class="inn-help">💡 <b>내재 권능</b> = 카드 없이 쓰는 이 정령만의 고유 능력이에요. 에너지가 들지 않고 매 턴 1번 쓸 수 있어요.<br>
+      단, <b>이번 턴에 낸 카드들의 원소</b>(카드 왼쪽 위 아이콘)를 합쳐서 조건을 채워야 해요. 조건을 채운 단계까지 효과가 <b>모두 더해져요</b>. 쓸 수 있으면 빠름/느림 권능 단계에 버튼이 나타나요.</div>
+    ${innates}
     <h2>이번 턴에 낸 카드</h2><div class="mini-cards">${played || '<span class="hint">없음</span>'}</div>
     ${handList}
     <div class="pile">버린 카드 ${s.discard.length}장: ${s.discard.map((id) => `<span data-card-tip="${id}" style="text-decoration:underline dotted">${esc(app.catalog.powers[id].name)}</span>`).join(', ') || '-'}</div>

@@ -1062,8 +1062,8 @@ class Game extends EventEmitter {
       if (s.innatesUsed[inn.id]) continue;
       const lv = this.innateLevels(pid, inn);
       if (!lv || !this.hasTarget(pid, inn)) continue;
-      if (inn.speed === speed) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 권능 Lv${lv})` });
-      else if (speed === 'fast' && inn.speed === 'slow' && s.fastAllowance > 0) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 Lv${lv}, 느림→빠르게)`, convert: true });
+      if (inn.speed === speed) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 권능 ${lv}단계)` });
+      else if (speed === 'fast' && inn.speed === 'slow' && s.fastAllowance > 0) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 권능 ${lv}단계, 느림→빠르게)`, convert: true });
     }
     if (s.repeats.length) {
       const maxCost = Math.max(...s.repeats.map((r) => r.maxCost));

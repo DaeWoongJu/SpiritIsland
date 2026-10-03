@@ -637,3 +637,12 @@ body.hand-collapsed .hand-area { display: none; }
 .inv-banner.ib-float, .map-wrap.coach-on .inv-banner.ib-float { position: fixed; top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(760px, 94vw); max-height: 86vh; z-index: 40; }
 .map-wrap.coach-on.ib-float-on .inv-banner.ib-float { top: 12px; transform: translateX(-50%); max-height: calc(62vh - 12px); }
 .map-wrap.coach-on.ib-float-on .coach { position: fixed; left: 12px; bottom: 12px; z-index: 41; max-height: calc(38vh - 24px); overflow-y: auto; width: min(560px, calc(100vw - 24px)); }
+.inn-help { font-size: 12px; line-height: 1.6; color: #d8e6ee; background: #0d1a22; border: 1px solid #2c4a5c; border-radius: 10px; padding: 7px 10px; margin: 4px 0 6px; }
+.inn-help b { color: #ffe08a; }
+.innate .lv-n { flex-shrink: 0; font-size: 10.5px; font-weight: 800; color: #c9b27a; min-width: 2.8em; }
+.innate .lv.met .lv-n { color: #9fe0b0; }
+.inn-now { margin-top: 5px; padding: 5px 7px; border-radius: 7px; line-height: 1.5; }
+.inn-now.on { background: #1a4a2c88; color: #e6ffe9; }
+.inn-now.on b { color: #fff; }
+.inn-now.off { background: #00000055; color: #c9c3b1; }
+.inn-now.used { background: #00000055; color: #9fb0a8; }

@@ -2,6 +2,22 @@
 /* 정령섬 온라인 — 실전 튜토리얼 코치: 화면의 해당 부분을 빛나게 짚으면서 첫 두 턴을 한 단계씩 안내한다 */
 
 /** 카드를 사람이 읽기 쉬운 문장으로 설명 */
+/** 내재 권능: 지금 쓰면 어떤 효과인지(단계가 쌓임) */
+function innateNow(inn, lv) {
+  if (!lv) return '';
+  return inn.levels.slice(0, lv).map((l) => l.text.replace(/\.$/, '')).join(' → ');
+}
+/** 내재 권능: 다음 단계까지 모자란 원소 */
+function innateNeed(inn, lv, elements) {
+  const next = inn.levels[lv];
+  if (!next) return '';
+  const names = (app.catalog && app.catalog.elements) || {};
+  return Object.entries(next.el).map(([e, n]) => {
+    const have = (elements && elements[e]) || 0;
+    return `${names[e] || e} ${Math.min(have, n)}/${n}`;
+  }).join(', ');
+}
+
 function explainCard(c) {
   if (!c) return '';
   const speed = c.speed === 'fast' ? '<b class="ex-fast">빠른 권능</b>이라 침략자가 움직이기 <b>전에</b> 발동' : '<b class="ex-slow">느린 권능</b>이라 침략자가 움직인 <b>뒤에</b> 발동';
