@@ -4,6 +4,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const { exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const { Game, PIECE_NAMES, ELEMENT_NAMES, growthLabel } = require('./game/game');
 const { SPIRITS } = require('./game/spirits');
@@ -33,7 +35,7 @@ const CATALOG = {
 };
 
 // ───────────── HTTP ─────────────
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -142,7 +144,7 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'hello': {
         token = typeof msg.token === 'string' && msg.token.length >= 16 ? msg.token : crypto.randomBytes(16).toString('hex');
-        send(ws, { t: 'welcome', token, catalog: CATALOG });
+        send(ws, { t: 'welcome', token, catalog: CATALOG, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`) });
         const sess = sessions.get(token);
         if (sess && rooms.has(sess.roomCode)) {
           const r = rooms.get(sess.roomCode);
@@ -253,8 +255,38 @@ function cleanName(name) {
   return s || '정령' + crypto.randomInt(100, 999);
 }
 
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list || []) if (a.family === 'IPv4' && !a.internal) out.push(a.address);
+  }
+  return out;
+}
+
+function openBrowser(url) {
+  const cmd = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+  exec(cmd, () => {});
+}
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n[오류] ${PORT}번 포트가 이미 사용 중입니다. 정령섬 서버가 이미 켜져 있는지 확인하거나, 다른 포트로 실행하세요 (예: PORT=3001).`);
+    if (process.argv.includes('--open')) openBrowser(`http://localhost:${PORT}`);
+  } else console.error(err);
+  process.exitCode = 1;
+});
+
 server.listen(PORT, () => {
-  console.log(`정령섬 온라인 서버 실행 중: http://localhost:${PORT}`);
+  const line = '─'.repeat(52);
+  console.log(`\n${line}\n  🌋 정령섬 온라인 서버가 실행되었습니다\n${line}`);
+  console.log(`  내 컴퓨터에서 접속   : http://localhost:${PORT}`);
+  const lan = lanAddresses();
+  if (lan.length) {
+    console.log('  같은 와이파이 친구   : ' + lan.map((ip) => `http://${ip}:${PORT}`).join('  또는  '));
+  }
+  console.log('  멀리 있는 친구       : 새 창에서 "npm run share" 실행 → 나오는 https 주소 공유');
+  console.log(`  종료하려면 이 창을 닫거나 Ctrl+C 를 누르세요.\n${line}\n`);
+  if (process.argv.includes('--open')) openBrowser(`http://localhost:${PORT}`);
 });
 
 module.exports = { server };

@@ -44,10 +44,13 @@ async function autoPlay(page, label) {
   const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
   const errors = [];
   const mk = async (name) => {
-    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name} console: ${m.text()}`); });
+    // 외부 리소스(웹폰트)는 테스트 환경에 따라 막힐 수 있으므로 차단하고, 로컬 리소스 실패만 오류로 본다
+    await page.route((u) => !u.href.startsWith(URL), (r) => r.abort());
+    page.on('requestfailed', (r) => { if (r.url().startsWith(URL)) errors.push(`${name} 요청 실패: ${r.url()}`); });
+    page.on('console', (m) => { if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) errors.push(`${name} console: ${m.text()}`); });
     await page.goto(URL);
     await page.waitForSelector('#conn-status:has-text("연결되었습니다")');
     await page.fill('#in-name', name);
@@ -55,6 +58,7 @@ async function autoPlay(page, label) {
   };
   const a = await mk('철수');
   const b = await mk('영희');
+  if (SHOTS) await a.screenshot({ path: `${SHOTS}/home.png` });
   await a.click('#btn-create');
   await a.waitForSelector('#screen-room:not(.hidden)');
   const code = (await a.textContent('#room-code')).trim();

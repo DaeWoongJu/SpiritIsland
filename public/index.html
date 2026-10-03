@@ -4,24 +4,35 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>정령섬 온라인</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌋</text></svg>">
+  <meta name="theme-color" content="#0a100f">
+  <meta name="description" content="친구와 함께 브라우저에서 즐기는 정령섬 협력 보드게임">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&family=Noto+Serif+KR:wght@600;700;900&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- 로비: 이름 입력 / 방 만들기 / 참가 -->
   <section id="screen-home" class="screen">
     <div class="home-card">
-      <h1>🌋 정령섬 <small>온라인</small></h1>
-      <p class="sub">섬의 정령이 되어 친구와 함께 침략자를 몰아내세요. (협력 게임, 1~4인)</p>
+      <div class="home-logo"><svg viewBox="0 0 64 64"><use href="#logo"/></svg></div>
+      <h1>정령섬 <small>SPIRIT ISLAND ONLINE</small></h1>
+      <p class="sub">섬의 정령이 되어 친구와 함께 침략자를 몰아내세요.<br>협력 게임 · 1~4인</p>
       <label>이름<input id="in-name" maxlength="16" placeholder="닉네임"></label>
       <div class="home-actions">
-        <button id="btn-create" class="primary">방 만들기</button>
+        <button id="btn-create" class="primary big">새 방 만들기</button>
+        <div class="divider">또는 친구의 방에 참가</div>
         <div class="join-row">
           <input id="in-code" maxlength="4" placeholder="방 코드" autocomplete="off">
           <button id="btn-join">참가</button>
         </div>
       </div>
       <p class="hint">방을 만든 뒤 4자리 코드를 친구에게 알려주세요.</p>
+      <button id="btn-install" class="hidden" style="width:100%;margin-top:12px">⬇ 정령섬을 앱으로 설치 (바탕화면 아이콘)</button>
       <div id="conn-status" class="conn">서버 연결 중...</div>
     </div>
   </section>
@@ -29,7 +40,8 @@
   <!-- 대기실: 정령 선택 -->
   <section id="screen-room" class="screen hidden">
     <header class="room-header">
-      <div>방 코드 <span id="room-code" class="code"></span> <button id="btn-copy" class="small">링크 복사</button></div>
+      <div class="brand"><svg viewBox="0 0 64 64"><use href="#logo"/></svg>정령섬 대기실</div>
+      <div>방 코드 <span id="room-code" class="code"></span> <button id="btn-copy" class="small">초대 링크 복사</button></div>
       <div><button id="btn-leave" class="small">나가기</button></div>
     </header>
     <div class="room-body">
@@ -38,6 +50,7 @@
         <ul id="room-players"></ul>
         <button id="btn-start" class="primary big">게임 시작</button>
         <p id="start-hint" class="hint"></p>
+        <p id="lan-hint" class="hint" style="line-height:1.6"></p>
         <h2>채팅</h2>
         <div id="room-chat" class="chat-box"></div>
         <form id="room-chat-form" class="chat-form"><input placeholder="메시지..." maxlength="300"><button>전송</button></form>
@@ -103,6 +116,7 @@
   <div id="toast" class="toast hidden"></div>
   <div id="tooltip" class="tooltip hidden"></div>
 
+  <script src="icons.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

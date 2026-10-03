@@ -6,8 +6,12 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server/index.js",
+    "play": "node server/index.js --open",
     "dev": "node --watch server/index.js",
-    "test": "node --test test/*.test.js"
+    "share": "npx -y cloudflared tunnel --url http://localhost:3000",
+    "icons": "node scripts/make-icons.js",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e.js"
   },
   "engines": {
     "node": ">=18"

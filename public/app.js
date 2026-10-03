@@ -1,9 +1,8 @@
 'use strict';
 /* 정령섬 온라인 — 브라우저 클라이언트 (빌드 도구 없이 동작하는 순수 JS) */
 
-const EL_ICON = { sun: '☀️', moon: '🌙', fire: '🔥', air: '💨', water: '💧', earth: '⛰️', plant: '🌿', animal: '🐾' };
-const TERRAIN_COLOR = { M: '#8f9296', J: '#3c8d40', S: '#dcc07c', W: '#58a9a3' };
-const PIECE_ICON = { explorer: '🚶', town: '🏠', city: '🏰', dahan: '🛖', blight: '☠️' };
+const TERRAIN_COLOR = { M: '#9aa0a7', J: '#3f9a46', S: '#e2c681', W: '#5aaba3' };
+const elRep = (e, n, size = 14) => Array.from({ length: n }, () => elIcon(e, size)).join('');
 const FILTER_NAME = {
   any: '아무 지역', dahan: '다한이 있는 지역', invaders: '침략자가 있는 지역', noinvaders: '침략자가 없는 지역',
   blight: '황폐가 있는 지역', noblight: '황폐가 없는 지역', coastal: '해안 지역', inland: '내륙 지역',
@@ -37,11 +36,13 @@ function connect() {
   ws.onopen = () => {
     app.retry = 0;
     $('#conn-status').textContent = '서버에 연결되었습니다.';
+    $('#conn-status').classList.add('ok');
     send({ t: 'hello', token: app.token });
   };
   ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
   ws.onclose = () => {
     $('#conn-status').textContent = '연결이 끊어졌습니다. 다시 연결 중...';
+    $('#conn-status').classList.remove('ok');
     if (app.room) toast('서버 연결이 끊어졌습니다. 재연결 중...');
     setTimeout(connect, Math.min(5000, 500 * 2 ** app.retry++));
   };
@@ -57,6 +58,7 @@ function onMessage(msg) {
       app.token = msg.token;
       sessionStorage.setItem('si-token', msg.token);
       app.catalog = msg.catalog;
+      app.lan = msg.lan || [];
       break;
     case 'room':
       app.room = msg.room;
@@ -121,6 +123,10 @@ function renderRoom() {
   const c = app.catalog;
   if (!c) return;
   $('#room-code').textContent = r.code;
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+  $('#lan-hint').innerHTML = local && app.lan && app.lan.length
+    ? `같은 와이파이 친구 접속 주소: <b>${app.lan.map(esc).join(' / ')}</b><br>멀리 있는 친구는 README의 "npm run share" 방법을 이용하세요.`
+    : `친구에게 이 주소를 알려주세요: <b>${esc(location.origin)}</b>`;
   const isHost = r.hostId === app.you;
   $('#room-players').innerHTML = r.players.map((p) => {
     const sp = c.spirits.find((s) => s.id === p.spiritId);
@@ -137,14 +143,15 @@ function renderRoom() {
   $('#spirit-list').innerHTML = c.spirits.map((s) => {
     const owner = r.players.find((p) => p.spiritId === s.id);
     const mine = owner && owner.id === app.you;
-    return `<div class="spirit-card ${mine ? 'mine' : ''} ${owner && !mine ? 'taken' : ''}" data-spirit="${s.id}">
+    const pips = (arr) => `<span class="pips">${arr.map((v) => `<span class="pip">${v}</span>`).join('')}</span>`;
+    return `<div class="spirit-card ${mine ? 'mine' : ''} ${owner && !mine ? 'taken' : ''}" data-spirit="${s.id}" style="--sc:${s.color}">
       ${owner ? `<span class="owner">${esc(owner.name)}</span>` : ''}
-      <h3><span class="dot" style="background:${s.color}"></span>${esc(s.name)}</h3>
+      <h3><span class="spirit-orb"></span>${esc(s.name)}</h3>
       <div class="en">${esc(s.en)} · 난이도 ${esc(s.complexity)}</div>
       <div class="sec">${esc(s.summary)}</div>
       <div class="sec"><b>${esc(s.special.name)}</b>: ${esc(s.special.text)}</div>
       <div class="sec"><b>성장</b> (하나 선택)<br>${s.growth.map((g, i) => `${i + 1}. ${g.map(esc).join(' + ')}`).join('<br>')}</div>
-      <div class="sec tracks">에너지: ${s.energyTrack.join(' → ')}<br>카드 수: ${s.cardTrack.join(' → ')}</div>
+      <div class="sec tracks"><span>${pcIcon('energy', 13, '#f3d98b')} 에너지</span>${pips(s.energyTrack)}<span>${pcIcon('card', 13, '#9ed3ff')} 카드 수</span>${pips(s.cardTrack)}</div>
       <div class="sec"><b>내재 권능</b>: ${s.innates.map((i) => esc(i.name)).join(', ')}</div>
       <div class="sec"><b>시작 배치</b>: ${esc(s.setupText)}</div>
       <div class="sec"><b>고유 권능</b>: ${s.uniques.map((u) => esc(c.powers[u].name)).join(', ')}</div>
@@ -177,16 +184,16 @@ function targetText(t) {
 function cardHTML(id, opts = {}) {
   const c = app.catalog.powers[id];
   if (!c) return '';
-  const cls = ['card', c.kind, opts.mini ? 'mini' : '', opts.used ? 'used' : '', opts.selectable ? 'selectable' : '', opts.selected ? 'selected' : '', opts.disabled ? 'disabled' : ''].join(' ');
+  const cls = ['card', c.kind, 'sp-' + c.speed, opts.mini ? 'mini' : '', opts.used ? 'used' : '', opts.selectable ? 'selectable' : '', opts.selected ? 'selected' : '', opts.disabled ? 'disabled' : ''].join(' ');
   let th = '';
   if (c.threshold) {
     const met = opts.elements && Object.entries(c.threshold.el).every(([e, n]) => (opts.elements[e] || 0) >= n);
-    th = `<div class="c-th ${met ? 'met' : ''}">${Object.entries(c.threshold.el).map(([e, n]) => EL_ICON[e].repeat(n)).join('')} ${esc(c.threshold.text.replace(/^[^:]+:\s*/, ''))}</div>`;
+    th = `<div class="c-th ${met ? 'met' : ''}"><span class="th-els">${Object.entries(c.threshold.el).map(([e, n]) => elRep(e, n, 12)).join('')}</span> ${esc(c.threshold.text.replace(/^[^:]+:\s*/, ''))}</div>`;
   }
   const kindName = { unique: '고유', minor: '소형', major: '대형' }[c.kind];
   return `<div class="${cls}" data-card="${id}">
     <div class="c-top"><span class="c-cost">${c.cost}</span><span class="c-name">${esc(c.name)}</span><span class="c-speed ${c.speed}">${c.speed === 'fast' ? '빠름' : '느림'}</span></div>
-    <div class="c-el">${c.elements.map((e) => EL_ICON[e]).join('')}</div>
+    <div class="c-el">${c.elements.map((e) => elIcon(e, opts.mini ? 15 : 18)).join('')}</div>
     <div class="c-target">${esc(targetText(c.target))}</div>
     <div class="c-text">${esc(c.text)}</div>${th}
     <span class="c-kind">${kindName} · ${esc(c.en)}</span>
@@ -213,7 +220,7 @@ function renderGame() {
 function invCardHTML(card) {
   if (!card) return '<span class="hint">없음</span>';
   if (card.coastal) return '<span class="inv-card" style="background:#7fb3e0">해안 지역</span>';
-  return card.terrains.map((t) => `<span class="inv-card" style="background:${TERRAIN_COLOR[t]}">${app.catalog.terrains[t]}</span>`).join('');
+  return card.terrains.map((t) => `<span class="inv-card" style="background:${TERRAIN_COLOR[t]}">${trIcon(t, 12, '#1b1a12')}${app.catalog.terrains[t]}</span>`).join('');
 }
 
 function renderTopbar() {
@@ -221,10 +228,11 @@ function renderTopbar() {
   const f = st.fear;
   const fearDots = Array.from({ length: f.poolSize }, (_, i) => `<i class="${i < f.generated ? 'on' : ''}"></i>`).join('');
   $('#topbar').innerHTML = `
+    <div class="tb-logo"><svg viewBox="0 0 64 64"><use href="#logo"/></svg></div>
     <div class="tb-box phase"><span class="k">${st.turn}턴</span><span class="v">${PHASE_NAME[st.phase] || st.phase}</span></div>
     <div class="tb-box" title="공포가 공포 풀만큼 쌓이면 공포 카드를 얻습니다."><span class="k">공포 ${f.generated}/${f.poolSize} · 획득 카드 ${f.earnedTotal}장${f.pending ? ` (대기 ${f.pending})` : ''}</span><div class="fear-bar">${fearDots}</div></div>
-    <div class="tb-box" title="공포 단계에 따라 승리 조건이 쉬워집니다."><span class="k">공포 단계 · 남은 공포 카드</span><span class="v">${f.terrorLevel}단계 · ${f.deckLeft}장</span></div>
-    <div class="tb-box" title="${st.blight.flipped ? '황폐해진 섬: 다시 비면 패배' : '건강한 섬: 비면 뒤집힘'}"><span class="k">황폐 카드${st.blight.flipped ? ' (황폐해진 섬!)' : ''}</span><span class="v" style="color:${st.blight.flipped ? 'var(--danger)' : 'inherit'}">☠️ ${st.blight.pool}</span></div>
+    <div class="tb-box" title="공포 단계에 따라 승리 조건이 쉬워집니다."><span class="k">공포 단계 · 남은 공포 카드</span><span class="v">${pcIcon('fear', 16, '#c9a2ff')} ${f.terrorLevel}단계 · ${f.deckLeft}장</span></div>
+    <div class="tb-box" title="${st.blight.flipped ? '황폐해진 섬: 다시 비면 패배' : '건강한 섬: 비면 뒤집힘'}"><span class="k">황폐 카드${st.blight.flipped ? ' (황폐해진 섬!)' : ''}</span><span class="v" style="color:${st.blight.flipped ? 'var(--danger)' : 'inherit'}">${pcIcon('blight', 16, '#e8604f')} ${st.blight.pool}</span></div>
     <div class="tb-box"><span class="k">약탈 (이번 턴)</span><span class="v">${invCardHTML(st.invader.ravage)}</span></div>
     <div class="tb-box"><span class="k">건설 (이번 턴)</span><span class="v">${invCardHTML(st.invader.build)}</span></div>
     <div class="tb-box"><span class="k">침략자 덱</span><span class="v">${st.invader.deckCount}장${st.invader.nextStage ? ` <small class="hint">(다음 ${st.invader.nextStage}단계)</small>` : ''}</span></div>
@@ -266,7 +274,7 @@ function renderPrompt() {
     html += '<button id="btn-open-cards" class="primary">카드 선택 창 열기</button>';
   }
   el.innerHTML = html;
-  if (st.fear.current) el.innerHTML += `<div style="width:100%;color:#c99bf0;font-size:12px">공포 카드 [${esc(st.fear.current.name)}] ${st.fear.current.tl}단계: ${esc(st.fear.current.text)}</div>`;
+  if (st.fear.current) el.innerHTML += `<div class="fear-now">${pcIcon('fear', 14, '#c9a2ff')} 공포 카드 [${esc(st.fear.current.name)}] ${st.fear.current.tl}단계: ${esc(st.fear.current.text)}</div>`;
   for (const b of el.querySelectorAll('button[data-i]')) b.onclick = () => answer(p.options[Number(b.dataset.i)].value);
   for (const b of el.querySelectorAll('button[data-land]')) b.onclick = () => answer(b.dataset.land);
   const cancel = el.querySelector('button[data-cancel]');
@@ -284,64 +292,136 @@ function attachCardTips(root) {
   }
 }
 
+const TOKEN_STYLE = {
+  city: { fill: '#c3c6cd', stroke: '#454a54', glyph: '#262a31' },
+  town: { fill: '#dcae62', stroke: '#6b4a1a', glyph: '#3a270b' },
+  explorer: { fill: '#f1e7cc', stroke: '#6b5a3a', glyph: '#47381f' },
+  dahan: { fill: '#7e5130', stroke: '#2e1a0a', glyph: '#f4dcb6' },
+  blight: { fill: '#2a1014', stroke: '#c0443c', glyph: '#e8604f' },
+  shield: { fill: '#24496d', stroke: '#9cc6ee', glyph: '#e2f1ff' },
+  skip: { fill: '#3a3552', stroke: '#a59cf0', glyph: '#d9d3ff' },
+};
+
 function landPieces(l) {
-  const chips = [];
-  const dmgNote = (arr, full) => (arr.some((h) => h < full) ? '*' : '');
-  if (l.cities.length) chips.push({ icon: PIECE_ICON.city, n: l.cities.length + dmgNote(l.cities, 3) });
-  if (l.towns.length) chips.push({ icon: PIECE_ICON.town, n: l.towns.length + dmgNote(l.towns, 2) });
-  if (l.explorers) chips.push({ icon: PIECE_ICON.explorer, n: l.explorers });
-  if (l.dahan.length) chips.push({ icon: PIECE_ICON.dahan, n: l.dahan.length + dmgNote(l.dahan, 2), dahan: true });
-  if (l.blight) chips.push({ icon: PIECE_ICON.blight, n: l.blight, blight: true });
+  const out = [];
+  const damaged = (arr, full) => arr.some((h) => h < full);
+  if (l.cities.length) out.push({ kind: 'city', n: l.cities.length, dmg: damaged(l.cities, 3) });
+  if (l.towns.length) out.push({ kind: 'town', n: l.towns.length, dmg: damaged(l.towns, 2) });
+  if (l.explorers) out.push({ kind: 'explorer', n: l.explorers });
+  if (l.dahan.length) out.push({ kind: 'dahan', n: l.dahan.length, dmg: damaged(l.dahan, 2) });
+  if (l.blight) out.push({ kind: 'blight', n: l.blight });
   for (const [pid, n] of Object.entries(l.presence)) {
     if (!n) continue;
     const { def, s } = spiritOf(pid);
-    chips.push({ presence: def.color, n, sacred: s.sacred.includes(l.id) });
+    out.push({ presence: def.color, sid: def.id, n, sacred: s.sacred.includes(l.id) });
   }
-  if (l.defend) chips.push({ icon: '🛡️', n: l.defend });
-  if (l.skip) chips.push({ icon: '💤', n: '' });
-  return chips;
+  if (l.defend) out.push({ kind: 'shield', n: l.defend, always: true });
+  if (l.skip) out.push({ kind: 'skip', n: 0 });
+  return out;
+}
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (v) => Math.max(0, Math.min(255, Math.round(v + (amt > 0 ? (255 - v) * amt : v * amt))));
+  return '#' + [f(n >> 16), f((n >> 8) & 255), f(n & 255)].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+function mapDefs() {
+  const spiritGrads = app.catalog.spirits.map((sp) => `<radialGradient id="pg-${sp.id}" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="${shade(sp.color, 0.65)}"/><stop offset=".55" stop-color="${sp.color}"/><stop offset="1" stop-color="${shade(sp.color, -0.45)}"/></radialGradient>`).join('');
+  return `<defs>
+    <radialGradient id="sea" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#1f6a92"/><stop offset=".7" stop-color="#103a5c"/><stop offset="1" stop-color="#081d33"/></radialGradient>
+    <pattern id="waves" width="40" height="18" patternUnits="userSpaceOnUse"><path d="M0 9q5-4 10 0t10 0 10 0 10 0" fill="none" stroke="#9fd4ff" stroke-opacity=".12" stroke-width="1"/></pattern>
+    <linearGradient id="shallow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b86b0" stop-opacity="0"/><stop offset="1" stop-color="#4fb0d0" stop-opacity=".55"/></linearGradient>
+    <linearGradient id="light" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".28"/></linearGradient>
+    <pattern id="tex-M" width="30" height="26" patternUnits="userSpaceOnUse"><rect width="30" height="26" fill="#8e949b"/>
+      <path d="M2 22 9 10l7 12z" fill="#7a8087"/><path d="M9 10l-2.2 3.8 2.2-.8 1.8 1.2z" fill="#e9eef2" opacity=".8"/>
+      <path d="M15 12 21 3l6 9z" fill="#848a91"/><path d="M21 3l-1.8 2.8 1.8-.6 1.4.9z" fill="#e9eef2" opacity=".7"/></pattern>
+    <pattern id="tex-J" width="26" height="26" patternUnits="userSpaceOnUse"><rect width="26" height="26" fill="#2c7232"/>
+      <circle cx="6" cy="6" r="5" fill="#368a3d"/><circle cx="19" cy="13" r="5.5" fill="#327f39"/><circle cx="9" cy="21" r="4.5" fill="#3b9142"/>
+      <circle cx="5" cy="5" r="2" fill="#4aa451" opacity=".6"/><circle cx="18" cy="12" r="2.2" fill="#4aa451" opacity=".5"/><circle cx="23" cy="24" r="3" fill="#24612a"/></pattern>
+    <pattern id="tex-S" width="34" height="24" patternUnits="userSpaceOnUse"><rect width="34" height="24" fill="#dcc07e"/>
+      <path d="M0 8q8.5-6 17 0t17 0M0 20q8.5-6 17 0t17 0" fill="none" stroke="#c4a35f" stroke-width="1.4"/>
+      <circle cx="6" cy="14" r=".9" fill="#b8975a"/><circle cx="24" cy="3" r=".9" fill="#b8975a"/><circle cx="28" cy="15" r=".7" fill="#efdcac"/></pattern>
+    <pattern id="tex-W" width="28" height="22" patternUnits="userSpaceOnUse"><rect width="28" height="22" fill="#4e9d96"/>
+      <path d="M0 16q3.5-2.5 7 0t7 0 7 0 7 0" fill="none" stroke="#79c2b9" stroke-width="1.1"/>
+      <path d="M5 13V5M8 13V7M20 10V2M23 10V5" stroke="#2f6f68" stroke-width="1.2" stroke-linecap="round"/>
+      <ellipse cx="5" cy="5" rx=".9" ry="1.8" fill="#6b4f2f"/><ellipse cx="20" cy="2.5" rx=".9" ry="1.8" fill="#6b4f2f"/></pattern>
+    <filter id="island-shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000" flood-opacity=".6"/></filter>
+    <filter id="tok-shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1.2" stdDeviation="1" flood-color="#000" flood-opacity=".65"/></filter>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    ${spiritGrads}
+  </defs>`;
+}
+
+function tokenSVG(c, x, y) {
+  const badge = (n, dmg) => (n > 1 || dmg || c.always
+    ? `<circle cx="6.2" cy="-6.2" r="4.6" fill="${dmg ? '#a8231f' : '#14181d'}" stroke="#f3e6c4" stroke-width=".7"/><text x="6.2" y="-3.9" text-anchor="middle" class="tok-n">${n}</text>` : '');
+  if (c.presence) {
+    return `<g transform="translate(${x},${y})" filter="url(#tok-shadow)">
+      ${c.sacred ? '<circle r="10.6" fill="none" stroke="#ffd86b" stroke-width="1.6" stroke-dasharray="2.2 1.4"/>' : ''}
+      <circle r="8" fill="url(#pg-${c.sid})" stroke="${shade(c.presence, -0.6)}" stroke-width="1"/>
+      <circle cx="-2.6" cy="-3" r="2.4" fill="#fff" opacity=".55"/>${badge(c.n, false)}</g>`;
+  }
+  const st = TOKEN_STYLE[c.kind];
+  return `<g transform="translate(${x},${y})" filter="url(#tok-shadow)">
+    <circle r="8.2" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.2"/>
+    <circle r="8.2" fill="url(#light)"/>
+    <use href="#pc-${c.kind}" x="-5.6" y="-5.6" width="11.2" height="11.2" style="color:${st.glyph}"/>${badge(c.n, c.dmg)}</g>`;
 }
 
 function renderMap() {
   const st = app.state;
   const svg = $('#map');
-  const pad = 10;
-  svg.setAttribute('viewBox', `${-pad} ${-pad} ${st.mapSize.width + pad * 2} ${st.mapSize.height + pad * 2}`);
+  const pad = 14;
+  const W = st.mapSize.width;
+  const H = st.mapSize.height;
+  svg.setAttribute('viewBox', `${-pad} ${-pad} ${W + pad * 2} ${H + pad * 2}`);
   const p = app.prompt;
-  const selectable = new Set(p && p.type === 'land' ? p.options : []);
+  const landPrompt = p && p.type === 'land';
+  const selectable = new Set(landPrompt ? p.options : []);
   const focus = new Set((p && p.focus) || []);
   const ptsStr = (poly) => poly.map((q) => q.join(',')).join(' ');
-  let html = '';
-  for (const o of Object.values(st.oceans)) html += `<polygon class="ocean" points="${ptsStr(o.poly)}"/><text x="${o.center[0]}" y="${o.center[1]}" text-anchor="middle" font-size="10" fill="#9cc3e8" transform="rotate(-90 ${o.center[0]} ${o.center[1]})">바다</text>`;
-  const ravaged = new Set(st.events.filter((e) => e.kind === 'ravage').map((e) => e.landId));
+  let html = mapDefs();
+  html += `<rect x="${-pad}" y="${-pad}" width="${W + pad * 2}" height="${H + pad * 2}" fill="url(#sea)"/><rect x="${-pad}" y="${-pad}" width="${W + pad * 2}" height="${H + pad * 2}" fill="url(#waves)"/>`;
+  for (const o of Object.values(st.oceans)) {
+    const flip = o.center[0] > W / 2;
+    html += `<polygon points="${ptsStr(o.poly)}" fill="url(#shallow)" ${flip ? `transform="translate(${2 * o.center[0]} 0) scale(-1 1)"` : ''} opacity=".8"/>`;
+    html += `<text x="${o.center[0]}" y="${o.center[1]}" class="sea-label" transform="rotate(${flip ? 90 : -90} ${o.center[0]} ${o.center[1]})">바다 · ${o.board}</text>`;
+  }
+  const evPriority = { ravage: 3, build: 2, explore: 1 };
+  const ev = {};
+  for (const e of st.events) if (!ev[e.landId] || evPriority[e.kind] > evPriority[ev[e.landId]]) ev[e.landId] = e.kind;
+  html += '<g filter="url(#island-shadow)">';
+  for (const l of Object.values(st.lands)) html += `<polygon points="${ptsStr(l.poly)}" fill="url(#tex-${l.terrain})" class="land-base"/>`;
+  html += '</g>';
+  for (const l of Object.values(st.lands)) {
+    const dim = landPrompt && !selectable.has(l.id);
+    html += `<polygon points="${ptsStr(l.poly)}" fill="url(#light)" pointer-events="none"/>`;
+    if (l.blight) html += `<polygon points="${ptsStr(l.poly)}" fill="#5a1a1a" opacity="${Math.min(0.12 * l.blight, 0.36)}" pointer-events="none"/>`;
+    if (dim) html += `<polygon points="${ptsStr(l.poly)}" fill="#05080c" opacity=".45" pointer-events="none"/>`;
+    if (ev[l.id]) html += `<polygon class="ev ev-${ev[l.id]}" points="${ptsStr(l.poly)}"/>`;
+  }
   for (const l of Object.values(st.lands)) {
     const cls = ['land', selectable.has(l.id) ? 'selectable' : '', focus.has(l.id) ? 'focus' : ''].join(' ');
-    html += `<polygon class="${cls}" data-land="${l.id}" points="${ptsStr(l.poly)}" fill="${TERRAIN_COLOR[l.terrain]}"/>`;
-    if (ravaged.has(l.id)) html += `<polygon class="ev-ravage" points="${ptsStr(l.poly)}"/>`;
+    html += `<polygon class="${cls}" data-land="${l.id}" points="${ptsStr(l.poly)}"/>`;
   }
   for (const l of Object.values(st.lands)) {
     const [cx, cy] = l.center;
-    html += `<text class="land-label" x="${cx}" y="${cy - 24}" text-anchor="middle">${l.id} ${app.catalog.terrains[l.terrain]}${l.coastal ? ' 🌊' : ''}</text>`;
-    const chips = landPieces(l);
-    const perRow = 3;
-    const w = 25;
-    const h = 16;
-    chips.forEach((c, i) => {
+    const name = app.catalog.terrains[l.terrain] + (l.coastal ? '·해안' : '');
+    const lw = 31 + name.length * 6.8;
+    html += `<g transform="translate(${cx},${cy - 24})" pointer-events="none" class="plaque">
+      <rect x="${-lw / 2}" y="-7" width="${lw}" height="13" rx="6.5" fill="#0c1117" fill-opacity=".78" stroke="#d9b45a" stroke-opacity=".55" stroke-width=".7"/>
+      <use href="#tr-${l.terrain}" x="${-lw / 2 + 3}" y="-5" width="9" height="9" style="color:#e9d8a6"/>
+      <text x="${-lw / 2 + 14}" y="2.6" class="plaque-t">${l.id}</text><text x="${-lw / 2 + 28}" y="2.4" class="plaque-s">${name}</text></g>`;
+    const toks = landPieces(l);
+    const perRow = 4;
+    const sp = 19;
+    toks.forEach((c, i) => {
       const row = Math.floor(i / perRow);
-      const inRow = Math.min(perRow, chips.length - row * perRow);
+      const inRow = Math.min(perRow, toks.length - row * perRow);
       const col = i % perRow;
-      const x = cx + (col - (inRow - 1) / 2) * (w + 2);
-      const y = cy - 8 + row * (h + 2);
-      if (c.presence) {
-        html += `<g transform="translate(${x},${y})" pointer-events="none"><rect x="-12.5" y="-8" width="25" height="16" rx="5" fill="#000a"/>
-          <circle cx="-5" cy="0" r="5.2" fill="${c.presence}" stroke="${c.sacred ? '#fff' : '#0008'}" stroke-width="${c.sacred ? 2 : 1}"/>
-          <text class="piece-text" x="6.5" y="3.8" text-anchor="middle">${c.n}</text></g>`;
-      } else {
-        const bg = c.blight ? '#3a0d0dcc' : c.dahan ? '#2b3a1acc' : '#000a';
-        html += `<g transform="translate(${x},${y})" pointer-events="none"><rect x="-12.5" y="-8" width="25" height="16" rx="5" fill="${bg}"/>
-          <text x="-5" y="3.6" text-anchor="middle" font-size="9">${c.icon}</text>
-          <text class="piece-text" x="6.5" y="3.8" text-anchor="middle">${c.n}</text></g>`;
-      }
+      html += tokenSVG(c, cx + (col - (inRow - 1) / 2) * sp, cy - 4 + row * sp);
     });
   }
   svg.innerHTML = html;
@@ -352,7 +432,10 @@ function renderMap() {
     poly.onmousemove = moveTip;
     poly.onmouseleave = hideTip;
   }
-  $('#legend').innerHTML = `${PIECE_ICON.explorer} 탐험가(1) · ${PIECE_ICON.town} 마을(2) · ${PIECE_ICON.city} 도시(3) · ${PIECE_ICON.dahan} 다한(2) · ${PIECE_ICON.blight} 황폐 · ● 존재(흰 테두리=성지) · 🛡️ 방어 · 💤 행동 건너뜀 · * 손상됨 · 🌊 해안 · 빨간 점선 = 이번 턴 약탈`;
+  const lg = (k, label) => `<span class="lg">${pcIcon(k, 14, TOKEN_STYLE[k] ? TOKEN_STYLE[k].fill : '#ddd')} ${label}</span>`;
+  $('#legend').innerHTML = [lg('explorer', '탐험가 1'), lg('town', '마을 2'), lg('city', '도시 3'), lg('dahan', '다한 2'), lg('blight', '황폐'),
+    `<span class="lg">${pcIcon('presence', 14, '#f2c94c')} 존재 <span class="hint">(금빛 테두리 = 성지)</span></span>`, lg('shield', '방어'), lg('skip', '행동 건너뜀'),
+    '<span class="lg"><i class="sw sw-dmg"></i>손상</span>', '<span class="lg"><i class="sw sw-ravage"></i>약탈</span>', '<span class="lg"><i class="sw sw-build"></i>건설</span>', '<span class="lg"><i class="sw sw-explore"></i>탐험</span>'].join('');
 }
 
 function landTip(id) {
@@ -380,7 +463,7 @@ function renderSide() {
   if (!app.tab || !st.spirits[app.tab]) app.tab = order[0];
   $('#tabs').innerHTML = order.map((pid) => {
     const { def, player, s } = spiritOf(pid);
-    return `<button data-tab="${pid}" class="${app.tab === pid ? 'active' : ''}"><span class="dot" style="background:${def.color}"></span>${esc(player.name)}${pid === app.you ? ' (나)' : ''}${s.waiting ? ' <span class="wait">●선택 중</span>' : ''}</button>`;
+    return `<button data-tab="${pid}" class="${app.tab === pid ? 'active' : ''}"><span class="dot" style="background:${def.color};color:${def.color}"></span>${esc(player.name)}${pid === app.you ? ' (나)' : ''}${s.waiting ? ' <span class="wait">●선택 중</span>' : ''}</button>`;
   }).join('');
   for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => { app.tab = b.dataset.tab; renderSide(); };
   $('#side-content').innerHTML = spiritPanel(app.tab);
@@ -391,7 +474,7 @@ function trackHTML(label, values, revealed, color) {
   return `<div class="track"><span class="lbl">${label}</span>${values.map((v, i) => {
     const isRev = i < revealed;
     const cur = i === revealed - 1;
-    return `<span class="slot ${isRev ? 'rev' : 'pres'}" style="--pc:${color}" title="${isRev ? (cur ? '현재 값' : '드러남') : '존재가 덮고 있음'}">${cur || isRev ? v : ''}</span>`;
+    return `<span class="slot ${isRev ? 'rev' : 'pres'} ${cur ? 'cur' : ''}" style="--pc:${color}" title="${isRev ? (cur ? '현재 값' : '드러남') : '존재가 덮고 있음'}">${isRev ? v : ''}</span>`;
   }).join('')}</div>`;
 }
 
@@ -402,15 +485,15 @@ function spiritPanel(pid) {
   const innates = def.innates.map((inn) => {
     const lv = s.innateLevels[inn.id] || 0;
     return `<div class="innate ${inn.speed}"><b>${esc(inn.name)}</b> <span class="hint">(내재 · ${inn.speed === 'fast' ? '빠름' : '느림'} · ${esc(targetText(inn.target))})${s.innatesUsed[inn.id] ? ' · 사용함' : ''}</span>
-      ${inn.levels.map((l, i) => `<div class="lv ${i < lv ? 'met' : ''}">${Object.entries(l.el).map(([e, n]) => EL_ICON[e].repeat(n)).join(' ')} — ${esc(l.text)}</div>`).join('')}</div>`;
+      ${inn.levels.map((l, i) => `<div class="lv ${i < lv ? 'met' : ''}"><span class="lv-els">${Object.entries(l.el).map(([e, n]) => elRep(e, n, 13)).join('')}</span> ${esc(l.text)}</div>`).join('')}</div>`;
   }).join('');
   const played = s.played.map((p) => `<span data-card-tip="${p.id}">${cardHTML(p.id, { mini: true, used: p.used, elements: s.elements })}</span>`).join('');
   const handList = pid === app.you ? '' : `<div class="pile">손패: ${s.hand.map((id) => `<span data-card-tip="${id}" style="text-decoration:underline dotted">${esc(app.catalog.powers[id].name)}</span>`).join(', ') || '없음'}</div>`;
   return `
-    <div class="sp-head"><span class="dot" style="background:${def.color}"></span><h3>${esc(def.name)}</h3></div>
+    <div class="sp-head" style="--sc:${def.color}"><span class="spirit-orb"></span><h3>${esc(def.name)}</h3></div>
     <div class="hint">${esc(player.name)} · 보드 ${s.board} · ${esc(s.status || '')}</div>
     <div class="stat-row">
-      <div class="stat"><div class="k">에너지</div><div class="v">⚡${s.energy}</div></div>
+      <div class="stat energy"><div class="k">보유 에너지</div><div class="v">${pcIcon('energy', 16, '#f3d98b')}${s.energy}</div></div>
       <div class="stat"><div class="k">턴당 에너지</div><div class="v">+${s.energyPerTurn}</div></div>
       <div class="stat"><div class="k">카드 사용 수</div><div class="v">${s.cardPlays}</div></div>
       <div class="stat"><div class="k">섬의 존재</div><div class="v">${s.islandPresence}</div></div>
@@ -418,9 +501,9 @@ function spiritPanel(pid) {
       ${s.fastAllowance ? `<div class="stat"><div class="k">느림→빠름</div><div class="v">${s.fastAllowance}</div></div>` : ''}
       ${s.repeats.length ? `<div class="stat"><div class="k">반복 가능</div><div class="v">${s.repeats.length}</div></div>` : ''}
     </div>
-    <div class="els">원소: ${els.length ? els.map(([e, n]) => `<span title="${app.catalog.elements[e]}">${EL_ICON[e]}×${n}</span>`).join('') : '<span class="hint">없음</span>'}</div>
-    ${trackHTML('에너지', def.energyTrack, s.energyRevealed, def.color)}
-    ${trackHTML('카드 수', def.cardTrack, s.cardRevealed, def.color)}
+    <div class="els">원소: ${els.length ? els.map(([e, n]) => `<span title="${app.catalog.elements[e]}">${elIcon(e, 16)}<b>${n}</b></span>`).join('') : '<span class="hint">없음</span>'}</div>
+    ${trackHTML(`${pcIcon('energy', 12, '#f3d98b')}에너지`, def.energyTrack, s.energyRevealed, def.color)}
+    ${trackHTML(`${pcIcon('card', 12, '#9ed3ff')}카드`, def.cardTrack, s.cardRevealed, def.color)}
     <div class="special"><b>${esc(def.special.name)}</b>: ${esc(def.special.text)}</div>
     <h2>성장 옵션</h2><div class="growth-opts">${growth}</div>
     <h2>내재 권능</h2>${innates}
@@ -466,7 +549,7 @@ function renderModal() {
   const inner = $('#modal .modal-inner');
   if (st && st.result && !app.resultDismissed) {
     const isHost = app.room.hostId === app.you;
-    inner.innerHTML = `<div class="result"><h1>${st.result.win ? '🎉 승리!' : '💀 패배'}</h1><p>${esc(st.result.reason)}</p><p class="hint">${st.result.turn}턴에 게임이 끝났습니다.</p>
+    inner.innerHTML = `<div class="result ${st.result.win ? 'win' : 'lose'}"><svg class="big-logo" viewBox="0 0 64 64"><use href="#logo"/></svg><h1>${st.result.win ? '승리' : '패배'}</h1><p>${esc(st.result.reason)}</p><p class="hint">${st.result.turn}턴에 게임이 끝났습니다.</p>
       <div class="actions" style="justify-content:center">${isHost ? '<button id="btn-lobby" class="primary">대기실로 돌아가기 (새 게임)</button>' : '<span class="hint">방장이 새 게임을 준비할 수 있습니다.</span>'}<button id="btn-close-result">지도 보기</button></div></div>`;
     $('#modal').classList.remove('hidden');
     const lb = $('#btn-lobby');
@@ -482,7 +565,7 @@ function renderModal() {
   const cost = sel.reduce((a, id) => a + app.catalog.powers[id].cost, 0);
   const isPlay = p.mode === 'play';
   inner.innerHTML = `<h2>${esc(p.title)}</h2>
-    ${isPlay ? `<div>선택 ${sel.length}/${p.max}장 · 비용 <b style="color:${cost > p.budget ? 'var(--danger)' : 'var(--accent2)'}">${cost}</b> / 에너지 ${p.budget} · 현재 원소: ${Object.entries(sumElements(sel)).map(([e, n]) => `${EL_ICON[e]}×${n}`).join(' ') || '없음'}</div>` : ''}
+    ${isPlay ? `<div class="budget">선택 ${sel.length}/${p.max}장 · 비용 <b style="color:${cost > p.budget ? 'var(--danger)' : 'var(--accent2)'}">${cost}</b> / 에너지 ${p.budget} · 현재 원소: ${Object.entries(sumElements(sel)).map(([e, n]) => `${elIcon(e, 15)}×${n}`).join(' ') || '없음'}</div>` : ''}
     <div class="cards-row">${p.cards.map((id) => {
       const picked = sel.includes(id);
       const c = app.catalog.powers[id];
@@ -550,7 +633,9 @@ function initRoomAndGameUI() {
   $('#help').onclick = (e) => { if (e.target.id === 'help') $('#help').classList.add('hidden'); };
   $('#btn-start').onclick = () => send({ t: 'start' });
   $('#btn-copy').onclick = async () => {
-    const url = `${location.origin}${location.pathname}?room=${app.room.code}`;
+    const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+    const base = local && app.lan && app.lan.length ? app.lan[0] : location.origin;
+    const url = `${base}/?room=${app.room.code}`;
     try { await navigator.clipboard.writeText(url); toast('초대 링크를 복사했습니다: ' + url, true); } catch { toast('복사 실패. 직접 공유하세요: ' + url, true); }
   };
   for (const id of ['#room-chat-form', '#game-chat-form']) {
@@ -579,6 +664,25 @@ function initRoomAndGameUI() {
   });
 }
 
+// 앱 설치 (바탕화면/작업표시줄 아이콘)
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installEvent = e;
+  $('#btn-install').classList.remove('hidden');
+});
+function initInstall() {
+  $('#btn-install').onclick = async () => {
+    if (!installEvent) return;
+    installEvent.prompt();
+    await installEvent.userChoice;
+    installEvent = null;
+    $('#btn-install').classList.add('hidden');
+  };
+  if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 initHome();
 initRoomAndGameUI();
+initInstall();
 connect();
