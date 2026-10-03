@@ -61,7 +61,7 @@
         <form id="room-chat-form" class="chat-form"><input placeholder="메시지..." maxlength="300"><button>전송</button></form>
       </div>
       <div class="room-right">
-        <h2>정령 선택 <span class="hint" style="font-family:var(--sans);font-weight:400">— 카드를 눌러 고르세요. 처음이라면 <b style="color:var(--accent)">초보 추천</b> 정령을 골라 보세요.</span></h2>
+        <h2>정령 선택 <span class="hint" style="font-family:var(--sans);font-weight:400">— 카드를 누르면 정령 판(앞·뒷면)을 볼 수 있어요. 처음이라면 <b style="color:var(--accent)">초보 추천</b> 정령을 골라 보세요.</span></h2>
         <div id="spirit-filter" class="spirit-filter"></div>
         <div id="spirit-list" class="spirit-list"></div>
       </div>
@@ -132,6 +132,7 @@
     </ul>
     <div class="actions"><button id="btn-help-close" class="primary">닫기</button></div>
   </div></div>
+  <div id="board" class="modal hidden"><div class="board-modal"></div></div>
   <div id="guide" class="modal hidden"><div class="modal-inner guide"></div></div>
   <div id="sound-panel" class="sound-panel hidden"></div>
   <div id="toast" class="toast hidden"></div>
@@ -140,6 +141,8 @@
   <script src="icons.js"></script>
   <script src="audio.js"></script>
   <script src="guide.js"></script>
+  <script src="spirit-art.js"></script>
+  <script src="spirit-board.js"></script>
   <script src="app.js"></script>
   <script type="module" src="map3d.js"></script>
 </body>

@@ -17,6 +17,19 @@ const { TERRAIN_NAMES } = require('./game/boards');
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const THREE_DIR = path.dirname(path.dirname(require.resolve('three')));
+const CUSTOM_ART_DIR = path.join(__dirname, '..', 'custom-art');
+
+/** custom-art 폴더에 사용자가 넣은 정령 그림 목록 { spiritId: url } */
+function customArt() {
+  const out = {};
+  let files = [];
+  try { files = fs.readdirSync(CUSTOM_ART_DIR); } catch { return out; }
+  for (const f of files) {
+    const m = f.match(/^([a-z]+)\.(png|jpe?g|webp|gif|svg)$/i);
+    if (m && SPIRITS.some((sp) => sp.id === m[1].toLowerCase())) out[m[1].toLowerCase()] = `/custom-art/${encodeURIComponent(f)}`;
+  }
+  return out;
+}
 const MAX_PLAYERS = 6; // 방에 들어올 수 있는 사람 수
 const MAX_SPIRITS = 6; // 게임 전체 정령(보드) 수
 
@@ -74,7 +87,7 @@ const spiritExp = (id) => (SPIRITS.find((s) => s.id === id) || {}).exp || 'base'
 const totalSpirits = (room) => room.players.reduce((a, p) => a + p.spiritIds.length, 0);
 
 // ───────────── HTTP ─────────────
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -88,6 +101,16 @@ const server = http.createServer((req, res) => {
     fs.readFile(file, (err, data) => {
       if (err) { res.writeHead(404); res.end('Not found'); return; }
       res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+      res.end(data);
+    });
+    return;
+  }
+  if (p.startsWith('/custom-art/')) {
+    const file = path.normalize(path.join(CUSTOM_ART_DIR, p.slice('/custom-art/'.length)));
+    if (!file.startsWith(CUSTOM_ART_DIR)) { res.writeHead(403); res.end(); return; }
+    fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
       res.end(data);
     });
     return;
@@ -210,7 +233,7 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'hello': {
         token = typeof msg.token === 'string' && msg.token.length >= 16 ? msg.token : crypto.randomBytes(16).toString('hex');
-        send(ws, { t: 'welcome', token, catalog: CATALOG, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`) });
+        send(ws, { t: 'welcome', token, catalog: { ...CATALOG, customArt: customArt() }, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`) });
         const sess = sessions.get(token);
         if (sess && rooms.has(sess.roomCode)) {
           const r = rooms.get(sess.roomCode);

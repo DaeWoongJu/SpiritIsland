@@ -72,6 +72,7 @@ function onMessage(msg) {
       app.personId = msg.you;
       if (!msg.room.started) { app.state = null; app.prompt = null; app.resultDismissed = false; }
       render();
+      SpiritBoard.refresh();
       break;
     case 'state': {
       const prevPrompt = app.prompt;
@@ -236,6 +237,7 @@ function renderRoom() {
     const pips = (arr) => `<span class="pips">${arr.map((v) => `<span class="pip">${v}</span>`).join('')}</span>`;
     const canAdd = !owner && me.spiritIds.length > 0 && total < r.maxSpirits;
     return `<div class="spirit-card ${mine ? 'mine' : ''} ${owner && !mine ? 'taken' : ''}" data-spirit="${s.id}" style="--sc:${s.color}">
+      <div class="sc-art">${SpiritArt.html(s.id)}</div>
       ${owner ? `<span class="owner">${esc(owner.name)}</span>` : ''}
       <h3><span class="spirit-orb"></span>${esc(s.name)}</h3>
       <div class="en">${esc(s.en)}</div>
@@ -249,7 +251,9 @@ function renderRoom() {
       <div class="sec"><b>시작 배치</b>: ${esc(s.setupText)}</div>
       <div class="sec"><b>고유 권능</b>: ${s.uniques.map((u) => `<span data-card-tip="${u}" class="ulink">${esc(c.powers[u].name)}</span>`).join(', ')}</div>` : ''}
       <div class="sc-actions">
-        <button class="small sc-more" data-more="${s.id}">${open ? '접기 ▴' : '자세히 ▾'}</button>
+        ${!owner ? `<button class="small sc-pick primary" data-pick="${s.id}">선택</button>` : ''}
+        <button class="small sc-more" data-board="${s.id}">📜 정령 판</button>
+        <button class="small" data-more="${s.id}">${open ? '접기 ▴' : '자세히 ▾'}</button>
         ${mine ? `<button class="small sc-remove" data-remove="${s.id}">선택 해제</button>` : ''}
         ${canAdd ? `<button class="small sc-add" data-add="${s.id}" title="한 사람이 정령을 여러 개 조종합니다">＋ 추가로 조종</button>` : ''}
       </div>
@@ -262,8 +266,8 @@ function renderRoom() {
       if (e.target.closest('[data-remove]')) { send({ t: 'pickSpirit', spiritId: sid, mode: 'remove' }); return; }
       if (e.target.closest('[data-add]')) { send({ t: 'pickSpirit', spiritId: sid, mode: 'add' }); return; }
       if (e.target.closest('.ulink')) return;
-      if (me.spiritIds.includes(sid)) return;
-      send({ t: 'pickSpirit', spiritId: sid, mode: 'replace' });
+      if (e.target.closest('[data-pick]')) { send({ t: 'pickSpirit', spiritId: sid, mode: 'replace' }); return; }
+      SpiritBoard.open(sid, list.map((x) => x.id));
     };
   }
   attachCardTips($('#spirit-list'));
@@ -675,6 +679,8 @@ function renderSide() {
   }).join('');
   for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => { app.tab = b.dataset.tab; renderSide(); };
   $('#side-content').innerHTML = spiritPanel(app.tab);
+  const bb = $('#side-content [data-board]');
+  if (bb) bb.onclick = () => SpiritBoard.open(bb.dataset.board, app.state.players.map((p) => app.state.spirits[p.id].spiritId));
   attachCardTips($('#side-content'));
 }
 
@@ -698,6 +704,7 @@ function spiritPanel(pid) {
   const played = s.played.map((p) => `<span data-card-tip="${p.id}">${cardHTML(p.id, { mini: true, used: p.used, elements: s.elements })}</span>`).join('');
   const handList = pid === app.you ? '' : `<div class="pile">손패: ${s.hand.map((id) => `<span data-card-tip="${id}" style="text-decoration:underline dotted">${esc(app.catalog.powers[id].name)}</span>`).join(', ') || '없음'}</div>`;
   return `
+    <div class="sp-art">${SpiritArt.html(def.id)}<button class="small sp-boardbtn" data-board="${def.id}">📜 정령 판 보기</button></div>
     <div class="sp-head" style="--sc:${def.color}"><span class="spirit-orb"></span><h3>${esc(def.name)}</h3></div>
     <div class="hint">${esc(player.name)} · 보드 ${s.board} · ${esc(s.status || '')}</div>
     <div class="stat-row">
@@ -880,6 +887,7 @@ function initRoomAndGameUI() {
     };
   }
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && SpiritBoard.isOpen()) { SpiritBoard.close(); return; }
     if (e.key === 'Escape' && !$('#guide').classList.contains('hidden')) { Guide.close(); return; }
     if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) {
       if (app.state && app.state.result) app.resultDismissed = true; else app.modal.hidden = true;

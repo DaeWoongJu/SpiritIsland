@@ -6,3 +6,5 @@ test-results/
 launcher/*.res
 .version
 *.exe.old
+custom-art/*
+!custom-art/README.md

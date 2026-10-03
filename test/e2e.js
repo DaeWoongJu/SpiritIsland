@@ -68,8 +68,8 @@ async function autoPlay(page, label) {
   await b.fill('#in-code', code);
   await b.click('#btn-join');
   await b.waitForSelector('#screen-room:not(.hidden)');
-  await a.click('.spirit-card[data-spirit="lightning"]');
-  await b.click('.spirit-card[data-spirit="river"]');
+  await a.click('.spirit-card[data-spirit="lightning"] [data-pick]');
+  await b.click('.spirit-card[data-spirit="river"] [data-pick]');
   await a.waitForFunction(() => !document.querySelector('#btn-start').disabled);
   if (SHOTS) await a.screenshot({ path: `${SHOTS}/lobby.png` });
   await a.click('#btn-start');

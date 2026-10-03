@@ -33,7 +33,7 @@ const SHOTS = process.env.SHOTS || '';
   await page.uncheck('[data-exp="ni"]');
   await page.waitForFunction((b) => document.querySelectorAll('.spirit-card').length < b, before);
   // 정령 2개 고르기
-  await page.click('.spirit-card[data-spirit="lightning"]');
+  await page.click('.spirit-card[data-spirit="lightning"] [data-pick]');
   await page.waitForSelector('.spirit-card.mine[data-spirit="lightning"]');
   await page.click('.spirit-card[data-spirit="lure"] [data-add]');
   await page.waitForSelector('.spirit-card.mine[data-spirit="lure"]');
