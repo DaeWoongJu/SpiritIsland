@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>정령섬 — 서버가 꺼져 있습니다</title>
+  <link rel="icon" href="icons/icon-192.png">
+  <style>
+    :root { --gold: #d9b45a; --gold2: #f3d98b; --text: #ece4cf; --muted: #98a39c; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { display: flex; align-items: center; justify-content: center; padding: 16px; color: var(--text);
+      font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+      background: radial-gradient(ellipse 80% 60% at 15% 0%, #16302a 0%, transparent 60%), radial-gradient(ellipse 70% 60% at 100% 100%, #102638 0%, transparent 60%), #0a100f; }
+    .card { width: 100%; max-width: 480px; text-align: center; padding: 30px 28px 24px; border-radius: 20px;
+      background: linear-gradient(180deg, #172220, #0f1716); border: 1px solid #4a4130; box-shadow: 0 20px 60px #000c; }
+    img { width: 92px; height: 92px; filter: drop-shadow(0 6px 18px #f2a93b55); }
+    h1 { font-family: 'Noto Serif KR', 'Batang', serif; color: var(--gold2); font-size: 24px; margin: 10px 0 6px; }
+    p { color: var(--muted); line-height: 1.7; margin: 8px 0; font-size: 14px; }
+    a.btn, button { display: inline-block; margin-top: 14px; padding: 13px 22px; border-radius: 10px; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
+      background: linear-gradient(180deg, #e3c26e, #b88d34); color: #241a06; border: 1px solid #f3d98b; }
+    button.sub { background: #1f2a27; color: var(--text); border-color: #3b4a46; font-size: 14px; padding: 9px 16px; font-weight: 500; margin-left: 6px; }
+    .status { margin-top: 16px; font-size: 13px; color: var(--muted); }
+    .status::before { content: '●'; color: #e5a04f; margin-right: 6px; animation: blink 1.4s infinite; }
+    @keyframes blink { 50% { opacity: .3; } }
+    ol { text-align: left; color: var(--muted); font-size: 13px; line-height: 1.8; margin: 18px 0 0; padding-left: 20px; }
+    b { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="icons/icon-192.png" alt="">
+    <h1>정령섬 서버가 꺼져 있습니다</h1>
+    <p>게임을 하려면 서버가 켜져 있어야 합니다.<br>아래 버튼을 누르면 서버가 켜지고, 이 화면이 자동으로 게임으로 바뀝니다.</p>
+    <a class="btn" href="spiritisland://start">🌋 서버 켜기</a><button class="sub" onclick="location.reload()">다시 시도</button>
+    <div class="status" id="status">서버를 기다리는 중...</div>
+    <ol>
+      <li>"정령섬.exe를 여시겠습니까?" 같은 창이 뜨면 <b>열기</b>를 누르세요.</li>
+      <li>버튼이 동작하지 않으면 바탕화면의 <b>"정령섬"</b> 아이콘(또는 게임 폴더의 <b>정령섬.exe</b>)을 실행하세요. 정령섬.exe를 한 번 실행한 적이 있어야 버튼이 동작합니다.</li>
+      <li>서버의 <b>검은 창을 닫으면</b> 서버가 꺼집니다. 게임하는 동안에는 열어 두세요.</li>
+      <li>친구의 서버에 접속하는 중이라면, 방장에게 서버를 켜 달라고 하세요.</li>
+    </ol>
+  </div>
+  <script>
+    // 서버가 켜지면 자동으로 게임 화면으로 이동
+    async function check() {
+      try {
+        const r = await fetch('/health?t=' + Date.now(), { cache: 'no-store' });
+        if (r.ok) { document.getElementById('status').textContent = '서버가 켜졌습니다! 이동 중...'; location.reload(); return; }
+      } catch (e) { /* 아직 꺼져 있음 */ }
+      setTimeout(check, 1500);
+    }
+    check();
+  </script>
+</body>
+</html>

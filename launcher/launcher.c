@@ -79,6 +79,24 @@ static int server_running(void) {
   return ok;
 }
 
+// spiritisland:// 주소를 이 exe 와 연결한다 (브라우저의 "서버 켜기" 버튼용, 관리자 권한 불필요).
+static void set_reg(const wchar_t *key, const wchar_t *name, const wchar_t *value) {
+  HKEY h;
+  if (RegCreateKeyExW(HKEY_CURRENT_USER, key, 0, NULL, 0, KEY_WRITE, NULL, &h, NULL) != ERROR_SUCCESS) return;
+  RegSetValueExW(h, name, 0, REG_SZ, (const BYTE *)value, (DWORD)((wcslen(value) + 1) * sizeof(wchar_t)));
+  RegCloseKey(h);
+}
+static void register_protocol(void) {
+  wchar_t exe[MAX_PATH], buf[MAX_PATH * 2];
+  GetModuleFileNameW(NULL, exe, MAX_PATH);
+  set_reg(L"Software\\Classes\\spiritisland", NULL, L"URL:정령섬 온라인");
+  set_reg(L"Software\\Classes\\spiritisland", L"URL Protocol", L"");
+  swprintf(buf, MAX_PATH * 2, L"\"%ls\",0", exe);
+  set_reg(L"Software\\Classes\\spiritisland\\DefaultIcon", NULL, buf);
+  swprintf(buf, MAX_PATH * 2, L"\"%ls\" \"%%1\"", exe);
+  set_reg(L"Software\\Classes\\spiritisland\\shell\\open\\command", NULL, buf);
+}
+
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show) {
   (void)hInst; (void)hPrev; (void)show;
   wchar_t dir[MAX_PATH];
@@ -88,11 +106,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show) {
   if (slash) *slash = 0;
 
   int force = cmd && wcsstr(cmd, L"--shortcut") != NULL;
+  // 브라우저 안내 화면의 "서버 켜기" 버튼으로 실행된 경우: 브라우저는 이미 열려 있으므로 새로 열지 않는다
+  int viaProtocol = cmd && wcsstr(cmd, L"spiritisland:") != NULL;
+  register_protocol();
   ensure_shortcuts(dir, force);
   if (force) return 0;
 
   if (server_running()) {
-    ShellExecuteW(NULL, L"open", L"http://localhost:3000", NULL, NULL, SW_SHOWNORMAL);
+    if (!viaProtocol) ShellExecuteW(NULL, L"open", L"http://localhost:3000", NULL, NULL, SW_SHOWNORMAL);
     return 0;
   }
 
@@ -112,7 +133,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, PWSTR cmd, int show) {
       L"정령섬 온라인", MB_OK | MB_ICONWARNING);
     return 1;
   }
-  HINSTANCE h = ShellExecuteW(NULL, L"open", bat, NULL, dir, SW_SHOWNORMAL);
+  HINSTANCE h = ShellExecuteW(NULL, L"open", bat, viaProtocol ? L"noopen" : NULL, dir, SW_SHOWNORMAL);
   if ((INT_PTR)h <= 32) {
     MessageBoxW(NULL, L"서버를 시작하지 못했습니다. start-windows.bat 을 직접 실행해 보세요.", L"정령섬 온라인", MB_OK | MB_ICONERROR);
     return 1;

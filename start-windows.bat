@@ -26,5 +26,9 @@ if not exist "node_modules\ws" (
 
 echo  서버를 시작합니다. 브라우저가 자동으로 열립니다.
 echo  게임하는 동안 이 창을 닫지 마세요.
-node server\index.js --open
+if /i "%~1"=="noopen" (
+  node server\index.js
+) else (
+  node server\index.js --open
+)
 pause

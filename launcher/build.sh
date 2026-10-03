@@ -3,6 +3,6 @@
 set -e
 cd "$(dirname "$0")"
 x86_64-w64-mingw32-windres -c 65001 launcher.rc -O coff -o launcher.res
-x86_64-w64-mingw32-gcc -O2 -s -municode -mwindows -o "../정령섬.exe" launcher.c launcher.res -lws2_32 -lshell32 -lole32 -luuid
+x86_64-w64-mingw32-gcc -O2 -s -municode -mwindows -o "../정령섬.exe" launcher.c launcher.res -lws2_32 -lshell32 -lole32 -luuid -ladvapi32
 rm -f launcher.res
 echo "빌드 완료: ../정령섬.exe"
