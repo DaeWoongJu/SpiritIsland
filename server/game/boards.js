@@ -38,11 +38,20 @@ const BOARDS = {
     terrain: { 1: 'S', 2: 'J', 3: 'W', 4: 'M', 5: 'J', 6: 'S', 7: 'W', 8: 'M' },
     setup: { 1: { d: 2 }, 2: { c: 1 }, 3: { d: 1 }, 5: { b: 1, d: 1 }, 6: { t: 1 }, 7: { d: 2 } },
   },
+  // 들쭉날쭉한 대지 추가 보드
+  E: {
+    terrain: { 1: 'M', 2: 'J', 3: 'S', 4: 'W', 5: 'S', 6: 'M', 7: 'J', 8: 'W' },
+    setup: { 1: { d: 1 }, 2: { t: 1, d: 1 }, 3: { d: 2 }, 5: { b: 1 }, 6: { d: 1 }, 7: { c: 1 }, 8: { d: 2 } },
+  },
+  F: {
+    terrain: { 1: 'W', 2: 'S', 3: 'J', 4: 'M', 5: 'W', 6: 'J', 7: 'S', 8: 'M' },
+    setup: { 1: { d: 2 }, 2: { c: 1 }, 4: { d: 1 }, 5: { b: 1, d: 1 }, 6: { t: 1 }, 7: { d: 1 }, 8: { d: 2 } },
+  },
 };
 
 const TERRAIN_NAMES = { M: '산', J: '정글', S: '사막', W: '습지' };
 
-// 플레이어 수에 따른 보드 배치. flipX/flipY는 보드를 거울 반전한다.
+// 보드 수에 따른 기본(격자) 배치. flipX/flipY는 보드를 거울 반전한다.
 const LAYOUTS = {
   1: [{ board: 'A', ox: 0, oy: 0, flipX: false, flipY: false }],
   2: [
@@ -109,10 +118,23 @@ function centroid(poly) {
   return [cx / (6 * a), cy / (6 * a)];
 }
 
+/**
+ * 배치 계산.
+ * layout: 'auto'(격자, 4개까지) | 'coast'(세로 해안선, 6개까지) | 'row'(2개를 위아래로 — coast 와 같음)
+ */
+function makeLayout(letters, layout) {
+  const n = letters.length;
+  if (layout !== 'coast' && n <= 4) return LAYOUTS[n].map((pl, i) => ({ ...pl, board: letters[i] }));
+  return letters.map((board, i) => ({ board, ox: 0, oy: i * BOARD_H, flipX: false, flipY: i % 2 === 1 }));
+}
+
 // 게임용 지역 맵을 만든다. 반환: { lands: {id: land}, oceans: {id: ocean}, width, height }
-function buildIsland(playerCount) {
-  const layout = LAYOUTS[playerCount];
-  if (!layout) throw new Error('지원하지 않는 플레이어 수: ' + playerCount);
+// arg: 플레이어 수(숫자) 또는 { boards: ['A','B',...], layout }
+function buildIsland(arg) {
+  const letters = typeof arg === 'number' ? ['A', 'B', 'C', 'D'].slice(0, arg) : arg.boards;
+  const layoutName = typeof arg === 'number' ? 'auto' : (arg.layout || 'auto');
+  if (!letters.length || letters.length > 6) throw new Error('지원하지 않는 보드 수: ' + letters.length);
+  const layout = makeLayout(letters, layoutName);
   const lands = {};
   const oceans = {};
   for (const place of layout) {
@@ -155,8 +177,8 @@ function buildIsland(playerCount) {
     const land = lands[ids[i]];
     land.coastal = Object.values(oceans).some((o) => polygonsShareEdge(land.poly, o.poly));
   }
-  const width = BOARD_W * (playerCount >= 2 ? 2 : 1);
-  const height = BOARD_H * (playerCount >= 3 ? 2 : 1);
+  const width = Math.max(...layout.map((l) => l.ox)) + BOARD_W;
+  const height = Math.max(...layout.map((l) => l.oy)) + BOARD_H;
   return { lands, oceans, width, height, boards: layout.map((l) => l.board) };
 }
 

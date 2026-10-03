@@ -4,6 +4,7 @@ const { buildIsland, TERRAIN_NAMES } = require('./boards');
 const { SPIRIT_MAP } = require('./spirits');
 const { POWERS, POWER_MAP } = require('./powers');
 const { FEAR_CARDS } = require('./fear');
+const { difficultyConfig } = require('./adversaries');
 
 const PIECE_NAMES = { explorer: '탐험가', town: '마을', city: '도시', dahan: '다한', blight: '황폐' };
 const ELEMENT_NAMES = { sun: '태양', moon: '달', fire: '불', air: '공기', water: '물', earth: '대지', plant: '식물', animal: '짐승' };
@@ -41,11 +42,20 @@ class Game extends EventEmitter {
    */
   constructor(players, opts = {}) {
     super();
-    if (!players.length || players.length > 4) throw new Error('플레이어는 1~4명이어야 합니다.');
+    if (!players.length || players.length > 6) throw new Error('정령은 1~6개여야 합니다.');
     this.rand = mulberry32(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
     this.players = players.map((p) => ({ ...p }));
     this.playerIds = this.players.map((p) => p.id);
-    const island = buildIsland(players.length);
+    const settings = opts.settings || {};
+    this.settings = settings;
+    this.diff = difficultyConfig(settings.difficulty);
+    const map = settings.map || {};
+    const avail = ['A', 'B', 'C', 'D', ...((settings.expansions || []).includes('je') || players.length > 4 ? ['E', 'F'] : [])];
+    let boardCount = players.length + (map.extraBoard ? 1 : 0);
+    boardCount = Math.max(players.length, Math.min(boardCount, avail.length));
+    const letters = (map.boards === 'random' ? this.shuffle(avail) : avail).slice(0, boardCount);
+    const island = buildIsland({ boards: letters, layout: boardCount > 4 ? 'coast' : (map.layout || 'auto') });
+    this.boardLetters = island.boards;
     this.lands = island.lands;
     this.oceans = island.oceans;
     this.mapSize = { width: island.width, height: island.height };
@@ -62,8 +72,10 @@ class Game extends EventEmitter {
     this.events = []; // 최근 침략자 행동 하이라이트 [{landId, kind}]
 
     const n = players.length;
-    this.fear = { poolSize: 4 * n, generated: 0, deck: this.shuffle(FEAR_CARDS.map((c) => c.id)).slice(0, 9), earned: [], earnedTotal: 0, resolved: [] };
-    this.blight = { pool: 2 * n + 1, flipped: false };
+    const d = this.diff;
+    const fearCards = Math.min(FEAR_CARDS.length, 9 + (d.extraFear || 0));
+    this.fear = { poolSize: d.fearPerPlayer * n, generated: 0, deck: this.shuffle(FEAR_CARDS.map((c) => c.id)).slice(0, fearCards), earned: [], earnedTotal: 0, resolved: [], total: fearCards };
+    this.blight = { pool: Math.max(1, (2 + d.blightPerPlayer) * n + 1), flipped: false };
 
     const minors = POWERS.filter((p) => p.kind === 'minor').map((p) => p.id);
     const majors = POWERS.filter((p) => p.kind === 'major').map((p) => p.id);
@@ -72,6 +84,8 @@ class Game extends EventEmitter {
     const s1 = this.shuffle(['M', 'J', 'S', 'W'].map((t) => ({ stage: 1, terrains: [t] }))).slice(0, 3);
     const s2 = this.shuffle([...['M', 'J', 'S', 'W'].map((t) => ({ stage: 2, terrains: [t] })), { stage: 2, coastal: true, terrains: [] }]).slice(0, 4);
     const s3 = this.shuffle(['MJ', 'MS', 'MW', 'JS', 'JW', 'SW'].map((s) => ({ stage: 3, terrains: s.split('') }))).slice(0, 5);
+    s1.splice(0, Math.min(s1.length, d.removeStage1 || 0));
+    s2.splice(0, Math.min(s2.length - 1, d.removeStage2 || 0));
     this.invader = { deck: [...s1, ...s2, ...s3], ravage: null, build: null, lastExplore: null, discard: [] };
 
     this.spirits = {};
@@ -81,7 +95,7 @@ class Game extends EventEmitter {
       this.spirits[p.id] = {
         pid: p.id,
         spiritId: def.id,
-        energy: 0,
+        energy: d.startEnergy || 0,
         energyRevealed: 1,
         cardRevealed: 1,
         destroyed: 0,
@@ -211,7 +225,8 @@ class Game extends EventEmitter {
   isSacred(pid, landId) {
     const n = this.presenceCount(pid, landId);
     if (n >= 2) return true;
-    return n >= 1 && this.spirits[pid].spiritId === 'river' && this.lands[landId].terrain === 'W';
+    const st = this.spiritDef(pid).sacredTerrain;
+    return n >= 1 && !!st && st.includes(this.lands[landId].terrain);
   }
   sacredLands(pid) { return Object.keys(this.lands).filter((id) => this.isSacred(pid, id)); }
   islandPresence(pid) { return Object.keys(this.lands).reduce((s, id) => s + this.presenceCount(pid, id), 0); }
@@ -259,8 +274,28 @@ class Game extends EventEmitter {
     return Object.entries(req).every(([e, n]) => (el[e] || 0) >= n);
   }
 
-  energyPerTurn(pid) { const s = this.spirits[pid]; return this.spiritDef(pid).energyTrack[s.energyRevealed - 1]; }
-  cardPlays(pid) { const s = this.spirits[pid]; return this.spiritDef(pid).cardTrack[s.cardRevealed - 1]; }
+  energyPerTurn(pid) {
+    const s = this.spirits[pid];
+    const def = this.spiritDef(pid);
+    let e = def.energyTrack[s.energyRevealed - 1] + (def.energyBonus || 0);
+    if (def.energyPerSacred) e += Math.min(3, this.sacredLands(pid).length);
+    return e;
+  }
+  cardPlays(pid) { const s = this.spirits[pid]; const def = this.spiritDef(pid); return def.cardTrack[s.cardRevealed - 1] + (def.extraCard || 0); }
+
+  /** 정령 특성 bonusWhere 가 이 지역에 해당하는지 */
+  bonusApplies(where, landId) {
+    if (!where) return false;
+    const l = this.lands[landId];
+    switch (where) {
+      case 'any': return true;
+      case 'coastal': return l.coastal;
+      case 'inland': return !l.coastal;
+      case 'blight': return l.blight > 0;
+      case 'dahan': return l.dahan.length > 0;
+      default: return where.split('/').includes(l.terrain);
+    }
+  }
 
   gainEnergy(pid, n) {
     this.spirits[pid].energy += n;
@@ -467,7 +502,8 @@ class Game extends EventEmitter {
 
   terrorLevel() {
     const e = this.fear.earnedTotal;
-    return e >= 6 ? 3 : e >= 3 ? 2 : 1;
+    const t = this.fear.total || 9;
+    return e >= Math.round((2 * t) / 3) ? 3 : e >= Math.round(t / 3) ? 2 : 1;
   }
 
   takeBlightFromPool() {
@@ -499,6 +535,9 @@ class Game extends EventEmitter {
     l.blight++;
     this.log(`${landId}: 황폐 추가`);
     this.events.push({ landId, kind: 'blight' });
+    for (const pid of this.playerIds) {
+      if (this.spiritDef(pid).blightFear && this.presenceCount(pid, landId) > 0) { this.log(`${this.pname(pid)}: 땅의 복수 — 공포 +1`); this.addFear(1); }
+    }
     for (const pid of this.playerIds) {
       if (this.presenceCount(pid, landId) > 0 && !this.spiritDef(pid).blightImmune) this.destroyPresence(pid, landId, 1, '황폐');
     }
@@ -636,9 +675,9 @@ class Game extends EventEmitter {
       { value: 'minor', label: '소형 권능 (4장 중 1장)' },
       { value: 'major', label: '대형 권능 (4장 중 1장, 카드 1장을 잊어야 함)' },
     ], { kind: 'gainKind' });
-    const drawn = this.drawFrom(kind, 4);
+    const drawn = this.drawFrom(kind, this.spiritDef(pid).cardDraw || 4);
     if (!drawn.length) return;
-    const [pick] = await this.ask(pid, { type: 'cards', title: `${kind === 'minor' ? '소형' : '대형'} 권능 카드 1장을 고르세요`, cards: drawn, min: 1, max: 1, kind: 'pickCard' });
+    const [pick] = await this.ask(pid, { type: 'cards', title: `${kind === 'minor' ? '소형' : '대형'} 권능 카드 ${drawn.length}장 중 1장을 고르세요`, cards: drawn, min: 1, max: 1, kind: 'pickCard' });
     this.decks[kind + 'Discard'].push(...drawn.filter((c) => c !== pick));
     const s = this.spirits[pid];
     s.hand.push(pick);
@@ -764,7 +803,7 @@ class Game extends EventEmitter {
       damage: (n, types) => {
         if (n <= 0) return { count: 0, destroyed: { explorer: 0, town: 0, city: 0 } };
         // 바다(해안) / 들불(황폐 지역): 권능마다 한 번 피해 +1
-        if (!ctx.bonusUsed && ((def.coastalOnly && g.lands[landId].coastal) || (def.blightImmune && g.lands[landId].blight > 0))) {
+        if (!ctx.bonusUsed && g.bonusApplies(def.bonusWhere, landId)) {
           ctx.bonusUsed = true; n += 1; g.log(`${def.special.name}: 피해 +1`);
         }
         if (def.dreamer) return dream(Math.min(n, invaderHp(types)));
@@ -806,15 +845,25 @@ class Game extends EventEmitter {
     return ctx;
   }
 
+  /** 이 권능을 쓸 수 있는 대상이 있는지 */
+  hasTarget(pid, power) {
+    const t = power.target;
+    if (t.kind !== 'land') return true;
+    const sources = t.from === 'sacred' ? this.sacredLands(pid) : this.presenceLands(pid);
+    if (this.landsWithinRange(sources, t.range + (this.spiritDef(pid).rangeBonus || 0)).some((id) => this.landMatches(id, t.filter))) return true;
+    return !!(this.spiritDef(pid).dahanReach && this.spirits[pid].energy >= 1
+      && Object.keys(this.lands).some((id) => this.lands[id].dahan.length > 0 && this.landMatches(id, t.filter)));
+  }
+
   /** 대상 지역 선택. 반환: landId | null(취소) | false(대상 없음) */
   async chooseTargetLand(pid, power) {
     const t = power.target;
     const sources = t.from === 'sacred' ? this.sacredLands(pid) : this.presenceLands(pid);
-    const inRange = this.landsWithinRange(sources, t.range).filter((id) => this.landMatches(id, t.filter));
+    const inRange = this.landsWithinRange(sources, t.range + (this.spiritDef(pid).rangeBonus || 0)).filter((id) => this.landMatches(id, t.filter));
     const s = this.spirits[pid];
     const notes = {};
     let extra = [];
-    if (s.spiritId === 'shadows' && s.energy >= 1) {
+    if (this.spiritDef(pid).dahanReach && s.energy >= 1) {
       extra = Object.keys(this.lands).filter((id) => !inRange.includes(id) && this.lands[id].dahan.length > 0 && this.landMatches(id, t.filter));
       for (const id of extra) notes[id] = '에너지 1 지불 (다한의 그림자)';
     }
@@ -910,7 +959,13 @@ class Game extends EventEmitter {
         // 트랙에서 존재를 꺼낸 것이 아니라 시작 존재로 취급
       }
     }
-    this.log('게임 준비 완료. 침략자들이 섬에 상륙합니다...');
+    for (const sp of this.diff.setupPieces) {
+      for (const b of this.boardLetters) {
+        const land = this.lands[b + sp.num];
+        if (land) this.addPieces(land.id, sp.type, sp.count || 1);
+      }
+    }
+    this.log(`게임 준비 완료 (난이도: ${this.diff.label}). 침략자들이 섬에 상륙합니다...`);
     // 첫 탐험
     const card = this.invader.deck.shift();
     this.log(`첫 탐험: [${invaderCardName(card)}]`);
@@ -950,7 +1005,7 @@ class Game extends EventEmitter {
       s.played.push({ id, used: false });
     }
     this.log(`${this.pname(pid)}: 카드 ${chosen.length}장 사용 — ${chosen.map((c) => POWER_MAP[c].name).join(', ') || '없음'}`);
-    if (s.spiritId === 'lightning') {
+    if (this.spiritDef(pid).airFast) {
       const air = this.elements(pid).air || 0;
       if (air) { s.fastAllowance += air; this.log(`${this.pname(pid)}: 번개의 신속함 — 느린 권능 ${air}개를 빠르게 사용 가능`); }
     }
@@ -976,6 +1031,7 @@ class Game extends EventEmitter {
       case 'presence': {
         let opts = this.landsWithinRange(this.presenceLands(pid), act.range);
         if (this.spiritDef(pid).coastalOnly) opts = opts.filter((id) => this.lands[id].coastal);
+        if (this.spiritDef(pid).inlandOnly) opts = opts.filter((id) => !this.lands[id].coastal);
         if (!opts.length) { this.log(`${this.pname(pid)}: 존재를 놓을 수 있는 지역이 없습니다`); break; }
         const land = await this.askLand(pid, `존재를 추가할 지역 선택 (존재에서 사거리 ${act.range})`, opts, false, {}, { kind: 'presenceLand' });
         await this.placePresence(pid, land);
@@ -991,13 +1047,14 @@ class Game extends EventEmitter {
     s.played.forEach((p, idx) => {
       if (p.used) return;
       const c = POWER_MAP[p.id];
+      if (!this.hasTarget(pid, c)) return;
       if (c.speed === speed) out.push({ value: `card:${idx}`, label: `${c.name} (${speedName(c.speed)})`, card: c.id });
       else if (speed === 'fast' && c.speed === 'slow' && s.fastAllowance > 0) out.push({ value: `card:${idx}`, label: `${c.name} (느림→빠르게)`, card: c.id, convert: true });
     });
     for (const inn of this.spiritDef(pid).innates) {
       if (s.innatesUsed[inn.id]) continue;
       const lv = this.innateLevels(pid, inn);
-      if (!lv) continue;
+      if (!lv || !this.hasTarget(pid, inn)) continue;
       if (inn.speed === speed) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 권능 Lv${lv})` });
       else if (speed === 'fast' && inn.speed === 'slow' && s.fastAllowance > 0) out.push({ value: `innate:${inn.id}`, label: `${inn.name} (내재 Lv${lv}, 느림→빠르게)`, convert: true });
     }
@@ -1005,7 +1062,7 @@ class Game extends EventEmitter {
       const maxCost = Math.max(...s.repeats.map((r) => r.maxCost));
       s.played.forEach((p, idx) => {
         const c = POWER_MAP[p.id];
-        if (c.speed === speed && c.cost <= maxCost) out.push({ value: `repeat:${idx}`, label: `${c.name} 반복 사용`, card: c.id });
+        if (c.speed === speed && c.cost <= maxCost && this.hasTarget(pid, c)) out.push({ value: `repeat:${idx}`, label: `${c.name} 반복 사용`, card: c.id });
       });
     }
     return out;
@@ -1056,7 +1113,7 @@ class Game extends EventEmitter {
   }
 
   skipAction(land, action) {
-    if (land.flags.skipAll) return true;
+    if (land.flags.skipAll || land.flags['skip' + action]) return true;
     return this.turnRules.some((r) => r.kind === 'no' + action && r.test(land));
   }
 
@@ -1069,6 +1126,12 @@ class Game extends EventEmitter {
     for (const pid of this.playerIds) this.spirits[pid].status = '대기 중';
     this.events = [];
     this.log('── 침략자 단계 ──');
+    for (const pid of this.playerIds) {
+      const def = this.spiritDef(pid);
+      if (!def.fearPerSacred) continue;
+      const n = Math.min(2, this.sacredLands(pid).filter((id) => this.invaderCount(id) > 0).length);
+      if (n) { this.log(`${this.pname(pid)}: ${def.special.name} — 공포 +${n}`); this.addFear(n); }
+    }
     // 공포 카드
     while (this.fear.earned.length) {
       const id = this.fear.earned.shift();
@@ -1094,8 +1157,12 @@ class Game extends EventEmitter {
     if (this.invader.build) {
       const card = this.invader.build;
       this.log(`건설: [${invaderCardName(card)}]`);
-      for (const land of Object.values(this.lands)) {
-        if (this.cardMatches(card, land)) this.doBuild(land);
+      const d = this.diff;
+      const targets = Object.values(this.lands).filter((land) => this.cardMatches(card, land)
+        && (this.invaderCount(land.id) > 0 || (d.buildAdjacent && land.adj.reduce((a, id) => a + this.townCityCount(id), 0) >= 2)));
+      for (const land of targets) {
+        this.doBuild(land, true);
+        if (d.buildTwice === 'all' || (d.buildTwice === 'coastal' && land.coastal)) this.doBuild(land, true);
       }
     }
     // 탐험
@@ -1116,22 +1183,35 @@ class Game extends EventEmitter {
     if (this.skipAction(land, 'Ravage')) { this.log(`${land.id}: 약탈하지 않음`); return; }
     let defend = land.defend;
     for (const pid of this.playerIds) {
-      if (this.spirits[pid].spiritId === 'earth' && this.isSacred(pid, land.id)) defend += 3;
-      if (this.spiritDef(pid).presenceDefend) defend += this.presenceCount(pid, land.id);
+      const def = this.spiritDef(pid);
+      if (def.sacredDefend && this.isSacred(pid, land.id)) defend += def.sacredDefend;
+      if (def.presenceDefend) defend += def.presenceDefend * this.presenceCount(pid, land.id);
     }
-    const counterBonus = this.playerIds.some((pid) => this.spirits[pid].spiritId === 'thunder' && this.presenceCount(pid, land.id) > 0) ? 1 : 0;
+    const here = this.playerIds.filter((pid) => this.presenceCount(pid, land.id) > 0);
+    const counterBonus = Math.max(0, ...here.map((pid) => this.spiritDef(pid).counterBonus || 0));
+    if (here.some((pid) => this.spiritDef(pid).dahanShield)) land.flags.dahanProtected = true;
+    for (const pid of here) {
+      const def = this.spiritDef(pid);
+      if (def.ravageFear && (this.spirits[pid].ravageFearUsed || 0) < 2) {
+        this.spirits[pid].ravageFearUsed = (this.spirits[pid].ravageFearUsed || 0) + 1;
+        this.log(`${this.pname(pid)}: ${def.special.name} — 공포 +1`);
+        this.addFear(1);
+      }
+    }
     if (land.flags.dahanAmbush && land.dahan.length) {
       const pre = land.dahan.length * (2 + counterBonus);
       this.log(`${land.id}: 다한의 선제 반격! 피해 ${pre}`);
       this.damageInvaders(land.id, pre);
       land.flags.dahanAmbushed = true;
     }
-    let dmg = land.explorers + 2 * land.towns.length + 3 * land.cities.length;
+    const d = this.diff;
+    let dmg = land.explorers * d.explorerDamage + d.townDamage * land.towns.length + d.cityDamage * land.cities.length;
     dmg = Math.max(0, dmg - defend);
     this.events.push({ landId: land.id, kind: 'ravage' });
     this.log(`${land.id}: 약탈! 피해 ${dmg}${defend ? ` (방어 ${defend})` : ''}`);
     if (dmg >= 2) this.addBlight(land.id);
-    if (dmg > 0 && !land.flags.dahanProtected) this.damageDahan(land.id, dmg);
+    if (dmg >= 6 && d.heavyMining) { this.log(`${land.id}: 대규모 채굴 — 황폐가 하나 더!`); this.addBlight(land.id); }
+    if (dmg > 0 && !land.flags.dahanProtected) this.damageDahan(land.id, dmg + (d.ravageDahanBonus || 0));
     if (land.dahan.length && !land.flags.dahanAmbushed && this.invaderCount(land.id)) {
       const counter = land.dahan.length * (2 + counterBonus);
       this.log(`${land.id}: 다한의 반격! 피해 ${counter}`);
@@ -1139,9 +1219,11 @@ class Game extends EventEmitter {
     }
   }
 
-  doBuild(land) {
-    if (!this.invaderCount(land.id)) return;
+  doBuild(land, force = false) {
+    if (!force && !this.invaderCount(land.id)) return;
     if (this.skipAction(land, 'Build')) { this.log(`${land.id}: 건설하지 않음`); return; }
+    const blocker = this.playerIds.find((pid) => this.spiritDef(pid).noBuildSacred && this.isSacred(pid, land.id));
+    if (blocker) { this.log(`${land.id}: ${this.spiritDef(blocker).special.name} — 건설하지 못합니다`); return; }
     const type = land.towns.length > land.cities.length ? 'city' : 'town';
     if (type === 'city' && this.turnRules.some((r) => r.kind === 'noBuildCity' && r.test(land))) { this.log(`${land.id}: 도시를 건설하지 않음`); return; }
     this.addPieces(land.id, type, 1);
@@ -1159,9 +1241,11 @@ class Game extends EventEmitter {
       if (this.skipAction(land, 'Explore')) { this.log(`${land.id}: 탐험하지 않음`); continue; }
       const keeper = this.playerIds.find((pid) => this.spiritDef(pid).forbidExplore && this.isSacred(pid, land.id));
       if (keeper) { this.log(`${land.id}: 금지된 땅 — 침략자가 들어오지 못합니다`); continue; }
-      this.addPieces(land.id, 'explorer', 1);
+      this.addPieces(land.id, 'explorer', this.diff.coastalExploreExtra && land.coastal ? 2 : 1);
       this.events.push({ landId: land.id, kind: 'explore' });
       this.log(`${land.id}: 탐험가 도착`);
+      const bane = this.playerIds.find((pid) => this.spiritDef(pid).explorerBane && this.isSacred(pid, land.id));
+      if (bane) { this.log(`${land.id}: ${this.spiritDef(bane).special.name} — 탐험가가 사라집니다`); this.removePieces(land.id, 'explorer', 1); }
     }
   }
 
@@ -1183,6 +1267,11 @@ class Game extends EventEmitter {
       s.repeats = [];
       s.innatesUsed = {};
       s.growthChoice = null;
+      s.ravageFearUsed = 0;
+      if (this.spiritDef(pid).blightHeal) {
+        const land = this.sacredLands(pid).find((id) => this.lands[id].blight > 0);
+        if (land) { this.log(`${this.pname(pid)}: ${this.spiritDef(pid).special.name} — ${land}의 황폐가 치유됩니다`); this.removeBlight(land); }
+      }
     }
     this.turnRules = [];
     this.log('시간이 흐릅니다. (피해·방어 초기화, 사용한 카드는 버림 더미로)');
@@ -1223,7 +1312,7 @@ class Game extends EventEmitter {
       mapSize: this.mapSize,
       spirits,
       fear: {
-        poolSize: this.fear.poolSize, generated: this.fear.generated, earnedTotal: this.fear.earnedTotal,
+        poolSize: this.fear.poolSize, generated: this.fear.generated, earnedTotal: this.fear.earnedTotal, total: this.fear.total,
         pending: this.fear.earned.length, deckLeft: this.fear.deck.length, terrorLevel: this.terrorLevel(), current: this.fear.current || null,
       },
       blight: this.blight,
@@ -1235,6 +1324,8 @@ class Game extends EventEmitter {
         discardCount: this.invader.discard.length,
       },
       turnRules: this.turnRules.map((r) => r.text),
+      difficulty: this.diff.label,
+      boards: this.boardLetters,
       events: this.events,
       log: this.logLines.slice(-120),
       result: this.result,

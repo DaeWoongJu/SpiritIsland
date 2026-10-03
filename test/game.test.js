@@ -179,3 +179,39 @@ test('특수 규칙: 화산 존재가 파괴되면 분출 피해', () => {
   g.destroyPresence('p0', land, 1, '테스트');
   assert.strictEqual(g.lands[land].explorers, 1);
 });
+
+test('설정: 무작위 보드 + 추가 보드 + 세로 해안선 배치', () => {
+  const g = new Game([{ id: 'a', name: 'A', spiritId: 'river' }, { id: 'b', name: 'B', spiritId: 'earth' }],
+    { seed: 3, settings: { expansions: ['base', 'je'], map: { boards: 'random', extraBoard: true, layout: 'coast' } } });
+  assert.strictEqual(g.boardLetters.length, 3);
+  assert.strictEqual(g.mapSize.width, 300);
+  assert.strictEqual(g.mapSize.height, 780);
+});
+
+test('설정: 6명(정령 6개)이면 보드 6개, 자동으로 세로 배치', async () => {
+  const ids = ['river', 'earth', 'lightning', 'shadows', 'stone', 'thunder'];
+  const g = new Game(ids.map((s, i) => ({ id: 'p' + i, name: 'P' + i, spiritId: s })), { seed: 5 });
+  assert.strictEqual(g.boardLetters.length, 6);
+  attachBots(g);
+  const r = await g.run();
+  assert.ok(!r.reason.startsWith('서버 오류'), r.reason);
+});
+
+test('난이도: 적대 세력 레벨 효과 적용', () => {
+  const g = new Game([{ id: 'a', name: 'A', spiritId: 'river' }], { seed: 1, settings: { difficulty: { preset: 'hard', adversary: 'prussia', level: 6 } } });
+  assert.strictEqual(g.fear.poolSize, 5);
+  assert.ok(g.invader.deck.every((c) => c.stage !== 1), '1단계 카드 모두 제거');
+  assert.strictEqual(g.fear.total, 10);
+  g.setup();
+  assert.ok(g.lands.A3.towns.length >= 1, '빠른 시작: 3번 지역 마을');
+});
+
+test('난이도: 모든 적대 세력 6레벨로 게임이 끝까지 진행', async () => {
+  const { ADVERSARIES } = require('../server/game/adversaries');
+  for (const adv of ADVERSARIES) {
+    const g = new Game([{ id: 'a', name: 'A', spiritId: 'earth' }, { id: 'b', name: 'B', spiritId: 'lure' }], { seed: 7, settings: { difficulty: { preset: 'expert', adversary: adv.id, level: 6 } } });
+    attachBots(g);
+    const r = await g.run();
+    assert.ok(!r.reason.startsWith('서버 오류'), `${adv.id}: ${r.reason}`);
+  }
+});

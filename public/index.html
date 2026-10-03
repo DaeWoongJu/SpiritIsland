@@ -54,6 +54,8 @@
         <button id="btn-start" class="primary big">게임 시작</button>
         <p id="start-hint" class="hint"></p>
         <p id="lan-hint" class="hint" style="line-height:1.6"></p>
+        <h2>게임 설정</h2>
+        <div id="room-settings" class="room-settings"></div>
         <h2>채팅</h2>
         <div id="room-chat" class="chat-box"></div>
         <form id="room-chat-form" class="chat-form"><input placeholder="메시지..." maxlength="300"><button>전송</button></form>
@@ -71,6 +73,7 @@
     <header id="topbar"></header>
     <div class="game-body">
       <main class="map-area">
+        <div id="seat-bar" class="seat-bar hidden"></div>
         <div id="prompt" class="prompt"></div>
         <div id="hint" class="hint-bar hidden"></div>
         <div class="map-wrap">

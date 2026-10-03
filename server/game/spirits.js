@@ -5,12 +5,14 @@
 const SPIRITS = [
   {
     id: 'lightning',
+    exp: 'base',
     name: '번개의 신속한 일격',
     en: "Lightning's Swift Strike",
     color: '#f2c94c',
     complexity: '낮음',
     summary: '빠른 공격으로 마을과 도시를 부숩니다. 공기 원소로 느린 권능을 빠르게 사용합니다.',
     tip: '마을과 도시를 빠르게 파괴하는 공격수입니다. 공기 원소가 있는 카드를 내면 느린 권능도 침략자보다 먼저 쓸 수 있어요.',
+    airFast: true,
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'gainCard' }, { type: 'energy', n: 1 }] },
       { actions: [{ type: 'presence', range: 1 }, { type: 'presence', range: 1 }] },
@@ -37,12 +39,14 @@ const SPIRITS = [
   },
   {
     id: 'river',
+    exp: 'base',
     name: '햇살 속에 굽이치는 강',
     en: 'River Surges in Sunlight',
     color: '#56ccf2',
     complexity: '낮음',
     summary: '침략자를 밀어내고 넓게 퍼집니다. 습지의 존재는 성지로 취급됩니다.',
     tip: '침략자를 밀어내 약탈을 막는 역할입니다. 습지에 존재를 두면 바로 성지가 되어 강한 권능을 쓸 수 있어요.',
+    sacredTerrain: 'W',
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'gainCard' }, { type: 'energy', n: 1 }] },
       { actions: [{ type: 'presence', range: 1 }, { type: 'presence', range: 1 }] },
@@ -71,12 +75,14 @@ const SPIRITS = [
   },
   {
     id: 'earth',
+    exp: 'base',
     name: '대지의 활력',
     en: 'Vital Strength of the Earth',
     color: '#9b6a3c',
     complexity: '낮음',
     summary: '단단한 방어로 땅을 지킵니다. 성지에는 언제나 방어 3이 적용됩니다.',
     tip: '성지가 있는 땅은 방어 3이 적용되어 잘 무너지지 않습니다. 초보자에게 가장 쉬운 정령입니다.',
+    sacredDefend: 3,
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'presence', range: 2 }] },
       { actions: [{ type: 'gainCard' }, { type: 'presence', range: 0 }] },
@@ -106,12 +112,14 @@ const SPIRITS = [
   },
   {
     id: 'shadows',
+    exp: 'base',
     name: '불꽃처럼 일렁이는 그림자',
     en: 'Shadows Flicker Like Flame',
     color: '#9b51e0',
     complexity: '낮음',
     summary: '공포로 침략자를 몰아냅니다. 에너지 1을 내면 다한이 있는 어느 지역이든 대상으로 삼을 수 있습니다.',
     tip: '공포를 많이 만들어 승리를 앞당깁니다. 에너지 1을 내면 멀리 있는 다한 지역도 노릴 수 있어요.',
+    dahanReach: true,
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'gainCard' }] },
       { actions: [{ type: 'gainCard' }, { type: 'presence', range: 1 }] },
@@ -141,12 +149,14 @@ const SPIRITS = [
   },
   {
     id: 'thunder',
+    exp: 'base',
     name: '천둥의 대변자',
     en: 'Thunderspeaker',
     color: '#e2853a',
     complexity: '보통',
     summary: '섬의 원주민 다한과 함께 싸웁니다. 다한이 많은 곳에서 강력합니다.',
     tip: '다한(원주민)이 많은 지역 근처에 존재를 두고, 다한을 모아 침략자를 함께 공격하세요.',
+    counterBonus: 1,
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'gainCard' }] },
       { actions: [{ type: 'presence', range: 2 }, { type: 'presence', range: 1 }] },
@@ -183,12 +193,14 @@ const SPIRITS = [
   },
   {
     id: 'ocean',
+    exp: 'base',
     name: '바다의 굶주린 손아귀',
     en: "Ocean's Hungry Grasp",
     color: '#2d6fb8',
     complexity: '보통',
     summary: '해안을 지배하는 바다. 해안에서 침략자를 바다 속으로 끌어들입니다.',
     tip: '존재는 해안 지역에만 둘 수 있습니다. 침략자가 처음 상륙하는 해안을 지키는 역할입니다.',
+    bonusWhere: 'coastal',
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'energy', n: 2 }] },
       { actions: [{ type: 'presence', range: 1 }, { type: 'presence', range: 1 }] },
@@ -224,6 +236,7 @@ const SPIRITS = [
   },
   {
     id: 'bringer',
+    exp: 'base',
     name: '꿈과 악몽을 부르는 자',
     en: 'Bringer of Dreams and Nightmares',
     color: '#c86bd8',
@@ -256,6 +269,7 @@ const SPIRITS = [
   },
   {
     id: 'green',
+    exp: 'base',
     name: '만연한 초록',
     en: 'A Spread of Rampant Green',
     color: '#4caf50',
@@ -297,12 +311,14 @@ const SPIRITS = [
   },
   {
     id: 'wildfire',
+    exp: 'ff',
     name: '들불의 심장',
     en: 'Heart of the Wildfire',
     color: '#e5492d',
     complexity: '높음',
     summary: '모든 것을 태우는 불. 황폐에 강하지만 쓰는 권능이 섬을 상하게 할 수 있습니다.',
     tip: '황폐가 있는 땅에서 더 강합니다. 존재가 황폐로 파괴되지 않으니 위험한 곳에 과감히 들어가세요.',
+    bonusWhere: 'blight',
     growth: [
       { actions: [{ type: 'reclaimAll' }, { type: 'gainCard' }, { type: 'energy', n: 1 }] },
       { actions: [{ type: 'presence', range: 2 }, { type: 'energy', n: 1 }] },
@@ -334,6 +350,7 @@ const SPIRITS = [
   },
   {
     id: 'keeper',
+    exp: 'bc',
     name: '금지된 야생의 수호자',
     en: 'Keeper of the Forbidden Wilds',
     color: '#2e7d4f',
@@ -366,6 +383,7 @@ const SPIRITS = [
   },
   {
     id: 'stone',
+    exp: 'je',
     name: '굴하지 않는 바위',
     en: "Stone's Unyielding Defiance",
     color: '#8d8a84',
@@ -380,7 +398,7 @@ const SPIRITS = [
     energyTrack: [2, 2, 3, 4, 4, 5],
     cardTrack: [1, 2, 2, 3, 3, 4],
     special: { name: '꿋꿋한 바위', text: '당신의 존재가 있는 지역은 존재 1개당 방어 1을 얻습니다.' },
-    presenceDefend: true,
+    presenceDefend: 1,
     setup: [{ terrain: 'M', count: 2 }, { terrain: 'S', count: 1 }],
     setupText: '자기 보드에서 번호가 가장 큰 산에 존재 2개, 가장 큰 사막에 존재 1개',
     uniques: ['jagged_shards', 'stubborn_solidity', 'plows_shatter', 'scarred_stony_land'],
@@ -398,6 +416,7 @@ const SPIRITS = [
   },
   {
     id: 'volcano',
+    exp: 'je',
     name: '높이 솟은 화산',
     en: 'Volcano Looming High',
     color: '#b23a1f',
@@ -431,6 +450,9 @@ const SPIRITS = [
 
 ];
 
+const { SPIRITS_EXT, EXPANSIONS } = require('./spirits_ext');
+SPIRITS.push(...SPIRITS_EXT);
+
 const SPIRIT_MAP = Object.fromEntries(SPIRITS.map((s) => [s.id, s]));
 
-module.exports = { SPIRITS, SPIRIT_MAP };
+module.exports = { SPIRITS, SPIRIT_MAP, EXPANSIONS };

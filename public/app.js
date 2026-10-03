@@ -69,15 +69,27 @@ function onMessage(msg) {
       if (app.room && msg.room.chat.length > app.room.chat.length && msg.room.chat[msg.room.chat.length - 1].from !== myName()) Sound.play('chat');
       app.room = msg.room;
       if (!msg.room.started) Sound.setMood('calm');
-      app.you = msg.you;
+      app.personId = msg.you;
       if (!msg.room.started) { app.state = null; app.prompt = null; app.resultDismissed = false; }
       render();
       break;
     case 'state': {
       const prevPrompt = app.prompt;
       app.state = msg.state;
-      app.prompt = msg.prompt;
-      app.you = msg.you;
+      app.prompts = msg.prompts || {};
+      app.mySeats = msg.seats || [];
+      // 조종 중인 정령(좌석) 선택: 현재 좌석에 할 일이 없고 다른 좌석에 있으면 자동 전환
+      if (!app.mySeats.includes(app.you)) app.you = app.mySeats[0];
+      if (!app.prompts[app.you] && app.mySeats.some((id) => app.prompts[id])) {
+        // 다음 선택이 곧 올 수 있으므로 잠깐 기다렸다가 할 일이 있는 정령으로 전환
+        clearTimeout(app.seatTimer);
+        app.seatTimer = setTimeout(() => {
+          if (app.prompts[app.you]) return;
+          const busy = app.mySeats.find((id) => app.prompts[id]);
+          if (busy) { app.you = busy; app.prompt = app.prompts[busy]; app.tab = busy; render(); }
+        }, 700);
+      }
+      app.prompt = app.prompts[app.you] || null;
       gameSounds(prevPrompt);
       render();
       if (!app.guideShown) {
@@ -101,7 +113,7 @@ function onMessage(msg) {
 }
 
 function myName() {
-  const me = app.room && app.room.players.find((p) => p.id === app.you);
+  const me = app.room && app.room.players.find((p) => p.id === app.personId);
   return me ? me.name : null;
 }
 
@@ -138,7 +150,7 @@ function gameSounds(prevPrompt) {
 
 function answer(value) {
   if (!app.prompt) return;
-  send({ t: 'answer', promptId: app.prompt.id, value });
+  send({ t: 'answer', promptId: app.prompt.id, value, seat: app.you });
 }
 
 // ───────────── 화면 전환 ─────────────
@@ -171,6 +183,8 @@ function initHome() {
 }
 
 // ───────────── 대기실 ─────────────
+const EXP_SHORT = { base: '기본', bc: '가지와 발톱', ff: '깃털과 불꽃', je: '들쭉날쭉한 대지', hz: '지평선', ni: '자연의 화신' };
+
 function renderRoom() {
   const r = app.room;
   const c = app.catalog;
@@ -180,52 +194,131 @@ function renderRoom() {
   $('#lan-hint').innerHTML = local && app.lan && app.lan.length
     ? `같은 와이파이 친구 접속 주소: <b>${app.lan.map(esc).join(' / ')}</b><br>멀리 있는 친구는 README의 "npm run share" 방법을 이용하세요.`
     : `친구에게 이 주소를 알려주세요: <b>${esc(location.origin)}</b>`;
-  const isHost = r.hostId === app.you;
+  const isHost = r.hostId === app.personId;
+  const spiritById = (id) => c.spirits.find((x) => x.id === id);
   $('#room-players').innerHTML = r.players.map((p) => {
-    const sp = c.spirits.find((s) => s.id === p.spiritId);
-    return `<li class="${p.connected ? '' : 'off'}"><span>${p.id === r.hostId ? '👑 ' : ''}${esc(p.name)}${p.id === app.you ? ' (나)' : ''}${p.connected ? '' : ' · 연결 끊김'}</span>
-      <span style="color:${sp ? sp.color : 'var(--muted)'}">${sp ? esc(sp.name) : '정령 미선택'}</span></li>`;
+    const names = p.spiritIds.map((id) => { const sp = spiritById(id); return `<span style="color:${sp.color}">${esc(sp.name)}</span>`; }).join('<br>');
+    return `<li class="${p.connected ? '' : 'off'}"><span>${p.id === r.hostId ? '👑 ' : ''}${esc(p.name)}${p.id === app.personId ? ' (나)' : ''}${p.connected ? '' : ' · 연결 끊김'}</span>
+      <span style="text-align:right">${names || '<span class="hint">정령 미선택</span>'}</span></li>`;
   }).join('');
-  const allPicked = r.players.every((p) => p.spiritId);
+  const total = r.players.reduce((a, p) => a + p.spiritIds.length, 0);
+  const allPicked = r.players.every((p) => p.spiritIds.length);
   $('#btn-start').disabled = !isHost || !allPicked;
   $('#btn-start').classList.toggle('hidden', !isHost);
   $('#start-hint').textContent = isHost
-    ? (allPicked ? `${r.players.length}인 게임을 시작할 수 있습니다.` : '모든 플레이어가 정령을 고르면 시작할 수 있습니다.')
+    ? (allPicked ? `정령 ${total}개로 게임을 시작할 수 있습니다.` : '모든 플레이어가 정령을 하나 이상 고르면 시작할 수 있습니다.')
     : '방장이 게임을 시작하기를 기다리는 중...';
+  renderSettings(isHost, total);
 
+  // 정령 목록
   const order = { 낮음: 0, 보통: 1, 높음: 2 };
-  const filters = [['all', '전체'], ['낮음', '쉬움'], ['보통', '보통'], ['높음', '어려움']];
+  const enabled = r.settings.expansions;
+  const pool = c.spirits.filter((sp) => enabled.includes(sp.exp));
   app.spiritFilter ||= 'all';
-  $('#spirit-filter').innerHTML = filters.map(([k, n]) => `<button class="small ${app.spiritFilter === k ? 'on' : ''}" data-f="${k}">${n}</button>`).join('') + `<span class="hint">총 ${c.spirits.length}종</span>`;
-  for (const b of document.querySelectorAll('#spirit-filter button')) b.onclick = () => { app.spiritFilter = b.dataset.f; renderRoom(); };
-  const list = [...c.spirits].sort((a, b) => order[a.complexity] - order[b.complexity]).filter((sp) => app.spiritFilter === 'all' || sp.complexity === app.spiritFilter);
+  app.expFilter ||= 'all';
+  if (app.expFilter !== 'all' && !enabled.includes(app.expFilter)) app.expFilter = 'all';
+  const cx = [['all', '전체'], ['낮음', '쉬움'], ['보통', '보통'], ['높음', '어려움']];
+  const ex = [['all', '모든 확장'], ...c.expansions.filter((e) => enabled.includes(e.id)).map((e) => [e.id, EXP_SHORT[e.id]])];
+  $('#spirit-filter').innerHTML = `${cx.map(([k, n]) => `<button class="small ${app.spiritFilter === k ? 'on' : ''}" data-f="${k}">${n}</button>`).join('')}
+    <span class="sep"></span>${ex.map(([k, n]) => `<button class="small ${app.expFilter === k ? 'on' : ''}" data-e="${k}">${n}</button>`).join('')}
+    <span class="sep"></span><button class="small" id="btn-rand">🎲 무작위 정령</button><span class="hint">사용 가능 ${pool.length}종 / 전체 ${c.spirits.length}종</span>`;
+  for (const b of document.querySelectorAll('#spirit-filter button[data-f]')) b.onclick = () => { app.spiritFilter = b.dataset.f; renderRoom(); };
+  for (const b of document.querySelectorAll('#spirit-filter button[data-e]')) b.onclick = () => { app.expFilter = b.dataset.e; renderRoom(); };
+  $('#btn-rand').onclick = () => send({ t: 'pickSpirit', spiritId: 'random', mode: 'replace' });
+  const me = r.players.find((p) => p.id === app.personId) || { spiritIds: [] };
+  const list = [...pool].sort((a, b) => order[a.complexity] - order[b.complexity])
+    .filter((sp) => (app.spiritFilter === 'all' || sp.complexity === app.spiritFilter) && (app.expFilter === 'all' || sp.exp === app.expFilter));
+  app.openSpirit ||= {};
   $('#spirit-list').innerHTML = list.map((s) => {
-    const owner = r.players.find((p) => p.spiritId === s.id);
-    const mine = owner && owner.id === app.you;
+    const owner = r.players.find((p) => p.spiritIds.includes(s.id));
+    const mine = owner && owner.id === app.personId;
+    const open = app.openSpirit[s.id];
     const pips = (arr) => `<span class="pips">${arr.map((v) => `<span class="pip">${v}</span>`).join('')}</span>`;
+    const canAdd = !owner && me.spiritIds.length > 0 && total < r.maxSpirits;
     return `<div class="spirit-card ${mine ? 'mine' : ''} ${owner && !mine ? 'taken' : ''}" data-spirit="${s.id}" style="--sc:${s.color}">
       ${owner ? `<span class="owner">${esc(owner.name)}</span>` : ''}
       <h3><span class="spirit-orb"></span>${esc(s.name)}</h3>
       <div class="en">${esc(s.en)}</div>
-      <div class="badges"><span class="badge cx-${order[s.complexity]}">난이도 ${esc(s.complexity)}</span>${s.complexity === '낮음' ? '<span class="badge rec">초보 추천</span>' : ''}</div>
+      <div class="badges"><span class="badge cx-${order[s.complexity]}">난이도 ${esc(s.complexity)}</span>${s.complexity === '낮음' ? '<span class="badge rec">초보 추천</span>' : ''}<span class="badge exp">${EXP_SHORT[s.exp]}</span></div>
       <div class="sec summary">${esc(s.summary)}</div>
       ${s.tip ? `<div class="sec tipbox">💡 ${esc(s.tip)}</div>` : ''}
       <div class="sec"><b>${esc(s.special.name)}</b>: ${esc(s.special.text)}</div>
-      <div class="sec"><b>성장</b> (하나 선택)<br>${s.growth.map((g, i) => `${i + 1}. ${g.map(esc).join(' + ')}`).join('<br>')}</div>
+      ${open ? `<div class="sec"><b>성장</b> (하나 선택)<br>${s.growth.map((g, i) => `${i + 1}. ${g.map(esc).join(' + ')}`).join('<br>')}</div>
       <div class="sec tracks"><span>${pcIcon('energy', 13, '#f3d98b')} 에너지</span>${pips(s.energyTrack)}<span>${pcIcon('card', 13, '#9ed3ff')} 카드 수</span>${pips(s.cardTrack)}</div>
       <div class="sec"><b>내재 권능</b>: ${s.innates.map((i) => esc(i.name)).join(', ')}</div>
       <div class="sec"><b>시작 배치</b>: ${esc(s.setupText)}</div>
-      <div class="sec"><b>고유 권능</b>: ${s.uniques.map((u) => esc(c.powers[u].name)).join(', ')}</div>
+      <div class="sec"><b>고유 권능</b>: ${s.uniques.map((u) => `<span data-card-tip="${u}" class="ulink">${esc(c.powers[u].name)}</span>`).join(', ')}</div>` : ''}
+      <div class="sc-actions">
+        <button class="small sc-more" data-more="${s.id}">${open ? '접기 ▴' : '자세히 ▾'}</button>
+        ${mine ? `<button class="small sc-remove" data-remove="${s.id}">선택 해제</button>` : ''}
+        ${canAdd ? `<button class="small sc-add" data-add="${s.id}" title="한 사람이 정령을 여러 개 조종합니다">＋ 추가로 조종</button>` : ''}
+      </div>
     </div>`;
-  }).join('');
+  }).join('') || '<p class="hint">조건에 맞는 정령이 없습니다.</p>';
   for (const el of document.querySelectorAll('.spirit-card')) {
-    el.onclick = () => {
+    el.onclick = (e) => {
       const sid = el.dataset.spirit;
-      const me = r.players.find((p) => p.id === app.you);
-      send({ t: 'pickSpirit', spiritId: me && me.spiritId === sid ? null : sid });
+      if (e.target.closest('[data-more]')) { app.openSpirit[sid] = !app.openSpirit[sid]; renderRoom(); return; }
+      if (e.target.closest('[data-remove]')) { send({ t: 'pickSpirit', spiritId: sid, mode: 'remove' }); return; }
+      if (e.target.closest('[data-add]')) { send({ t: 'pickSpirit', spiritId: sid, mode: 'add' }); return; }
+      if (e.target.closest('.ulink')) return;
+      if (me.spiritIds.includes(sid)) return;
+      send({ t: 'pickSpirit', spiritId: sid, mode: 'replace' });
     };
   }
+  attachCardTips($('#spirit-list'));
   renderChat($('#room-chat'));
+}
+
+function renderSettings(isHost, total) {
+  const r = app.room;
+  const c = app.catalog;
+  const st = r.settings;
+  const dis = isHost ? '' : 'disabled';
+  const adv = c.adversaries.find((a) => a.id === st.difficulty.adversary);
+  const preset = c.presets.find((p) => p.id === st.difficulty.preset);
+  const boards = total + (st.map.extraBoard ? 1 : 0);
+  $('#room-settings').innerHTML = `
+    ${isHost ? '' : '<p class="hint">방장만 설정을 바꿀 수 있습니다.</p>'}
+    <div class="set-group"><div class="set-title">📦 확장판 (DLC)</div>
+      ${c.expansions.map((e) => `<label class="set-check"><input type="checkbox" data-exp="${e.id}" ${st.expansions.includes(e.id) ? 'checked' : ''} ${e.required ? 'disabled' : dis}> ${esc(e.name)} <span class="hint">${esc(e.en)} · 정령 ${c.spirits.filter((sp) => sp.exp === e.id).length}종</span></label>`).join('')}
+    </div>
+    <div class="set-group"><div class="set-title">🗺 맵</div>
+      <label class="set-row">보드 배치 <select id="set-layout" ${dis}>
+        <option value="auto" ${st.map.layout === 'auto' ? 'selected' : ''}>섬 (격자 배치)</option>
+        <option value="coast" ${st.map.layout === 'coast' ? 'selected' : ''}>긴 해안선 (세로 일렬)</option></select></label>
+      <label class="set-row">보드 선택 <select id="set-boards" ${dis}>
+        <option value="ordered" ${st.map.boards === 'ordered' ? 'selected' : ''}>순서대로 (A, B, C…)</option>
+        <option value="random" ${st.map.boards === 'random' ? 'selected' : ''}>무작위${st.expansions.includes('je') ? ' (E·F 포함)' : ''}</option></select></label>
+      <label class="set-check"><input type="checkbox" id="set-extra" ${st.map.extraBoard ? 'checked' : ''} ${dis}> 추가 보드 +1 <span class="hint">(더 넓은 섬, 더 많은 침략자 — 어려워짐)</span></label>
+      <div class="hint">보드 ${boards}개${boards > 4 ? ' · 5개 이상은 자동으로 세로 배치' : ''}</div>
+    </div>
+    <div class="set-group"><div class="set-title">⚔ 난이도</div>
+      <div class="preset-row">${c.presets.map((p) => `<button class="small preset ${st.difficulty.preset === p.id ? 'on' : ''}" data-preset="${p.id}" ${dis} title="${esc(p.desc)}">${esc(p.name)}</button>`).join('')}</div>
+      <div class="hint">${esc(preset ? preset.desc : '')}</div>
+      <label class="set-row">적대 세력 <select id="set-adv" ${dis}>
+        <option value="">없음</option>
+        ${c.adversaries.filter((a) => st.expansions.includes(a.exp)).map((a) => `<option value="${a.id}" ${st.difficulty.adversary === a.id ? 'selected' : ''}>${esc(a.name)}${a.exp !== 'base' ? ` (${EXP_SHORT[a.exp]})` : ''}</option>`).join('')}
+      </select></label>
+      ${adv ? `<label class="set-row">레벨 <input type="range" id="set-level" min="0" max="6" value="${st.difficulty.level}" ${dis}> <b>${st.difficulty.level}</b></label>
+        <ol class="adv-levels">${adv.levels.map((l, i) => `<li class="${i < st.difficulty.level ? 'on' : ''}"><b>${i + 1}. ${esc(l.name)}</b> — ${esc(l.text)}</li>`).join('')}</ol>` : '<div class="hint">적대 세력을 고르면 레벨(0~6)별로 침략자가 더 강해집니다.</div>'}
+    </div>`;
+  if (!isHost) return;
+  const push = (patch) => {
+    const next = JSON.parse(JSON.stringify(st));
+    patch(next);
+    send({ t: 'setSettings', settings: next });
+  };
+  for (const cb of document.querySelectorAll('#room-settings [data-exp]')) {
+    cb.onchange = () => push((n) => { n.expansions = [...document.querySelectorAll('#room-settings [data-exp]:checked')].map((x) => x.dataset.exp); });
+  }
+  $('#set-layout').onchange = (e) => push((n) => { n.map.layout = e.target.value; });
+  $('#set-boards').onchange = (e) => push((n) => { n.map.boards = e.target.value; });
+  $('#set-extra').onchange = (e) => push((n) => { n.map.extraBoard = e.target.checked; });
+  for (const b of document.querySelectorAll('#room-settings [data-preset]')) b.onclick = () => push((n) => { n.difficulty.preset = b.dataset.preset; });
+  $('#set-adv').onchange = (e) => push((n) => { n.difficulty.adversary = e.target.value || null; n.difficulty.level = e.target.value ? Math.max(1, n.difficulty.level) : 0; });
+  const lv = $('#set-level');
+  if (lv) lv.onchange = (e) => push((n) => { n.difficulty.level = Number(e.target.value); });
 }
 
 function renderChat(box) {
@@ -267,8 +360,23 @@ function spiritOf(pid) {
   return { s, def: app.catalog.spirits.find((d) => d.id === s.spiritId), player: app.state.players.find((p) => p.id === pid) };
 }
 
+function renderSeatBar() {
+  const bar = $('#seat-bar');
+  const seats = app.mySeats || [];
+  bar.classList.toggle('hidden', seats.length < 2);
+  if (seats.length < 2) return;
+  bar.innerHTML = `<span class="hint">내가 조종하는 정령:</span>${seats.map((id) => {
+    const { def } = spiritOf(id);
+    return `<button class="small seat ${id === app.you ? 'on' : ''}" data-seat="${id}" style="--sc:${def.color}"><span class="dot" style="background:${def.color}"></span>${esc(def.name)}${app.prompts[id] ? ' <b class="need">● 할 일</b>' : ''}</button>`;
+  }).join('')}`;
+  for (const b of bar.querySelectorAll('[data-seat]')) {
+    b.onclick = () => { app.you = b.dataset.seat; app.prompt = app.prompts[app.you] || null; app.tab = app.you; renderGame(); };
+  }
+}
+
 function renderGame() {
   hideTip();
+  renderSeatBar();
   renderTopbar();
   renderPrompt();
   renderMap();
@@ -298,7 +406,7 @@ function renderTopbar() {
     <div class="tb-box"><span class="k">약탈 (이번 턴)</span><span class="v">${invCardHTML(st.invader.ravage)}</span></div>
     <div class="tb-box"><span class="k">건설 (이번 턴)</span><span class="v">${invCardHTML(st.invader.build)}</span></div>
     <div class="tb-box"><span class="k">침략자 덱</span><span class="v">${st.invader.deckCount}장${st.invader.nextStage ? ` <small class="hint">(다음 ${st.invader.nextStage}단계)</small>` : ''}</span></div>
-    <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계)</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
+    <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계) · 난이도 ${esc(st.difficulty || '보통')}</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
     <div class="tb-actions"><button class="btn-guide small">📖 게임 방법</button>${soundButtonHTML()}<button id="btn-help" class="small">❓ 규칙 요약</button></div>
   `;
   $('#btn-help').onclick = () => $('#help').classList.remove('hidden');
@@ -648,7 +756,7 @@ function renderModal() {
   const p = app.prompt;
   const inner = $('#modal .modal-inner');
   if (st && st.result && !app.resultDismissed) {
-    const isHost = app.room.hostId === app.you;
+    const isHost = app.room.hostId === app.personId;
     inner.innerHTML = `<div class="result ${st.result.win ? 'win' : 'lose'}"><svg class="big-logo" viewBox="0 0 64 64"><use href="#logo"/></svg><h1>${st.result.win ? '승리' : '패배'}</h1><p>${esc(st.result.reason)}</p><p class="hint">${st.result.turn}턴에 게임이 끝났습니다.</p>
       <div class="actions" style="justify-content:center">${isHost ? '<button id="btn-lobby" class="primary">대기실로 돌아가기 (새 게임)</button>' : '<span class="hint">방장이 새 게임을 준비할 수 있습니다.</span>'}<button id="btn-close-result">지도 보기</button></div></div>`;
     $('#modal').classList.remove('hidden');

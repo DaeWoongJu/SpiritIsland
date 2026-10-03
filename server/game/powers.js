@@ -735,6 +735,8 @@ const POWERS = [
   },
 ];
 
+POWERS.push(...require('./powers_ext').POWERS_EXT);
+
 const POWER_MAP = Object.fromEntries(POWERS.map((p) => [p.id, p]));
 
 module.exports = { POWERS, POWER_MAP };
