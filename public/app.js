@@ -470,6 +470,16 @@ function bindStepFoot(b) {
 }
 
 function renderInvaderBanner() {
+  renderInvaderBannerInner();
+  // 지도 영역이 좁으면 배너를 화면 가운데에 띄움
+  const b = $('#inv-banner');
+  const wrap = document.querySelector('.map-wrap');
+  const float = !b.classList.contains('hidden') && wrap && (wrap.clientHeight < 440 || wrap.clientWidth < 760);
+  b.classList.toggle('ib-float', !!float);
+  if (wrap) wrap.classList.toggle('ib-float-on', !!float);
+}
+
+function renderInvaderBannerInner() {
   const b = $('#inv-banner');
   const step = app.state.invaderStep;
   if (!step || app.state.result) { b.classList.add('hidden'); return; }

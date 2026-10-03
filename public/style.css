@@ -623,3 +623,17 @@ body.hand-collapsed .hand-area { display: none; }
 .ib-next { font-size: 15px; padding: 8px 20px; animation: ibpulse 1.6s ease-in-out infinite; }
 @keyframes ibpulse { 50% { box-shadow: 0 0 18px #e9c46a; } }
 .inv-banner button, .inv-banner .ib-next-row, .inv-banner .ib-foot { pointer-events: auto; }
+/* 튜토리얼 강조가 배너 위치를 덮어쓰지 않도록 */
+.inv-banner.tut-spot { position: absolute; z-index: 7; border-radius: 14px; }
+.inv-banner { max-height: calc(100% - 70px); overflow-y: auto; }
+.inv-banner.ib-wide { pointer-events: auto; }
+/* 코치가 떠 있으면 배너는 코치 오른쪽에 */
+.map-wrap.coach-on .inv-banner { left: 452px; right: 12px; width: auto; transform: none; }
+@media (max-width: 1500px) {
+  .map-wrap.coach-on .inv-banner { left: 50%; right: auto; width: min(720px, 94%); transform: translateX(-50%); top: 52px; max-height: calc(58% - 52px); }
+  .map-wrap.coach-on .coach { bottom: 12px; max-height: 40%; overflow-y: auto; }
+}
+/* 좁은 화면: 배너를 화면 가운데에 띄움 */
+.inv-banner.ib-float, .map-wrap.coach-on .inv-banner.ib-float { position: fixed; top: 50%; left: 50%; right: auto; transform: translate(-50%, -50%); width: min(760px, 94vw); max-height: 86vh; z-index: 40; }
+.map-wrap.coach-on.ib-float-on .inv-banner.ib-float { top: 12px; transform: translateX(-50%); max-height: calc(62vh - 12px); }
+.map-wrap.coach-on.ib-float-on .coach { position: fixed; left: 12px; bottom: 12px; z-index: 41; max-height: calc(38vh - 24px); overflow-y: auto; width: min(560px, calc(100vw - 24px)); }

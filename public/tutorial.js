@@ -98,6 +98,8 @@ const Tutorial = (() => {
 
   function render(step, ctx) {
     const box = $('#coach');
+    const wrap = document.querySelector('.map-wrap');
+    if (wrap) wrap.classList.toggle('coach-on', !!step);
     if (!step) { box.classList.add('hidden'); setSpot(null); return; }
     box.classList.remove('hidden');
     box.innerHTML = `<div class="coach-h"><span>🎓 튜토리얼 코치</span><span class="hint">${idx + 1} / ${STEPS.length}</span><button class="small" id="coach-off">코치 닫기</button></div>
