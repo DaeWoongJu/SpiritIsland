@@ -163,7 +163,10 @@ function promptHint(p, st, you) {
     case 'pickCard': return '새 권능 카드 4장 중 1장을 골라 손패에 넣습니다. 내 존재 근처에서 쓰기 좋은 카드를 고르세요.';
     case 'forget': return '대형 권능을 얻는 대가로 카드 1장을 영원히 잊어야 합니다. 가장 덜 쓰는 카드를 고르세요.';
     case 'play': return `에너지 <b>${p.budget}</b> 안에서 최대 <b>${p.max}장</b>을 낼 수 있어요. <b>빠름</b> 카드는 침략자보다 먼저 써서 약탈을 막을 수 있어요. ${danger} 카드를 아끼고 싶다면 "카드 없이 진행"도 괜찮아요.`;
-    case 'power': return `낸 카드(또는 조건을 채운 내재 권능)를 하나씩 눌러 사용하세요. 다 썼으면 <b>단계 종료</b>를 누릅니다. ${st.phase === 'fast' ? danger : ''}`;
+    case 'power': {
+      const list = p.options.filter((o) => o.card).map((o) => `<br>▶ <b>${esc(app.catalog.powers[o.card].name)}</b>: ${explainCard(app.catalog.powers[o.card])}`).join('');
+      return `낸 카드(또는 조건을 채운 내재 권능)를 하나씩 눌러 사용하세요. 다 썼으면 <b>단계 종료</b>를 누릅니다. ${st.phase === 'fast' ? danger : ''}${list}`;
+    }
     case 'target': return `빛나는 지역 중 권능을 쓸 곳을 클릭하세요. ${danger} 그 지형의 침략자를 노리면 섬을 지킬 수 있어요.`;
     case 'targetSpirit': return '이 권능을 받을 정령을 고르세요. 친구를 도와줄 수도 있어요.';
     case 'push': return '밀어내기: 조각을 옆 지역으로 내보냅니다. 침략자는 <b>약탈 예정이 아닌 곳</b>이나 <b>다한이 많은 곳</b>으로 보내면 좋아요.';

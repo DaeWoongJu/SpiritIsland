@@ -184,7 +184,12 @@ function startGame(room) {
       room.seats.push({ id: `${p.id}-${k}`, owner: p.id, name: p.spiritIds.length > 1 ? `${p.name}·${k + 1}` : p.name, spiritId: sid });
     });
   }
-  const game = new Game(room.seats.map((x) => ({ id: x.id, name: x.name, spiritId: x.spiritId })), { settings: room.settings });
+  const game = new Game(room.seats.map((x) => ({ id: x.id, name: x.name, spiritId: x.spiritId })), {
+    settings: room.settings,
+    stepDelay: room.tutorial ? 2800 : 1500,
+    tutorial: !!room.tutorial,
+    seed: room.tutorial ? 20261003 : undefined,
+  });
   room.game = game;
   game.on('update', () => broadcastState(room));
   broadcastRoom(room);
@@ -253,6 +258,21 @@ wss.on('connection', (ws) => {
         r.hostId = p.id;
         rooms.set(code, r);
         attach(r, p);
+        break;
+      }
+      case 'tutorial': {
+        // 혼자 하는 튜토리얼: 대지의 활력 + 입문 난이도로 바로 시작
+        if (!token) return fail('먼저 연결하세요.');
+        if (room) return fail('이미 방에 있습니다.');
+        const code = makeCode();
+        const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), settings: DEFAULT_SETTINGS(), seats: [], tutorial: true };
+        r.settings.difficulty.preset = 'intro';
+        const p = { id: crypto.randomBytes(6).toString('hex'), name: cleanName(msg.name), spiritIds: ['earth'], token, ws: null };
+        r.players.push(p);
+        r.hostId = p.id;
+        rooms.set(code, r);
+        attach(r, p);
+        startGame(r);
         break;
       }
       case 'join': {

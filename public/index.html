@@ -33,7 +33,9 @@
         </div>
       </div>
       <p class="hint">방을 만든 뒤 4자리 코드를 친구에게 알려주세요.</p>
-      <button class="btn-guide big-guide">📖 처음이세요? 게임 방법 보기</button>
+      <button id="btn-video" class="big-guide video-btn">🎬 규칙 설명 영상 보기 (자동 재생 · 음성)</button>
+      <button id="btn-tutorial" class="big-guide tut-btn">🎓 튜토리얼 시작 (혼자서 따라하며 배우기)</button>
+      <button class="btn-guide big-guide">📖 그림으로 보는 게임 방법</button>
       <button id="btn-install" class="hidden" style="width:100%;margin-top:12px">⬇ 정령섬을 앱으로 설치 (바탕화면 아이콘)</button>
       <div id="conn-status" class="conn">서버 연결 중...</div>
       <div style="text-align:center;margin-top:8px"><button class="btn-sound small">🔊 소리</button></div>
@@ -87,6 +89,8 @@
             <button id="btn-full" class="small" title="전체 화면">⛶ 전체 화면</button>
           </div>
           <div id="map-help" class="map-help">드래그: 회전 · 휠: 확대 · 우클릭 드래그: 이동</div>
+          <div id="inv-banner" class="inv-banner hidden"></div>
+          <div id="coach" class="coach hidden"></div>
         </div>
         <div id="legend" class="legend"></div>
       </main>
@@ -132,6 +136,7 @@
     </ul>
     <div class="actions"><button id="btn-help-close" class="primary">닫기</button></div>
   </div></div>
+  <div id="video" class="modal hidden"><div class="video-player"></div></div>
   <div id="board" class="modal hidden"><div class="board-modal"></div></div>
   <div id="guide" class="modal hidden"><div class="modal-inner guide"></div></div>
   <div id="sound-panel" class="sound-panel hidden"></div>
@@ -143,6 +148,8 @@
   <script src="guide.js"></script>
   <script src="spirit-art.js"></script>
   <script src="spirit-board.js"></script>
+  <script src="tutorial.js"></script>
+  <script src="video.js"></script>
   <script src="app.js"></script>
   <script type="module" src="map3d.js"></script>
 </body>

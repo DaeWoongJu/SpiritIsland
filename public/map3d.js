@@ -368,6 +368,13 @@ function render(state, prompt, info) {
   S.events = {};
   const pr = { ravage: 3, build: 2, explore: 1, shield: 0 };
   for (const e of state.events || []) if (!S.events[e.landId] || pr[e.kind] > pr[S.events[e.landId]]) S.events[e.landId] = e.kind;
+  // 이번 턴 예보 / 침략자 단계 진행 중인 지역
+  S.fc = {};
+  if (state.invaderStep && state.invaderStep.lands) for (const id of state.invaderStep.lands) S.fc[id] = 'now-' + state.invaderStep.kind;
+  else if (state.phase !== 'invader' && state.forecast) {
+    for (const id of state.forecast.build) S.fc[id] = 'build';
+    for (const id of state.forecast.ravage) S.fc[id] = 'ravage';
+  }
   applyHighlights();
   buildPieces(state, info);
 }
@@ -380,8 +387,9 @@ function applyHighlights() {
     L.topMat.emissive.set(sel ? '#ffcf5a' : S.focus.has(id) ? '#ff9a3a' : '#000000');
     L.topMat.emissiveIntensity = sel ? 0.25 : S.focus.has(id) ? 0.3 : 0;
     L.group.position.y = (S.hover === id && sel) ? 2 : 0;
-    const ev = S.events && S.events[id];
-    const col = { ravage: '#ff3b30', build: '#ffb547', explore: '#f0f6ff', shield: '#6fcf97' }[ev];
+    const ev = (S.fc && S.fc[id] && S.fc[id].replace('now-', '')) || (S.events && S.events[id]);
+    const col = { ravage: '#ff3b30', build: '#ffb547', explore: '#f0f6ff', shield: '#6fcf97', fear: '#c9a2ff' }[ev];
+    if (!sel && S.fc && S.fc[id]) { L.topMat.emissive.set(col || '#000000'); L.topMat.emissiveIntensity = S.fc[id].startsWith('now') ? 0.35 : 0.14; }
     L.edge.material.color.set(sel ? '#ffe08a' : col || '#000000');
     L.edge.material.opacity = sel || col ? 1 : 0.35;
   }
@@ -434,6 +442,12 @@ function buildPieces(state, info) {
         S.pieces.add(b);
       }
     });
+    const fk = S.fc && S.fc[l.id];
+    if (fk === 'ravage' || fk === 'build') {
+      const t = textSprite(fk === 'ravage' ? '⚔ 이번 턴 약탈 예정' : '🏠 이번 턴 건설 예정', { bg: fk === 'ravage' ? 'rgba(200,40,30,0.95)' : 'rgba(210,140,40,0.95)', fg: '#fff', size: 0.85 });
+      t.position.set(cx, top + 34, cz - 18);
+      S.labels.add(t);
+    }
     if (l.defend) { const d = textSprite(`🛡 방어 ${l.defend}`, { bg: 'rgba(36,73,109,0.92)', size: 0.75 }); d.position.set(cx, top + 15, cz + 18); S.labels.add(d); }
     if (l.skip) { const d = textSprite('💤 행동 건너뜀', { bg: 'rgba(58,53,82,0.92)', size: 0.75 }); d.position.set(cx, top + 15, cz + 26); S.labels.add(d); }
   }

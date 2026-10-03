@@ -48,6 +48,9 @@ class Game extends EventEmitter {
     this.playerIds = this.players.map((p) => p.id);
     const settings = opts.settings || {};
     this.settings = settings;
+    this.stepDelay = opts.stepDelay || 0; // 침략자 단계를 사람이 볼 수 있도록 잠깐씩 멈추는 시간(ms)
+    this.tutorial = !!opts.tutorial;
+    this.invaderStep = null;
     this.diff = difficultyConfig(settings.difficulty);
     const map = settings.map || {};
     const avail = ['A', 'B', 'C', 'D', ...((settings.expansions || []).includes('je') || players.length > 4 ? ['E', 'F'] : [])];
@@ -1121,6 +1124,27 @@ class Game extends EventEmitter {
     return card.coastal ? land.coastal : card.terrains.includes(land.terrain);
   }
 
+  pause(ms) { return ms > 0 && !this.result ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve(); }
+
+  /** 침략자 단계의 현재 진행 상황을 화면에 알림 */
+  async step(kind, card, lands, text) {
+    this.invaderStep = { kind, card: card ? invaderCardName(card) : null, lands, text };
+    this.changed();
+    await this.pause(this.stepDelay);
+  }
+
+  /** 이번 턴 침략자가 행동할 지역 예보 */
+  forecast() {
+    const out = { ravage: [], build: [], exploreStage: this.invader.deck[0] ? this.invader.deck[0].stage : null };
+    const d = this.diff;
+    if (this.invader.ravage) out.ravage = Object.values(this.lands).filter((l) => this.cardMatches(this.invader.ravage, l) && this.invaderCount(l.id) > 0).map((l) => l.id);
+    if (this.invader.build) {
+      out.build = Object.values(this.lands).filter((l) => this.cardMatches(this.invader.build, l)
+        && (this.invaderCount(l.id) > 0 || (d.buildAdjacent && l.adj.reduce((a, id) => a + this.townCityCount(id), 0) >= 2))).map((l) => l.id);
+    }
+    return out;
+  }
+
   async invaderPhase() {
     this.phase = 'invader';
     for (const pid of this.playerIds) this.spirits[pid].status = '대기 중';
@@ -1141,14 +1165,18 @@ class Game extends EventEmitter {
       this.log(`공포 카드 [${card.name}] (단계 ${tl}): ${lv.text}`);
       this.fear.resolved.push({ id, tl, turn: this.turn });
       this.fear.current = { id, name: card.name, tl, text: lv.text };
-      this.changed();
+      await this.step('fear', null, [], `공포 카드 [${card.name}] (${tl}단계): ${lv.text}`);
       await lv.effect(this);
       this.fear.current = null;
     }
     // 약탈
+    const fc = this.forecast();
     if (this.invader.ravage) {
       const card = this.invader.ravage;
       this.log(`약탈: [${invaderCardName(card)}]`);
+      await this.step('ravage', card, fc.ravage, fc.ravage.length
+        ? `${invaderCardName(card)} 지형에 있는 침략자들이 땅을 공격합니다 (탐험가 1·마을 2·도시 3 피해). 피해가 2 이상이면 황폐가 생기고, 살아남은 다한이 반격합니다.`
+        : `${invaderCardName(card)} 지형에 침략자가 없어서 약탈이 일어나지 않습니다.`);
       for (const land of Object.values(this.lands)) {
         if (this.cardMatches(card, land)) this.doRavage(land);
       }
@@ -1160,6 +1188,9 @@ class Game extends EventEmitter {
       const d = this.diff;
       const targets = Object.values(this.lands).filter((land) => this.cardMatches(card, land)
         && (this.invaderCount(land.id) > 0 || (d.buildAdjacent && land.adj.reduce((a, id) => a + this.townCityCount(id), 0) >= 2)));
+      await this.step('build', card, targets.map((l) => l.id), targets.length
+        ? `${invaderCardName(card)} 지형 중 침략자가 있는 곳에 마을을 짓습니다 (마을이 도시보다 많으면 도시).`
+        : `${invaderCardName(card)} 지형에 침략자가 없어서 건설하지 않습니다.`);
       for (const land of targets) {
         this.doBuild(land, true);
         if (d.buildTwice === 'all' || (d.buildTwice === 'coastal' && land.coastal)) this.doBuild(land, true);
@@ -1169,12 +1200,17 @@ class Game extends EventEmitter {
     if (!this.invader.deck.length) this.endGame(false, '침략자 덱이 바닥났습니다. 시간이 다 되었습니다.');
     const card = this.invader.deck.shift();
     this.log(`탐험: [${invaderCardName(card)}] (${card.stage}단계)`);
+    const exploreTargets = Object.values(this.lands).filter((land) => this.cardMatches(card, land)
+      && (land.coastal || this.townCityCount(land.id) || land.adj.some((a) => this.townCityCount(a) > 0))).map((l) => l.id);
+    await this.step('explore', card, exploreTargets, `새 침략자 카드 [${invaderCardName(card)}]가 뒤집혔습니다. 이 지형 중 해안이거나 마을·도시가 있거나 그 옆인 곳에 탐험가가 도착합니다. 이 카드는 다음 턴 '건설', 그다음 턴 '약탈'로 이동합니다.`);
     this.doExplore(card);
     // 카드 전진
     if (this.invader.ravage) this.invader.discard.push(this.invader.ravage);
     this.invader.ravage = this.invader.build;
     this.invader.build = card;
     this.invader.lastExplore = card;
+    await this.step('advance', null, [], '침략자 카드가 한 칸씩 이동했습니다: 탐험 → 건설 → 약탈. 위쪽 진행표에서 다음 턴에 어디가 위험한지 확인하세요.');
+    this.invaderStep = null;
     this.changed();
   }
 
@@ -1325,6 +1361,10 @@ class Game extends EventEmitter {
       },
       turnRules: this.turnRules.map((r) => r.text),
       difficulty: this.diff.label,
+      forecast: this.forecast(),
+      invaderStep: this.invaderStep,
+      tutorial: this.tutorial,
+      invaderTrack: { explore: cardInfo(this.invader.lastExplore), discard: this.invader.discard.length },
       boards: this.boardLetters,
       events: this.events,
       log: this.logLines.slice(-120),

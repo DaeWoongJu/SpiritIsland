@@ -174,6 +174,8 @@ function initHome() {
   if (params.get('room')) $('#in-code').value = params.get('room').toUpperCase();
   const saveName = () => localStorage.setItem('si-name', $('#in-name').value.trim());
   $('#btn-create').onclick = () => { saveName(); send({ t: 'create', name: $('#in-name').value }); };
+  $('#btn-video').onclick = () => RuleVideo.open();
+  $('#btn-tutorial').onclick = () => { saveName(); Tutorial.reset(); send({ t: 'tutorial', name: $('#in-name').value || '연습생' }); };
   $('#btn-join').onclick = () => {
     saveName();
     const code = $('#in-code').value.trim();
@@ -378,9 +380,21 @@ function renderSeatBar() {
   }
 }
 
+function renderInvaderBanner() {
+  const b = $('#inv-banner');
+  const step = app.state.invaderStep;
+  if (!step || app.state.result) { b.classList.add('hidden'); return; }
+  const meta = { fear: ['😱', '공포 카드'], ravage: ['⚔', '약탈'], build: ['🏠', '건설'], explore: ['🧭', '탐험'], advance: ['➡', '카드 이동'] }[step.kind] || ['•', ''];
+  b.className = `inv-banner ib-${step.kind}`;
+  b.innerHTML = `<div class="ib-title">${meta[0]} 침략자 단계 — ${meta[1]}${step.card ? ` <span class="ib-card">[${esc(step.card)}]</span>` : ''}</div>
+    <div class="ib-text">${esc(step.text)}</div>${step.lands && step.lands.length ? `<div class="ib-lands">${step.lands.map((id) => `<span>${id}</span>`).join('')}</div>` : ''}`;
+}
+
 function renderGame() {
   hideTip();
   renderSeatBar();
+  renderInvaderBanner();
+  Tutorial.update(app.state, app.prompt);
   renderTopbar();
   renderPrompt();
   renderMap();
@@ -407,9 +421,15 @@ function renderTopbar() {
     <div class="tb-box" title="공포가 공포 풀만큼 쌓이면 공포 카드를 얻습니다."><span class="k">공포 ${f.generated}/${f.poolSize} · 획득 카드 ${f.earnedTotal}장${f.pending ? ` (대기 ${f.pending})` : ''}</span><div class="fear-bar">${fearDots}</div></div>
     <div class="tb-box" title="공포 단계에 따라 승리 조건이 쉬워집니다."><span class="k">공포 단계 · 남은 공포 카드</span><span class="v">${pcIcon('fear', 16, '#c9a2ff')} ${f.terrorLevel}단계 · ${f.deckLeft}장</span></div>
     <div class="tb-box" title="${st.blight.flipped ? '황폐해진 섬: 다시 비면 패배' : '건강한 섬: 비면 뒤집힘'}"><span class="k">황폐 카드${st.blight.flipped ? ' (황폐해진 섬!)' : ''}</span><span class="v" style="color:${st.blight.flipped ? 'var(--danger)' : 'inherit'}">${pcIcon('blight', 16, '#e8604f')} ${st.blight.pool}</span></div>
-    <div class="tb-box"><span class="k">약탈 (이번 턴)</span><span class="v">${invCardHTML(st.invader.ravage)}</span></div>
-    <div class="tb-box"><span class="k">건설 (이번 턴)</span><span class="v">${invCardHTML(st.invader.build)}</span></div>
-    <div class="tb-box"><span class="k">침략자 덱</span><span class="v">${st.invader.deckCount}장${st.invader.nextStage ? ` <small class="hint">(다음 ${st.invader.nextStage}단계)</small>` : ''}</span></div>
+    <div class="tb-box inv-track" title="침략자 카드는 매 턴 오른쪽으로 한 칸씩 이동합니다: 탐험 → 건설 → 약탈">
+      <span class="k">침략자 진행표 <span class="hint">(매 턴 → 방향으로 이동)</span></span>
+      <div class="it-row">
+        <div class="it-slot"><span class="it-l">🧭 탐험 <small>(새 카드)</small></span><span class="it-c">${st.invader.deckCount ? `<span class="inv-card back">?</span><small>${st.invader.nextStage}단계 · ${st.invader.deckCount}장</small>` : '<span class="hint">없음</span>'}</span></div>
+        <i>›</i>
+        <div class="it-slot build"><span class="it-l">🏠 건설 <small>이번 턴</small></span><span class="it-c">${invCardHTML(st.invader.build)}</span></div>
+        <i>›</i>
+        <div class="it-slot ravage"><span class="it-l">⚔ 약탈 <small>이번 턴</small></span><span class="it-c">${invCardHTML(st.invader.ravage)}</span></div>
+      </div></div>
     <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계) · 난이도 ${esc(st.difficulty || '보통')}</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
     <div class="tb-actions"><button class="btn-guide small">📖 게임 방법</button>${soundButtonHTML()}<button id="btn-help" class="small">❓ 규칙 요약</button></div>
   `;
@@ -609,6 +629,12 @@ function renderMap() {
     if (l.blight) html += `<polygon points="${ptsStr(l.poly)}" fill="#5a1a1a" opacity="${Math.min(0.12 * l.blight, 0.36)}" pointer-events="none"/>`;
     if (dim) html += `<polygon points="${ptsStr(l.poly)}" fill="#05080c" opacity=".45" pointer-events="none"/>`;
     if (ev[l.id]) html += `<polygon class="ev ev-${ev[l.id]}" points="${ptsStr(l.poly)}"/>`;
+    const stepLands = st.invaderStep && st.invaderStep.lands ? st.invaderStep.lands : [];
+    if (stepLands.includes(l.id)) html += `<polygon class="fc fc-now fc-${st.invaderStep.kind}" points="${ptsStr(l.poly)}"/>`;
+    else if (st.phase !== 'invader' && st.forecast) {
+      if (st.forecast.ravage.includes(l.id)) html += `<polygon class="fc fc-ravage" points="${ptsStr(l.poly)}"/>`;
+      else if (st.forecast.build.includes(l.id)) html += `<polygon class="fc fc-build" points="${ptsStr(l.poly)}"/>`;
+    }
   }
   for (const l of Object.values(st.lands)) {
     const cls = ['land', selectable.has(l.id) ? 'selectable' : '', focus.has(l.id) ? 'focus' : ''].join(' ');
@@ -622,6 +648,8 @@ function renderMap() {
       <rect x="${-lw / 2}" y="-7" width="${lw}" height="13" rx="6.5" fill="#0c1117" fill-opacity=".78" stroke="#d9b45a" stroke-opacity=".55" stroke-width=".7"/>
       <use href="#tr-${l.terrain}" x="${-lw / 2 + 3}" y="-5" width="9" height="9" style="color:#e9d8a6"/>
       <text x="${-lw / 2 + 14}" y="2.6" class="plaque-t">${l.id}</text><text x="${-lw / 2 + 28}" y="2.4" class="plaque-s">${name}</text></g>`;
+    const fcTag = st.phase !== 'invader' && st.forecast ? (st.forecast.ravage.includes(l.id) ? ['⚔ 약탈 예정', '#ff4d4d'] : st.forecast.build.includes(l.id) ? ['🏠 건설 예정', '#ffb547'] : null) : null;
+    if (fcTag) html += `<g transform="translate(${cx},${cy - 38})" pointer-events="none"><rect x="-26" y="-7" width="52" height="13" rx="6.5" fill="${fcTag[1]}" opacity=".92"/><text x="0" y="2.6" text-anchor="middle" class="plaque-t" fill="#1a0a04" style="fill:#1a0a04">${fcTag[0]}</text></g>`;
     const toks = landPieces(l);
     const perRow = 4;
     const sp = 19;
@@ -780,6 +808,7 @@ function renderModal() {
   const cost = sel.reduce((a, id) => a + app.catalog.powers[id].cost, 0);
   const isPlay = p.mode === 'play';
   inner.innerHTML = `<h2>${esc(p.title)}</h2>
+    ${isPlay ? `<div class="read-guide">📖 <b>카드 읽는 법</b> — 왼쪽 위 숫자: 필요한 에너지 · <span class="ex-fast">빠름</span>: 침략자보다 먼저 / <span class="ex-slow">느림</span>: 침략자 다음 · 가운데 줄: 쓸 수 있는 곳(사거리) · 아래: 효과 · 원소 아이콘: 모이면 내재 권능이 강해짐</div>` : ''}
     ${isPlay ? `<div class="budget">선택 ${sel.length}/${p.max}장 · 비용 <b style="color:${cost > p.budget ? 'var(--danger)' : 'var(--accent2)'}">${cost}</b> / 에너지 ${p.budget} · 현재 원소: ${Object.entries(sumElements(sel)).map(([e, n]) => `${elIcon(e, 15)}×${n}`).join(' ') || '없음'}</div>` : ''}
     <div class="cards-row">${p.cards.map((id) => {
       const picked = sel.includes(id);
@@ -787,6 +816,7 @@ function renderModal() {
       const disabled = !picked && ((isPlay && (sel.length >= p.max || cost + c.cost > p.budget)) || (!isPlay && sel.length >= p.max && p.max > 1));
       return cardHTML(id, { selectable: !disabled, selected: picked, disabled, elements: isPlay ? sumElements(sel) : s.elements });
     }).join('')}</div>
+    ${sel.length ? `<div class="sel-explain">${sel.map((id) => `<div>▶ <b>${esc(app.catalog.powers[id].name)}</b>: ${explainCard(app.catalog.powers[id])}</div>`).join('')}</div>` : (isPlay ? '<div class="sel-explain hint">카드를 누르면 그 카드가 무엇을 하는지 여기에 설명이 나옵니다.</div>' : '')}
     <div class="actions">
       <button id="btn-hide-modal">지도 보기 (나중에 선택)</button>
       <button id="btn-confirm-cards" class="primary" ${sel.length < p.min || sel.length > p.max ? 'disabled' : ''}>${isPlay ? (sel.length ? `${sel.length}장 사용하기` : '카드 없이 진행') : '선택 완료'}</button>
@@ -887,6 +917,7 @@ function initRoomAndGameUI() {
     };
   }
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && RuleVideo.isOpen()) { RuleVideo.close(); return; }
     if (e.key === 'Escape' && SpiritBoard.isOpen()) { SpiritBoard.close(); return; }
     if (e.key === 'Escape' && !$('#guide').classList.contains('hidden')) { Guide.close(); return; }
     if (e.key === 'Escape' && !$('#modal').classList.contains('hidden')) {
