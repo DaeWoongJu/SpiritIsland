@@ -457,6 +457,7 @@ class Game extends EventEmitter {
     if (st.tough) v.tough = true;
     if (st.threat) this.addThreat(this.nPlayers(), `${st.stage}단계 시작`);
     if (st.drones) for (const p of this.alive()) this.summon(p, 'drone', true);
+    if (st.summonAll) for (const p of this.alive()) this.summon(p, st.summonAll, true);
   }
 
   thwartTargets(opts) {

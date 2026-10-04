@@ -33,6 +33,20 @@ const ENC_ART = {
   drone: '🛸', war_bot: '🤖', drone_factory: '🏭', produce: '⚙', hack: '🖥', nano: '🧬',
 };
 
+function encArt(id) { return ENC_ART[id] || ((app.catalog && app.catalog.encounter[id]) || {}).icon || ''; }
+/** 확장(팩) 고르기 버튼 줄 */
+function packTabs(key, items) {
+  const packs = app.catalog.packs;
+  const used = [...new Set(items.map((x) => x.pack || 'core'))].sort((a, b) => packs[a].order - packs[b].order);
+  const cur = app[key] || 'all';
+  return `<div class="pack-tabs">${[['all', `전체 (${items.length})`], ...used.map((k) => [k, `${packs[k].name} (${items.filter((x) => (x.pack || 'core') === k).length})`])]
+    .map(([k, n]) => `<button class="small pack-tab ${cur === k ? 'on' : ''}" data-pack-key="${key}" data-pack="${k}">${esc(n)}</button>`).join('')}</div>`;
+}
+function bindPackTabs() {
+  for (const b of document.querySelectorAll('[data-pack-key]')) b.onclick = () => { app[b.dataset.packKey] = b.dataset.pack; renderRoom(); };
+}
+const inPack = (key, x) => !app[key] || app[key] === 'all' || (x.pack || 'core') === app[key];
+
 // ───────────── 연결 ─────────────
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -219,8 +233,9 @@ function renderRoom() {
   const st = r.settings;
   const dis = isHost ? '' : 'disabled';
   $('#room-settings').innerHTML = `<div class="rs-title">😈 악당과 난이도 ${isHost ? '' : '<span class="hint">(방장만 바꿀 수 있어요)</span>'}</div>
-    <div class="villains">${c.villains.map((v) => `<button class="villain-opt ${st.villain === v.id ? 'on' : ''}" data-villain="${v.id}" ${dis} style="--vc:${v.color}">
-      <span class="vo-icon">${v.icon}</span><b>${esc(v.name)}</b><span class="vo-level">${esc(v.level)}</span><span class="vo-desc">${esc(v.desc)}</span>
+    ${packTabs('villainPack', c.villains)}
+    <div class="villains">${c.villains.filter((v) => inPack('villainPack', v) || v.id === st.villain).map((v) => `<button class="villain-opt ${st.villain === v.id ? 'on' : ''}" data-villain="${v.id}" ${dis} style="--vc:${v.color}">
+      <span class="vo-icon">${v.icon}</span><b>${esc(v.name)}</b><span class="vo-level">${esc(v.level)}</span><span class="pack-chip">${esc(c.packs[v.pack || 'core'].name)}</span><span class="vo-desc">${esc(v.desc)}</span>
       <span class="vo-scheme">계략: ${esc(v.scheme.name)}</span></button>`).join('')}</div>
     <div class="diffs">${c.difficulties.map((d) => `<button class="small diff-opt ${st.difficulty === d.id ? 'on' : ''}" data-diff="${d.id}" ${dis} title="${esc(d.desc)}">${esc(d.name)}</button>`).join('')}</div>
     <div class="hint">${esc((c.difficulties.find((d) => d.id === st.difficulty) || {}).desc || '')}</div>`;
@@ -232,10 +247,11 @@ function renderRoom() {
   const meP = r.players.find((p) => p.id === app.you);
   const owner = (id) => r.players.find((p) => p.hero === id);
   $('#hero-pick').innerHTML = `<div class="rs-title">🦸 영웅 고르기 <span class="hint">카드를 눌러 내 영웅을, 아래에서 측면(덱 성향)을 고르세요.${isHost && r.players.some((p) => p.bot) ? ' 방장은 AI 동료의 영웅도 정할 수 있어요.' : ''}</span></div>
-    <div class="heroes">${c.heroes.map((h) => {
+    ${packTabs('heroPack', c.heroes)}
+    <div class="heroes">${c.heroes.filter((h) => inPack('heroPack', h) || (meP && meP.hero === h.id)).map((h) => {
       const o = owner(h.id);
       return `<div class="hero-opt ${o ? 'taken' : ''} ${meP && meP.hero === h.id ? 'mine' : ''}" data-hero="${h.id}" style="--hc:${h.color};${o ? `--pc:${o.color}` : ''}">
-        <div class="ho-top"><span class="ho-icon">${h.icon}</span><span><b>${esc(h.name)}</b><br><span class="hint">${esc(h.archetype)}</span></span></div>
+        <div class="ho-top"><span class="ho-icon">${h.icon}</span><span><b>${esc(h.name)}</b> <span class="pack-chip">${esc(c.packs[h.pack || 'core'].name)}</span><br><span class="hint">${esc(h.archetype)}</span></span></div>
         <div class="ho-stats"><span title="저지">🛑${h.hero.thw}</span><span title="공격">👊${h.hero.atk}</span><span title="방어">🛡${h.hero.def}</span><span title="체력">❤${h.hp}</span><span title="손패">✋${h.hero.hand}</span></div>
         <div class="ho-ab"><b>✨ ${esc(h.hero.ability.name)}</b>: ${esc(h.hero.ability.text)}</div>
         <div class="ho-alter">일상: <b>${esc(h.alter.name)}</b> (${esc(h.alter.job)}) · 회복 ${h.alter.rec} · ${esc(h.alter.ability.name)}</div>
@@ -249,6 +265,7 @@ function renderRoom() {
   for (const el of document.querySelectorAll('.hero-opt')) el.onclick = (e) => { if (e.target.closest('.ho-bot')) return; const id = el.dataset.hero; send({ t: 'pickHero', hero: meP && meP.hero === id ? null : id }); };
   for (const b of document.querySelectorAll('.ho-bot')) b.onclick = () => send({ t: 'pickHero', hero: b.dataset.h, target: b.dataset.bot });
   for (const b of document.querySelectorAll('.asp-opt')) b.onclick = () => send({ t: 'pickHero', aspect: b.dataset.aspect });
+  bindPackTabs();
   $('#btn-start').disabled = !isHost;
   $('#btn-add-bot').disabled = !isHost || r.players.length >= r.maxPlayers;
   $('#btn-start').textContent = isHost ? '출동! ▶' : '방장이 시작하기를 기다리는 중…';
@@ -275,7 +292,7 @@ function cardHTML(card, opts = {}) {
   return `<div class="card t-${c.type} ${card.exhausted ? 'exhausted' : ''} ${opts.cls || ''}" data-uid="${card.uid || ''}" data-cid="${c.id}" style="--cc:${color}">
     <div class="c-head">${c.type !== 'resource' ? `<span class="c-cost" title="비용">${c.cost}</span>` : ''}<span class="c-type">${TYPE_NAME[c.type]}${c.defense ? ' · 방어' : ''}${c.attack ? ' · 공격' : ''}</span></div>
     <div class="c-name">${esc(c.name)}</div>
-    <div class="c-art">${CARD_ART[c.id] || '🃏'}</div>
+    <div class="c-art">${CARD_ART[c.id] || c.icon || '🃏'}</div>
     ${opts.mini ? '' : `<div class="c-text">${esc(c.text)}</div>`}
     ${ally}${uses}
     <div class="c-foot"><span class="c-asp">${asp ? esc(asp.name) : hero ? esc(hero.name) : '기본'}</span>${resIcons(c)}</div>
@@ -285,7 +302,7 @@ function cardHTML(card, opts = {}) {
 function minionHTML(m, can) {
   const e = app.catalog.encounter[m.cardId] || {};
   return `<div class="minion ${can ? 'can' : ''}" data-target="${m.iid}">
-    <div class="mn-name">${ENC_ART[m.cardId] || '👾'} ${esc(m.name)}</div>
+    <div class="mn-name">${encArt(m.cardId) || '👾'} ${esc(m.name)}</div>
     <div class="mn-stats"><span title="계략">🕸${m.sch}</span><span title="공격">👊${m.atk}</span></div>
     <div class="bar"><i style="width:${Math.max(0, 100 * m.hp / m.maxHp)}%"></i><span>❤ ${Math.max(0, m.hp)}/${m.maxHp}</span></div>
     <div class="mn-tags">${m.guard ? '<span class="kw">경비</span>' : ''}${m.retaliate ? `<span class="kw">반격 ${m.retaliate}</span>` : ''}${m.stunned ? '<span class="st st-stun">기절</span>' : ''}${m.confused ? '<span class="st st-conf">혼란</span>' : ''}${m.tough ? '<span class="st st-tough">강인함</span>' : ''}</div>
@@ -405,7 +422,7 @@ function renderVillain() {
         <div class="vc-stage">${v.stages.map((s, i) => `<span class="${i === v.stageIdx ? 'now' : i < v.stageIdx ? 'done' : ''}">${s}</span>`).join('→')}단계</div></div></div>
       ${bar(v.hp, v.maxHp, 'hp')}
       <div class="vc-stats"><span title="계략력: 일상 모습인 영웅에게 계략을 꾸밀 때 위협을 이만큼 쌓아요">🕸 계략 <b>${v.sch}</b></span><span title="공격력: 영웅 모습인 영웅을 공격할 때 피해">👊 공격 <b>${v.atk}</b></span></div>
-      <div class="vc-tags">${v.stunned ? '<span class="st st-stun">기절</span>' : ''}${v.confused ? '<span class="st st-conf">혼란</span>' : ''}${v.tough ? '<span class="st st-tough">강인함</span>' : ''}${v.attachments.map((id) => `<span class="kw" title="${esc(app.catalog.encounter[id].text)}">${ENC_ART[id] || ''} ${esc(app.catalog.encounter[id].name)}</span>`).join('')}</div>
+      <div class="vc-tags">${v.stunned ? '<span class="st st-stun">기절</span>' : ''}${v.confused ? '<span class="st st-conf">혼란</span>' : ''}${v.tough ? '<span class="st st-tough">강인함</span>' : ''}${v.attachments.map((id) => `<span class="kw" title="${esc(app.catalog.encounter[id].text)}">${encArt(id) || ''} ${esc(app.catalog.encounter[id].name)}</span>`).join('')}</div>
       ${v.text ? `<div class="vc-text hint">${esc(v.text)}</div>` : ''}
     </div>
     <div class="scheme-card ${pm.scheme.main ? 'can' : ''} ${ratio >= 0.7 ? 'danger' : ''}" data-scheme="main">
@@ -415,7 +432,7 @@ function renderVillain() {
       <div class="sc-text hint">${esc(sc.text)}</div>
     </div>
     <div class="side-schemes">${st.sides.map((s) => `<div class="side-card ${pm.scheme[s.sid] ? 'can' : ''}" data-scheme="${s.sid}">
-        <div class="sc-label">📌 부가 계략</div><div class="sc-name">${ENC_ART[s.cardId] || ''} ${esc(s.name)}</div>
+        <div class="sc-label">📌 부가 계략</div><div class="sc-name">${encArt(s.cardId) || ''} ${esc(s.name)}</div>
         <div class="threat-num">위협 <b>${s.threat}</b></div>
         <div class="vc-tags">${s.crisis ? '<span class="kw danger" title="이 계략이 있는 동안 주 계략에서 위협을 제거할 수 없어요">⛔ 위기</span>' : ''}${s.accel ? `<span class="kw" title="악당 단계마다 주 계략 위협 +${s.accel}">⏩ 가속</span>` : ''}${s.hazard ? `<span class="kw" title="악당 단계마다 조우 카드 +${s.hazard}장">☢ 위험</span>` : ''}</div>
       </div>`).join('') || '<div class="hint side-empty">부가 계략 없음</div>'}
@@ -614,7 +631,7 @@ function encounterBanner(e) {
   const pl = app.state.players.find((x) => x.id === e.pid);
   const el = document.createElement('div');
   el.className = `enc-banner t-${c.type}`;
-  el.innerHTML = `<div class="eb-type">🎴 조우 카드 — ${ENC_TYPE[c.type]}${pl ? ` · ${esc(pl.name)}` : ''}</div><div class="eb-name">${ENC_ART[e.card] || ''} ${esc(c.name)}</div><div class="eb-text">${esc(c.text)}</div>`;
+  el.innerHTML = `<div class="eb-type">🎴 조우 카드 — ${ENC_TYPE[c.type]}${pl ? ` · ${esc(pl.name)}` : ''}</div><div class="eb-name">${encArt(e.card) || ''} ${esc(c.name)}</div><div class="eb-text">${esc(c.text)}</div>`;
   $('#fx-layer').appendChild(el);
   setTimeout(() => el.remove(), 2600);
 }
@@ -656,7 +673,7 @@ function attachCardTips(root) {
     const m = app.state && app.state.order.flatMap((pid) => app.state.ps[pid].engaged).find((x) => x.iid === el.dataset.target);
     if (!m) continue;
     const e2 = app.catalog.encounter[m.cardId];
-    el.onmouseenter = (e) => showTip(e, `<b>${ENC_ART[m.cardId] || '👾'} ${esc(m.name)}</b> <span class="hint">(미니언)</span><br>계략 ${m.sch} · 공격 ${m.atk} · 체력 ${m.hp}/${m.maxHp}<br>${esc(e2.text)}<div class="tip-meta">악당 단계에 교전 중인 영웅이 영웅 모습이면 공격, 일상 모습이면 계략을 꾸며요. 공격이나 피해 카드로 쓰러뜨리세요.</div>`);
+    el.onmouseenter = (e) => showTip(e, `<b>${encArt(m.cardId) || '👾'} ${esc(m.name)}</b> <span class="hint">(미니언)</span><br>계략 ${m.sch} · 공격 ${m.atk} · 체력 ${m.hp}/${m.maxHp}<br>${esc(e2.text)}<div class="tip-meta">악당 단계에 교전 중인 영웅이 영웅 모습이면 공격, 일상 모습이면 계략을 꾸며요. 공격이나 피해 카드로 쓰러뜨리세요.</div>`);
     el.onmousemove = moveTip;
     el.onmouseleave = hideTip;
   }
@@ -671,7 +688,7 @@ function cardTip(c) {
     support: '지원: 내 앞에 놓이고, 능력을 쓸 수 있어요 (보통 라운드마다 1번 소진).',
     resource: '자원 카드: 직접 쓰지 않고, 다른 카드 비용을 낼 때 버리면 자원 2개가 돼요.',
   }[c.type];
-  return `<b>${CARD_ART[c.id] || ''} ${esc(c.name)}</b> <span class="hint">(${TYPE_NAME[c.type]} · ${asp ? asp.name : hero ? hero.name + ' 전용' : '기본'}${c.type !== 'resource' ? ` · 비용 ${c.cost}` : ''})</span>
+  return `<b>${CARD_ART[c.id] || c.icon || ''} ${esc(c.name)}</b> <span class="hint">(${TYPE_NAME[c.type]} · ${asp ? asp.name : hero ? hero.name + ' 전용' : '기본'}${c.type !== 'resource' ? ` · 비용 ${c.cost}` : ''})</span>
     <div class="tip-body">${esc(c.text)}${c.ally ? `<br>저지 ${c.ally.thw} · 공격 ${c.ally.atk} · 체력 ${c.ally.hp} · 결과 피해 ${c.ally.cons}` : ''}</div>
     <div class="tip-meta">${typeHelp}<br>${c.form === 'hero' ? '🦸 영웅 모습일 때만 쓸 수 있어요.<br>' : ''}${c.defense ? '🛡 방어 이벤트: 악당·미니언이 나를 공격할 때 쓸 수 있어요.<br>' : ''}비용으로 버리면 자원 ${app.catalog.resIcon[c.res].repeat(c.resN)} (${app.catalog.resNames[c.res]} ${c.resN}개)</div>`;
 }

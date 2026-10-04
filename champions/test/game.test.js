@@ -76,16 +76,37 @@ test('부가 계략 위기: 주 계략 위협 제거 불가', () => {
   assert.ok(t.some((o) => o.value === 's1'));
 });
 
-for (const vill of ['sonix', 'brute', 'omega']) {
+for (const vill of D.VILLAINS.map((v) => v.id)) {
   test(`봇 게임 끝까지 진행: ${vill} (1·2·4인, 모든 난이도)`, async () => {
     const heroes = D.HEROES.map((h) => h.id);
     const asps = Object.keys(D.ASPECTS);
     let k = 0;
     for (const diff of D.DIFFICULTIES.map((d) => d.id)) for (const n of [1, 2, 4]) {
-      const g = mk(Array.from({ length: n }, (_, i) => [heroes[(k + i) % 6], asps[(k + i) % 4]]), { villain: vill, difficulty: diff }, 10 + k++);
+      const g = mk(Array.from({ length: n }, (_, i) => [heroes[(k * 2 + i * 5) % heroes.length], asps[(k + i) % 4]]), { villain: vill, difficulty: diff }, 10 + k++);
       attachBots(g, { random: k % 3 === 0 });
       const r = await Promise.race([g.run(), new Promise((_, rej) => setTimeout(() => rej(new Error('시간 초과')), 20000))]);
       assert.ok(r && !String(r.reason).startsWith('서버 오류'), `${vill}/${diff}/${n}: ${r && r.reason}`);
     }
   });
 }
+
+test('모든 영웅(확장 포함)이 각 측면으로 봇 게임을 끝까지 진행', async () => {
+  const asps = Object.keys(D.ASPECTS);
+  let k = 0;
+  for (const h of D.HEROES) for (const a of asps) {
+    const g = mk([[h.id, a]], { villain: D.VILLAINS[k % D.VILLAINS.length].id, difficulty: 'standard' }, 500 + k++);
+    attachBots(g, { random: k % 2 === 0 });
+    const r = await Promise.race([g.run(), new Promise((_, rej) => setTimeout(() => rej(new Error('시간 초과')), 20000))]);
+    assert.ok(r && !String(r.reason).startsWith('서버 오류'), `${h.id}/${a}: ${r && r.reason}`);
+  }
+});
+
+test('확장 악당: 단계 시작 시 모든 영웅에게 미니언 교전 (summonAll)', async () => {
+  const g = mk([['cap', 'justice'], ['thor', 'aggression']], { villain: 'redskull', difficulty: 'standard' });
+  g.setup();
+  const before = g.allMinions().length;
+  g.villain.hp = 0;
+  g.villainDefeated();
+  assert.strictEqual(g.villainStage().stage, 'II');
+  assert.strictEqual(g.allMinions().filter((m) => m.cardId === 'rs_soldier').length - before >= 2, true);
+});

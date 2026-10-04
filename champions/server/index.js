@@ -28,6 +28,7 @@ const CATALOG = {
   cards: Object.fromEntries(D.PLAYER_CARDS.map((c) => [c.id, strip({ ...c, effect: undefined, action: c.action ? { ...c.action, effect: undefined } : undefined })])),
   encounter: Object.fromEntries(D.ENCOUNTER.map((e) => [e.id, strip({ ...e, reveal: undefined, onEnter: undefined })])),
   villains: D.VILLAINS.map((v) => strip(v)),
+  packs: D.PACKS,
   difficulties: D.DIFFICULTIES,
   resNames: D.RES_NAMES, resIcon: D.RES_ICON, allyLimit: D.ALLY_LIMIT,
   decks: Object.fromEntries(D.HEROES.flatMap((h) => Object.keys(D.ASPECTS).map((a) => [`${h.id}:${a}`, D.buildDeck(h.id, a)]))),

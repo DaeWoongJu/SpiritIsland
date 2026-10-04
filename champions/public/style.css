@@ -364,3 +364,8 @@ h2 { font-family: var(--comic); font-weight: 400; color: var(--yellow); margin: 
 .slot-card.taken { opacity: .6; }
 .slot-name { font-weight: 800; }
 .slot-tag { color: var(--yellow); font-weight: 700; }
+
+/* 확장(팩) 고르기 */
+.pack-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.pack-tab.on { background: var(--yellow); color: var(--ink); border-color: var(--yellow); }
+.pack-chip { display: inline-block; font-size: .72em; padding: 1px 6px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); font-weight: 700; vertical-align: middle; }

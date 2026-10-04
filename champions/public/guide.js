@@ -7,7 +7,7 @@ const Guide = (() => {
       <p>여러분은 도시를 지키는 <b>영웅</b>이에요. 친구들과 <b>힘을 합쳐</b>(협력) 악당 한 명을 상대합니다. 모두 함께 이기고 함께 져요.</p>
       <div class="g-box"><b>🎉 승리</b>: 악당의 체력을 0으로 만들어 마지막 단계까지 쓰러뜨리기<br><b>💀 패배</b>: 악당의 <b>주 계략</b> 위협이 한계에 닿거나, 모든 영웅이 쓰러지면</div>
       <p>그래서 두 가지를 동시에 해야 해요: 악당을 <b>공격</b>하면서, 악당의 계략(위협)을 <b>저지</b>하기!</p>
-      <p class="g-tip">💡 처음이라면 대기실에서 악당 <b>음파 마왕 소닉스</b> + 난이도 <b>연습</b>으로 한 판 해 보세요.</p>` },
+      <p class="g-tip">💡 처음이라면 대기실에서 악당 <b>클로우</b> + 난이도 <b>연습</b>으로 한 판 해 보세요.</p>` },
     { title: '🔄 영웅 모습과 일상 모습', body: () => `
       <p>영웅 카드는 앞뒤가 있어요. 내 차례에 <b>라운드마다 1번</b> 모습을 바꿀 수 있어요.</p>
       <div class="g-grid">
@@ -80,7 +80,7 @@ const Guide = (() => {
       <div class="g-grid">${Object.values((app.catalog || {}).aspects || {}).map((a) => `<div><b style="color:${a.color}">${a.name}</b> (${a.en})<br><span class="hint">${a.desc}</span></div>`).join('')}</div>
       <p>영웅: ${((app.catalog || {}).heroes || []).map((h) => `${h.icon} ${h.name}`).join(' · ')}</p>
       <p>악당: ${((app.catalog || {}).villains || []).map((v) => `${v.icon} ${v.name} (${v.level})`).join(' · ')}</p>
-      <p class="g-tip">💡 처음이라면 <b>마운틴 퀸 + 수호</b>(튼튼함)나 <b>섀도 폭스 + 정의</b>(저지 잘함)를 추천해요.</p>` },
+      <p class="g-tip">💡 처음이라면 <b>쉬-헐커 + 수호</b>(튼튼함)나 <b>블랙 위도 + 정의</b>(저지 잘함)를 추천해요.</p>` },
     { title: '💡 이기는 팁', body: () => `
       <ul>
         <li><b>위협 관리가 먼저!</b> 주 계략 위협이 반을 넘으면 저지에 집중하세요. 패배는 대부분 계략 때문이에요.</li>
