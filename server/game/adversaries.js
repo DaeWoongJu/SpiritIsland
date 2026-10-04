@@ -3,6 +3,10 @@
 // 각 레벨의 효과는 누적된다. 효과 키는 game.js 의 applyDifficulty 에서 해석한다.
 
 const PRESETS = [
+  { id: 'sandbox', name: '체험 (지지 않음)', desc: '규칙을 익히는 연습용. 황폐가 쌓이거나 존재가 사라져도 지지 않고, 황폐가 번지지 않으며 존재도 파괴되지 않아요. 침략자는 천천히 강해지고 매 턴 에너지 +1. 침략자 덱이 끝날 때까지 마음껏 시험해 보세요.',
+    mods: { fearPerPlayer: 2, blightPerPlayer: 3, startEnergy: 3, turnEnergy: 1, addStage1: 2, noCascade: true, presenceSafe: true, noLose: true } },
+  { id: 'learn', name: '연습 (아주 쉬움)', desc: '처음 이기는 경험을 위해. 공포가 아주 빨리 차고(정령 1개당 2), 황폐 여유가 넉넉하고, 황폐가 옆으로 번지지 않아요. 시작 에너지 +3, 매 턴 에너지 +1, 침략자 1단계 카드 +2장(천천히 강해짐).',
+    mods: { fearPerPlayer: 2, blightPerPlayer: 3, startEnergy: 3, turnEnergy: 1, addStage1: 2, noCascade: true } },
   { id: 'intro', name: '입문', desc: '처음 해보는 분께. 공포가 빨리 차고, 황폐 여유가 많고, 시작 에너지 +2.', mods: { fearPerPlayer: 3, blightPerPlayer: 2, startEnergy: 2 } },
   { id: 'easy', name: '쉬움', desc: '공포가 조금 빨리 차고 황폐 여유가 많습니다. 시작 에너지 +1.', mods: { fearPerPlayer: 3, blightPerPlayer: 1, startEnergy: 1 } },
   { id: 'normal', name: '보통', desc: '원작 기본 규칙.', mods: {} },
@@ -93,11 +97,11 @@ const ADVERSARIES = [
 /** 프리셋 + 적대 세력 레벨 효과를 합친 설정 */
 function difficultyConfig(diff = {}) {
   const cfg = { fearPerPlayer: 4, blightPerPlayer: 0, startEnergy: 0, removeStage1: 0, removeStage2: 0, extraFear: 0, setupPieces: [], townDamage: 2, cityDamage: 3, explorerDamage: 1 };
-  const preset = PRESETS.find((p) => p.id === (diff.preset || 'normal')) || PRESETS[2];
+  const preset = PRESETS.find((p) => p.id === (diff.preset || 'normal')) || PRESETS.find((p) => p.id === 'normal');
   const apply = (fx) => {
     for (const [k, v] of Object.entries(fx)) {
       if (k === 'setupPieces') cfg.setupPieces.push(...v);
-      else if (['blightPerPlayer', 'startEnergy', 'removeStage1', 'removeStage2', 'extraFear', 'ravageDahanBonus'].includes(k)) cfg[k] = (cfg[k] || 0) + v;
+      else if (['blightPerPlayer', 'startEnergy', 'removeStage1', 'removeStage2', 'extraFear', 'ravageDahanBonus', 'turnEnergy', 'addStage1'].includes(k)) cfg[k] = (cfg[k] || 0) + v;
       else if (k === 'buildTwice') cfg.buildTwice = cfg.buildTwice === 'all' || v === 'all' ? 'all' : v;
       else cfg[k] = v;
     }

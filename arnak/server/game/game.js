@@ -28,7 +28,14 @@ class Game extends EventEmitter {
   constructor(players, opts = {}) {
     super();
     this.rand = mulberry32(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
-    this.players = players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot }));
+    this.players = players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, leader: p.leader || null }));
+    // 설정: leaders(탐험대장 확장), expansion(확장 카드·수호자·조수·유적), track('bird' | 'snake')
+    this.settings = { leaders: false, expansion: false, track: 'bird', ...(opts.settings || {}) };
+    const track = D.TRACKS[this.settings.track] || D.TRACKS.bird;
+    this.track = track.id;
+    this.researchRows = track.rows || D.RESEARCH;
+    this.glassVP = track.glassVP || D.GLASS_VP;
+    this.noteVP = track.noteVP || D.NOTE_VP;
     this.order = this.players.map((p) => p.id);
     this.prompts = {};
     this.promptSeq = 1;
@@ -52,6 +59,11 @@ class Game extends EventEmitter {
     }
     return arr;
   }
+
+  assistantDef(id) { return D.ASSISTANTS.find((x) => x.id === id) || D.EXP_ASSISTANTS.find((x) => x.id === id); }
+  guardianDef(id) { return D.GUARDIANS.find((x) => x.id === id) || D.EXP_GUARDIANS.find((x) => x.id === id); }
+  leaderOf(pid) { const p = this.ps && this.ps[pid]; return p && p.leader ? D.LEADERS.find((l) => l.id === p.leader) : null; }
+  hasPassive(pid, k) { const l = this.leaderOf(pid); return !!(l && l.passive === k); }
 
   newCard(id) { const uid = 'c' + this.uidSeq++; this.cards[uid] = id; return uid; }
   def(uid) { return CARD_MAP[this.cards[uid]]; }
@@ -201,7 +213,7 @@ class Game extends EventEmitter {
     p.exiled.push(uid);
     this.log(`${this.pname(pid)}: [${this.def(uid).name}] 카드를 추방했습니다`, pid);
     this.changed();
-    return true;
+    return uid;
   }
 
   // ───────────── 이동 비용 ─────────────
@@ -216,6 +228,8 @@ class Game extends EventEmitter {
     const useBootB = Math.min(need.boot, have.boot);
     const useBootC = Math.min(need.boot - useBootB, carLeft);
     let unmet = (need.ship - useShip) + (need.car - useCar) + (need.boot - useBootB - useBootC) + need.plane;
+    // 기계공 볼트: 남은 지프 카드도 비행기처럼 쓸 수 있다
+    if (this.hasPassive(pid, 'carAsPlane')) have.plane += carLeft - useBootC;
     const planesUsed = Math.min(unmet, have.plane);
     unmet -= planesUsed;
     const coins = unmet * 2;
@@ -270,28 +284,44 @@ class Game extends EventEmitter {
   setup() {
     this.sites = {};
     for (const s of D.BASIC_SITES) this.sites[s.id] = { ...s, discovered: true, occupants: [], guardian: null };
-    const t1 = this.shuffle(D.SITE_TILES_1.slice());
-    const t2 = this.shuffle(D.SITE_TILES_2.slice());
+    const t1 = this.shuffle([...D.SITE_TILES_1, ...(this.settings.expansion ? D.EXP_SITE_TILES_1 : [])]);
+    const t2 = this.shuffle([...D.SITE_TILES_2, ...(this.settings.expansion ? D.EXP_SITE_TILES_2 : [])]);
     this.tileDeck = { 1: t1, 2: t2 };
-    const idols = this.shuffle(D.IDOLS.slice());
+    const idols = this.shuffle([...D.IDOLS, ...(this.settings.expansion ? D.EXP_IDOLS : [])]);
     for (const l of D.LOCATIONS) this.sites[l.id] = { ...l, name: null, reward: null, discovered: false, occupants: [], guardian: null, idol: idols.pop() };
-    this.guardianDeck = this.shuffle(D.GUARDIANS.slice());
-    this.assistantPool = this.shuffle(D.ASSISTANTS.map((a) => a.id));
+    this.guardianDeck = this.shuffle([...D.GUARDIANS, ...(this.settings.expansion ? D.EXP_GUARDIANS : [])]);
+    this.assistantPool = this.shuffle([...D.ASSISTANTS, ...(this.settings.expansion ? D.EXP_ASSISTANTS : [])].map((a) => a.id));
     this.assistantOffer = this.assistantPool.splice(0, 4);
     this.templeSupply = Object.fromEntries(D.TEMPLE_TILES.map((t) => [t.id, t.count]));
-    this.itemDeck = this.shuffle(D.ITEMS.map((c) => this.newCard(c.id)));
-    this.artifactDeck = this.shuffle(D.ARTIFACTS.map((c) => this.newCard(c.id)));
+    this.itemDeck = this.shuffle([...D.ITEMS, ...(this.settings.expansion ? D.EXP_ITEMS : [])].map((c) => this.newCard(c.id)));
+    this.artifactDeck = this.shuffle([...D.ARTIFACTS, ...(this.settings.expansion ? D.EXP_ARTIFACTS : [])].map((c) => this.newCard(c.id)));
     this.row = new Array(D.ROW_SIZE).fill(null);
     this.staff = 1; // 달 지팡이: 이보다 왼쪽(인덱스 < staff)은 유물 칸
     this.refillRow();
 
     this.ps = {};
+    // 탐험대장 배정: 고른 대장을 먼저(겹치면 먼저 들어온 사람), 나머지는 무작위
+    const leaderOf = {};
+    if (this.settings.leaders) {
+      const taken = new Set();
+      for (const pl of this.players) if (pl.leader && D.LEADERS.some((l) => l.id === pl.leader) && !taken.has(pl.leader)) { leaderOf[pl.id] = pl.leader; taken.add(pl.leader); }
+      for (const pl of this.players) {
+        if (leaderOf[pl.id]) continue;
+        const free = this.shuffle(D.LEADERS.filter((l) => !taken.has(l.id)));
+        if (free.length) { leaderOf[pl.id] = free[0].id; taken.add(free[0].id); }
+      }
+    }
     this.order.forEach((pid, i) => {
       const deck = [];
       for (const s of D.START) { deck.push(this.newCard(s.id)); deck.push(this.newCard(s.id)); }
-      deck.push(this.newCard('fear'), this.newCard('fear'));
+      // 탐험대장: 두려움 1장 대신 전용 시작 카드
+      const leader = this.settings.leaders ? D.LEADERS.find((l) => l.id === leaderOf[pid]) || null : null;
+      deck.push(this.newCard('fear'), this.newCard(leader ? leader.card : 'fear'));
+      const res = { ...emptyRes(), ...D.START_RES[Math.min(i, D.START_RES.length - 1)] };
+      if (leader && leader.res) for (const [k, n] of Object.entries(leader.res)) res[k] += n;
       this.ps[pid] = {
-        res: { ...emptyRes(), ...D.START_RES[Math.min(i, D.START_RES.length - 1)] },
+        leader: leader ? leader.id : null, leaderUsed: false,
+        res,
         deck: this.shuffle(deck), hand: [], play: [], discard: [], exiled: [],
         arch: D.ARCHAEOLOGISTS, idols: [], idolSlots: [], idolUsedRound: false,
         guardians: [], glass: 0, note: 0, assistants: [], assistRows: [], temple: [], templeVP: 0,
@@ -299,6 +329,9 @@ class Game extends EventEmitter {
       };
     });
     this.log(`게임 준비 완료. ${this.order.map((id) => this.pname(id)).join(' → ')} 순서로 진행합니다.`);
+    if (this.track === 'snake') this.log('연구 트랙: 🐍 뱀 신전 (비용이 비싸지만 점수가 커요)');
+    if (this.settings.expansion) this.log('확장 「탐험대장들」의 카드·수호자·조수·유적이 섞여 있어요.');
+    for (const pid of this.order) { const l = this.leaderOf(pid); if (l) this.log(`${this.pname(pid)}: 탐험대장 ${l.icon} ${l.name} — ${l.desc}`, pid); }
   }
 
   refillRow() {
@@ -347,6 +380,7 @@ class Game extends EventEmitter {
       p.discard.push(...p.play);
       p.play = [];
       p.idolUsedRound = false;
+      p.leaderUsed = false;
       for (const a of p.assistants) a.used = false;
     }
     if (this.round < D.ROUNDS) {
@@ -387,10 +421,12 @@ class Game extends EventEmitter {
       if (d.effect && d.free) add('play:' + uid, `⚡ ${d.name}`, 'free', !d.can || d.can(this, pid), '지금은 쓸 수 없어요', { card: uid });
     }
     if (p.idols.length && !p.idolUsedRound && p.idolSlots.length < 4) add('idol', '🗿 우상 놓기', 'free', true, '');
-    for (const a of p.assistants) if (!a.used) { const ad = D.ASSISTANTS.find((x) => x.id === a.id); add('assist:' + a.id, `👤 ${ad.name}`, 'free', true, ''); }
+    const lead = this.leaderOf(pid);
+    if (lead && lead.power && !p.leaderUsed) add('leader', `${lead.icon} ${lead.name} 능력`, 'free', lead.power !== 'mysticExile' || p.hand.length + p.play.length > 0, '추방할 카드가 없어요');
+    for (const a of p.assistants) if (!a.used) { const ad = this.assistantDef(a.id); add('assist:' + a.id, `👤 ${ad.name}`, 'free', true, ''); }
     p.guardians.forEach((g, i) => {
       if (g.used) return;
-      const gd = D.GUARDIANS.find((x) => x.id === g.id);
+      const gd = this.guardianDef(g.id);
       const ok = gd.boon.kind !== 'research' || this.researchTokens(pid, { free: true }).length > 0;
       add('boon:' + i, `🛡 ${gd.name} 혜택`, 'free', ok, '연구할 수 있는 말이 없어요');
     });
@@ -422,6 +458,7 @@ class Game extends EventEmitter {
       else if (kind === 'temple') done = await this.doTemple(pid);
       else if (kind === 'play') { const free = this.def(arg).free; await this.playCard(pid, arg); done = !free; }
       else if (kind === 'idol') await this.placeIdol(pid);
+      else if (kind === 'leader') await this.useLeader(pid);
       else if (kind === 'assist') await this.useAssistant(pid, arg);
       else if (kind === 'boon') await this.useBoon(pid, Number(arg));
       if (done) mainDone = true;
@@ -459,26 +496,29 @@ class Game extends EventEmitter {
   // ───────────── 행동: 탐사 ─────────────
   discoverTargets(pid) {
     const p = this.P(pid);
-    return Object.values(this.sites).filter((s) => !s.discovered && this.tileDeck[s.level].length && p.res.compass >= s.compass && this.canTravel(pid, s.travel));
+    return Object.values(this.sites).filter((s) => !s.discovered && this.tileDeck[s.level].length && p.res.compass >= this.discoverCost(pid, s) && this.canTravel(pid, s.travel));
   }
+
+  discoverCost(pid, s) { return Math.max(0, s.compass - (this.hasPassive(pid, 'discoverDiscount') ? 1 : 0)); }
 
   async doDiscover(pid) {
     const p = this.P(pid);
     const targets = this.discoverTargets(pid);
     if (!targets.length || p.arch <= 0) return false;
-    const options = targets.map((s) => ({ value: s.id, label: `${s.level}단계 유적 (나침반 ${s.compass} + ${travelText(s.travel)})`, site: s.id }));
+    const options = targets.map((s) => ({ value: s.id, label: `${s.level}단계 유적 (나침반 ${this.discoverCost(pid, s)} + ${travelText(s.travel)})`, site: s.id }));
     options.push({ value: 'cancel', label: '취소' });
     const v = await this.ask(pid, { type: 'option', kind: 'site', title: '탐사할 곳을 고르세요. 새 유적과 우상을 얻지만 수호자가 나타나요!', options });
     if (v === 'cancel') return false;
     const s = this.sites[v];
     if (!(await this.payTravel(pid, s.travel, true))) return false;
-    p.res.compass -= s.compass;
+    const ccost = this.discoverCost(pid, s);
+    p.res.compass -= ccost;
     const tile = this.tileDeck[s.level].pop();
     Object.assign(s, { discovered: true, name: tile.name, reward: tile.reward, tile: tile.id });
     p.arch--;
     s.occupants.push(pid);
     this.events.push({ kind: 'discover', site: s.id, pid });
-    this.log(`${this.pname(pid)}: 새 유적 [${tile.name}] 발견! (나침반 ${s.compass})`, pid);
+    this.log(`${this.pname(pid)}: 새 유적 [${tile.name}] 발견! (나침반 ${ccost}${ccost < s.compass ? ', 탐험가 리나 할인' : ''})`, pid);
     // 우상
     if (s.idol) {
       p.idols.push(s.idol.id);
@@ -521,9 +561,10 @@ class Game extends EventEmitter {
   }
 
   // ───────────── 행동: 카드 구매 ─────────────
-  cardCost(uid, discount = 0) {
+  cardCost(uid, discount = 0, pid = null) {
     const d = this.def(uid);
-    return Math.max(0, d.cost - discount);
+    const lead = pid && d.kind === 'item' && this.hasPassive(pid, 'itemDiscount') ? 1 : 0;
+    return Math.max(0, d.cost - discount - lead);
   }
 
   buyTargets(pid, opts) {
@@ -533,7 +574,7 @@ class Game extends EventEmitter {
       if (!uid) return false;
       const d = this.def(uid);
       if (!kinds.includes(d.kind)) return false;
-      const c = this.cardCost(uid, opts.discount || 0);
+      const c = this.cardCost(uid, opts.discount || 0, pid);
       return d.kind === 'item' ? p.res.coin >= c : p.res.compass >= c;
     });
   }
@@ -544,7 +585,7 @@ class Game extends EventEmitter {
     if (!targets.length) { if (!opts.cancel) this.log(`${this.pname(pid)}: 살 수 있는 카드가 없습니다`, pid); return false; }
     const options = targets.map(({ uid, i }) => {
       const d = this.def(uid);
-      return { value: String(i), label: `${d.name} (${d.kind === 'item' ? '동전' : '나침반'} ${this.cardCost(uid, opts.discount || 0)})`, slot: i, card: uid };
+      return { value: String(i), label: `${d.name} (${d.kind === 'item' ? '동전' : '나침반'} ${this.cardCost(uid, opts.discount || 0, pid)})`, slot: i, card: uid };
     });
     if (opts.cancel) options.push({ value: 'cancel', label: '취소' });
     const v = await this.ask(pid, { type: 'option', kind: 'row', title: '살 카드를 고르세요 (물건 = 동전, 유물 = 나침반)', options });
@@ -552,7 +593,7 @@ class Game extends EventEmitter {
     const i = Number(v);
     const uid = this.row[i];
     const d = this.def(uid);
-    const c = this.cardCost(uid, opts.discount || 0);
+    const c = this.cardCost(uid, opts.discount || 0, pid);
     if (d.kind === 'item') p.res.coin -= c; else p.res.compass -= c;
     this.row[i] = null;
     this.refillRow();
@@ -584,7 +625,7 @@ class Game extends EventEmitter {
   // ───────────── 행동: 연구 ─────────────
   researchCost(row, opts) {
     if (opts.free) return {};
-    const cost = { ...D.RESEARCH[row].cost };
+    const cost = { ...this.researchRows[row].cost };
     for (const [k, n] of Object.entries(opts.discount || {})) if (cost[k]) cost[k] = Math.max(0, cost[k] - n);
     return cost;
   }
@@ -615,37 +656,38 @@ class Game extends EventEmitter {
     if (v === 'glass') p.glass = row; else p.note = row;
     this.events.push({ kind: 'research', pid, token: v, row });
     this.log(`${this.pname(pid)}: ${v === 'glass' ? '돋보기' : '수첩'}를 ${row === 7 ? '신전' : `${row}줄`}로 올렸습니다`, pid);
+    if (this.hasPassive(pid, 'researchCoin')) { this.log(`${this.pname(pid)}: 교수 아델라 — 연구 보너스`, pid); this.gain(pid, { coin: 1 }); }
     await this.researchReward(pid, v, row);
     return true;
   }
 
   async researchReward(pid, token, row) {
     const p = this.P(pid);
-    const r = D.RESEARCH[row].reward;
+    const r = this.researchRows[row].reward;
     if (!r) return;
     if (r.kind === 'gain') this.gain(pid, r.res);
     else if (r.kind === 'assistant') {
       if (p.assistRows.includes(row) || !this.assistantOffer.length) { this.gain(pid, { coin: 1, compass: 1 }); return; }
       p.assistRows.push(row);
       const v = await this.choose(pid, '함께할 조수를 고르세요 (라운드마다 1번 쓰는 능력)', this.assistantOffer.map((id) => {
-        const a = D.ASSISTANTS.find((x) => x.id === id);
+        const a = this.assistantDef(id);
         return { value: id, label: `${a.name}: ${rewardText(a.base)}`, assistant: id };
       }), { always: true });
       this.assistantOffer = this.assistantOffer.filter((x) => x !== v);
       if (this.assistantPool.length) this.assistantOffer.push(this.assistantPool.pop());
       p.assistants.push({ id: v, up: false, used: false });
-      this.log(`${this.pname(pid)}: 조수 ${D.ASSISTANTS.find((x) => x.id === v).name}이(가) 합류했습니다`, pid);
+      this.log(`${this.pname(pid)}: 조수 ${this.assistantDef(v).name}이(가) 합류했습니다`, pid);
     } else if (r.kind === 'upgrade') {
       const cand = p.assistants.filter((a) => !a.up);
       if (!cand.length) { this.gain(pid, { compass: 2 }); return; }
       const v = await this.choose(pid, '업그레이드할 조수를 고르세요', cand.map((a) => {
-        const ad = D.ASSISTANTS.find((x) => x.id === a.id);
+        const ad = this.assistantDef(a.id);
         return { value: a.id, label: `${ad.name}: ${rewardText(ad.base)} → ${rewardText(ad.up)}` };
       }), { always: true });
       const a = p.assistants.find((x) => x.id === v);
       a.up = true;
       a.used = false;
-      this.log(`${this.pname(pid)}: 조수 ${D.ASSISTANTS.find((x) => x.id === v).name} 업그레이드 (이번 라운드 다시 사용 가능)`, pid);
+      this.log(`${this.pname(pid)}: 조수 ${this.assistantDef(v).name} 업그레이드 (이번 라운드 다시 사용 가능)`, pid);
     } else if (r.kind === 'temple' && token === 'glass') {
       const vp = D.TEMPLE_ARRIVAL_VP[this.templeArrivals] || 0;
       this.templeArrivals++;
@@ -687,10 +729,25 @@ class Game extends EventEmitter {
     this.gain(pid, D.IDOL_SLOT_CHOICES[Number(v)]);
   }
 
+  async useLeader(pid) {
+    const p = this.P(pid);
+    const l = this.leaderOf(pid);
+    if (!l || !l.power || p.leaderUsed) return;
+    p.leaderUsed = true;
+    if (l.power === 'mysticExile') {
+      this.log(`${this.pname(pid)}: ${l.name}의 정화 의식`, pid);
+      const uid = await this.exileCard(pid);
+      if (uid && this.cards[uid] === 'fear') this.gain(pid, { arrow: 1 });
+    } else {
+      this.log(`${this.pname(pid)}: ${l.name}의 선원 소집`, pid);
+      this.gain(pid, l.power);
+    }
+  }
+
   async useAssistant(pid, id) {
     const a = this.P(pid).assistants.find((x) => x.id === id && !x.used);
     if (!a) return;
-    const ad = D.ASSISTANTS.find((x) => x.id === id);
+    const ad = this.assistantDef(id);
     const r = a.up ? ad.up : ad.base;
     a.used = true;
     this.log(`${this.pname(pid)}: 조수 ${ad.name}의 도움`, pid);
@@ -701,7 +758,7 @@ class Game extends EventEmitter {
   async useBoon(pid, i) {
     const g = this.P(pid).guardians[i];
     if (!g || g.used) return;
-    const gd = D.GUARDIANS.find((x) => x.id === g.id);
+    const gd = this.guardianDef(g.id);
     g.used = true;
     this.log(`${this.pname(pid)}: 「${gd.name}」의 혜택 사용`, pid);
     const b = gd.boon;
@@ -717,7 +774,7 @@ class Game extends EventEmitter {
     const owned = [...p.deck, ...p.hand, ...p.play, ...p.discard];
     const cardVP = owned.reduce((s, u) => s + Math.max(0, this.def(u).vp), 0);
     const fear = owned.filter((u) => this.cards[u] === 'fear').length;
-    const research = D.GLASS_VP[p.glass] + D.NOTE_VP[p.note];
+    const research = this.glassVP[p.glass] + this.noteVP[p.note];
     const temple = p.temple.reduce((s, id) => s + D.TEMPLE_TILES.find((t) => t.id === id).vp, 0) + p.templeVP;
     const idols = p.idols.length * D.IDOL_VP + p.idolSlots.length * D.IDOL_PLACED_VP;
     const guardians = p.guardians.length * D.GUARDIAN_VP;
@@ -739,6 +796,7 @@ class Game extends EventEmitter {
     const card = (uid) => (uid ? { uid, id: this.cards[uid] } : null);
     return {
       round: this.round, rounds: D.ROUNDS, current: this.current, order: this.order, first: this.order[this.firstIdx],
+      settings: this.settings, track: this.track, researchRows: this.researchRows, glassVP: this.glassVP, noteVP: this.noteVP,
       players: this.players,
       sites: Object.values(this.sites || {}).map((s) => ({
         id: s.id, level: s.level, name: s.name, travel: s.travel, compass: s.compass, reward: s.reward, discovered: s.discovered,
@@ -752,7 +810,7 @@ class Game extends EventEmitter {
         const p = this.P(pid);
         if (!p) return [pid, null];
         return [pid, {
-          res: p.res, arch: p.arch, passed: p.passed, glass: p.glass, note: p.note,
+          res: p.res, arch: p.arch, passed: p.passed, glass: p.glass, note: p.note, leader: p.leader, leaderUsed: p.leaderUsed,
           idols: p.idols.length, idolSlots: p.idolSlots.length, idolUsedRound: p.idolUsedRound,
           guardians: p.guardians, assistants: p.assistants, temple: p.temple, templeVP: p.templeVP,
           hand: pid === forPid ? p.hand.map(card) : null, handCount: p.hand.length,

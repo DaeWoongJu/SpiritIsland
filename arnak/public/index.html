@@ -23,7 +23,7 @@
         <div class="join-row"><input id="in-code" maxlength="4" placeholder="방 코드"><button id="btn-join">입장</button></div>
       </div>
       <div class="solo-box">
-        <div class="solo-title">🤖 혼자 하기 — AI와 대결</div>
+        <div class="solo-title">🤖 혼자 하기 — AI와 대결 <span class="hint">(대기실에서 확장·연구 트랙을 고르고 시작)</span></div>
         <div class="solo-row">
           <button class="solo" data-bots="1">AI 1명</button>
           <button class="solo" data-bots="2">AI 2명</button>
@@ -42,6 +42,8 @@
       <div class="room-head"><h2>대기실</h2><div class="code-box">방 코드 <b id="room-code"></b><button id="btn-copy" class="small">초대 문구 복사</button></div></div>
       <p class="hint" id="invite-hint"></p>
       <div id="room-players" class="room-players"></div>
+      <div id="room-settings" class="room-settings"></div>
+      <div id="leader-pick" class="leader-pick"></div>
       <div class="room-actions">
         <button id="btn-add-bot" class="small">🤖 AI 추가</button>
         <span style="flex:1"></span>

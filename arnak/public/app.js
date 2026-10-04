@@ -18,8 +18,11 @@ const CARD_ART = {
   hot_air: '🎈', museum_letter: '✉', expedition_tent: '⛺', jade_mask: '🎭', obsidian_knife: '🗡', star_chart: '✨', sun_disc: '🌞', ancient_scroll: '📜',
   feather_crown: '👑', idol_eye: '👁', serpent_staff: '🐍', stone_key: '🗝', ritual_drum: '🥁', warrior_totem: '🗿', moon_pendant: '🌙', golden_jaguar: '🐆',
   temple_map: '🏛', guardian_horn: '📯', crystal_skull: '💀', clay_tablet: '🧱', bone_flute: '🦴', sky_lens: '🔮', spirit_mask: '👺',
+  lecture_notes: '📝', wrench: '🔧', walking_stick: '🦯', ship_log: '⚓', crystal_ball: '🔮', family_jewels: '💍',
+  radio: '📻', motorboat: '🚤', field_kit: '🎒', camp_stove: '🔥', guidebook: '📘', rifle: '🎯', gold_pan: '🥘', sextant: '📐', cargo_plane: '✈', field_notes: '🗒',
+  sun_mirror: '🪞', stone_compass: '🧭', jaguar_mask: '🐯', ancestor_bones: '☠', serpent_ring: '💍', thunder_drum: '🪘', golden_mask: '😷', eternal_flame: '🕯',
 };
-const GUARDIAN_ART = { g1: '🐢', g2: '🐍', g3: '🐆', g4: '🦇', g5: '🗿', g6: '🐉', g7: '🐊', g8: '🐒', g9: '🦅', g10: '🕷', g11: '🪨', g12: '🌪' };
+const GUARDIAN_ART = { g1: '🐢', g2: '🐍', g3: '🐆', g4: '🦇', g5: '🗿', g6: '🐉', g7: '🐊', g8: '🐒', g9: '🦅', g10: '🕷', g11: '🪨', g12: '🌪', g13: '🦎', g14: '🐺', g15: '🪲', g16: '🌳' };
 const KIND_NAME = { item: '물건', artifact: '유물', start: '시작 카드', fear: '두려움' };
 
 // ───────────── 연결 ─────────────
@@ -125,9 +128,55 @@ function renderRoom() {
     </div>`).join('');
   for (const b of document.querySelectorAll('[data-move]')) b.onclick = () => send({ t: 'move', id: b.dataset.move, dir: b.dataset.dir });
   for (const b of document.querySelectorAll('[data-rmbot]')) b.onclick = () => send({ t: 'removeBot', id: b.dataset.rmbot });
+  renderRoomSettings(isHost);
   $('#btn-start').disabled = !isHost;
   $('#btn-add-bot').disabled = !isHost || r.players.length >= r.maxPlayers;
   $('#btn-start').textContent = isHost ? '게임 시작 ▶' : '방장이 시작하기를 기다리는 중…';
+}
+
+function renderRoomSettings(isHost) {
+  const r = app.room;
+  const c = app.catalog;
+  const st = r.settings || {};
+  const dis = isHost ? '' : 'disabled';
+  $('#room-settings').innerHTML = `<div class="rs-title">⚙ 게임 설정 ${isHost ? '' : '<span class="hint">(방장만 바꿀 수 있어요)</span>'}</div>
+    <div class="rs-grid">
+      <label class="rs-opt ${st.leaders ? 'on' : ''}"><input type="checkbox" data-set="leaders" ${st.leaders ? 'checked' : ''} ${dis}>
+        <span><b>👑 확장: 탐험대장</b><br><span class="hint">각자 고유 능력이 있는 탐험대장 6명 중 한 명을 골라요. 두려움 카드 1장 대신 대장 전용 카드로 시작.</span></span></label>
+      <label class="rs-opt ${st.expansion ? 'on' : ''}"><input type="checkbox" data-set="expansion" ${st.expansion ? 'checked' : ''} ${dis}>
+        <span><b>📦 확장: 새 카드·수호자·조수·유적</b><br><span class="hint">물건 ${c.expansionInfo.items} · 유물 ${c.expansionInfo.artifacts} · 수호자 ${c.expansionInfo.guardians} · 조수 ${c.expansionInfo.assistants} · 유적 ${c.expansionInfo.sites}곳이 더해져요.</span></span></label>
+      <div class="rs-opt track"><b>🔍 연구 트랙 (판의 면)</b>
+        ${c.tracks.map((t) => `<label class="rs-radio ${st.track === t.id ? 'on' : ''}"><input type="radio" name="track" value="${t.id}" ${st.track === t.id ? 'checked' : ''} ${dis}> ${t.id === 'snake' ? '🐍' : '🦅'} <b>${esc(t.name)}</b> <span class="hint">${esc(t.desc)}</span></label>`).join('')}</div>
+    </div>`;
+  if (isHost) {
+    for (const cb of document.querySelectorAll('#room-settings [data-set]')) cb.onchange = () => send({ t: 'setSettings', settings: { [cb.dataset.set]: cb.checked } });
+    for (const rb of document.querySelectorAll('#room-settings input[name=track]')) rb.onchange = () => send({ t: 'setSettings', settings: { track: rb.value } });
+  }
+  // 탐험대장 고르기
+  const lp = $('#leader-pick');
+  if (!st.leaders) { lp.innerHTML = ''; return; }
+  const meP = r.players.find((p) => p.id === app.you);
+  const owner = (id) => r.players.find((p) => p.leader === id);
+  lp.innerHTML = `<div class="rs-title">👑 탐험대장 고르기 <span class="hint">카드를 눌러 내 대장을 고르세요. 안 고르면 시작할 때 무작위로 정해져요.${isHost && r.players.some((p) => p.bot) ? ' 방장은 AI 이름 옆 버튼으로 AI 대장도 정할 수 있어요.' : ''}</span></div>
+    <div class="leaders">${c.leaders.map((l) => {
+      const o = owner(l.id);
+      const card = c.cards[l.card];
+      return `<div class="leader ${o ? 'taken' : ''} ${meP && meP.leader === l.id ? 'mine' : ''}" data-leader="${l.id}" style="${o ? `--pc:${o.color}` : ''}">
+        <div class="ld-icon">${l.icon}</div><div class="ld-name">${esc(l.name)}</div><div class="ld-title">${esc(l.title)}</div>
+        <div class="ld-desc">${esc(l.desc)}</div>
+        <div class="ld-card">시작 카드: <b>${esc(card.name)}</b> — ${esc(card.text.replace(/^⚡ /, '⚡'))}</div>
+        ${o ? `<div class="ld-owner">✔ ${esc(o.name)}</div>` : ''}
+        ${isHost ? r.players.filter((p) => p.bot).map((b) => `<button class="small ld-bot" data-bot="${b.id}" data-l="${l.id}">${esc(b.name.replace('AI ', ''))}에게</button>`).join('') : ''}
+      </div>`;
+    }).join('')}</div>`;
+  for (const el of lp.querySelectorAll('.leader')) {
+    el.onclick = (e) => {
+      if (e.target.closest('.ld-bot')) return;
+      const id = el.dataset.leader;
+      send({ t: 'pickLeader', leader: meP && meP.leader === id ? null : id });
+    };
+  }
+  for (const b of lp.querySelectorAll('.ld-bot')) b.onclick = () => send({ t: 'pickLeader', leader: b.dataset.l, target: b.dataset.bot });
 }
 
 function renderChat() {
@@ -421,9 +470,15 @@ function renderRow() {
   attachCardTips(row);
 }
 
-function renderResearch() {
+function trackData() {
   const st = app.state;
   const c = app.catalog;
+  return { rows: (st && st.researchRows) || c.research, glassVP: (st && st.glassVP) || c.glassVP, noteVP: (st && st.noteVP) || c.noteVP, snake: st && st.track === 'snake' };
+}
+
+function renderResearch() {
+  const st = app.state;
+  const c = { ...app.catalog, research: trackData().rows, glassVP: trackData().glassVP, noteVP: trackData().noteVP };
   const colorOf = (pid) => c.colors[st.order.indexOf(pid)];
   const rewardLabel = (r) => {
     if (!r) return '';
@@ -448,7 +503,7 @@ function renderResearch() {
   }
   const temple = c.temple.map((t) => `<span class="tt" title="${resText(t.cost)} → ${t.vp}점 (남은 ${st.templeSupply[t.id] ?? 0}장)">${t.vp}점 ${resHTML(t.cost, 12)}</span>`).join('');
   const offer = st.assistantOffer.map((id) => { const a = c.assistants[id]; return `<div class="as-card" data-as="${id}">${ico('ic-assist', 18)}<b>${esc(a.name)}</b><span>${resHTML(a.base, 13)}</span></div>`; }).join('');
-  const rhtml = `<div class="r-title" title="줄마다: 올라오는 비용 → 처음 도착 보상 · 오른쪽 숫자는 게임 끝 점수(돋보기/수첩)">🔍 연구 트랙 <span class="hint">비용 → 보상 · 점수</span></div>
+  const rhtml = `${trackData().snake ? '<div class="track-badge">🐍 뱀 신전 (어려운 면)</div>' : ''}<div class="r-title" title="줄마다: 올라오는 비용 → 처음 도착 보상 · 오른쪽 숫자는 게임 끝 점수(돋보기/수첩)">🔍 연구 트랙 <span class="hint">비용 → 보상 · 점수</span></div>
     <div class="temple-tiles" title="돋보기가 신전에 도착한 뒤 살 수 있어요"><span class="hint">🏛 신전 타일</span>${temple}</div>
     <div class="r-rows">${rows}</div>
     <div class="r-title small">👤 고용 가능한 조수 <span class="hint">(연구 2·5줄에서 1명씩)</span></div><div class="as-offer">${offer || '<span class="hint">없음</span>'}</div>`;
@@ -468,7 +523,7 @@ function renderResearch() {
 }
 
 function researchTip(r) {
-  const c = app.catalog;
+  const c = { ...app.catalog, research: trackData().rows, glassVP: trackData().glassVP, noteVP: trackData().noteVP };
   const row = c.research[r];
   const rw = row.reward;
   const rewardText = !rw ? '' : rw.kind === 'gain' ? `자원 ${resHTML(rw.res, 14)}` : rw.kind === 'assistant' ? '조수 1명 고용 (라운드마다 1번 쓰는 능력)' : rw.kind === 'upgrade' ? '조수 1명 업그레이드 (더 강한 능력, 이번 라운드 다시 사용 가능). 조수가 없으면 나침반 2' : '돋보기 도착 순서대로 6 / 4 / 2 / 1점, 이후 신전 타일 구매 가능';
@@ -490,7 +545,7 @@ function renderPlayers() {
     const assists = p.assistants.map((a) => `<span class="mini-a ${a.used ? 'used' : ''} ${a.up ? 'up' : ''}" title="${esc(c.assistants[a.id].name)}: ${esc(rewardPlain(a.up ? c.assistants[a.id].up : c.assistants[a.id].base))}${a.used ? ' (이번 라운드 사용함)' : ''}">${ico('ic-assist', 15)}${esc(c.assistants[a.id].name.split(' ')[1] || '')}</span>`).join('');
     const s = p.score;
     return `<div class="pl ${st.current === pid ? 'turn' : ''} ${p.passed ? 'passed' : ''}" data-pid="${pid}" style="--pc:${color}">
-      <div class="pl-head"><span class="dot" style="background:${color}"></span><b>${esc(pl.name)}</b>${pid === app.you ? ' <span class="hint">(나)</span>' : ''}${pl.bot ? ' <span class="tag">AI</span>' : ''}${st.first === pid ? ' <span class="tag first" title="이번 라운드 선 플레이어">선</span>' : ''}
+      <div class="pl-head"><span class="dot" style="background:${color}"></span>${p.leader ? `<span class="pl-leader" title="${esc(c.leaders.find((l) => l.id === p.leader).name)}: ${esc(c.leaders.find((l) => l.id === p.leader).desc)}">${c.leaders.find((l) => l.id === p.leader).icon}</span>` : ''}<b>${esc(pl.name)}</b>${pid === app.you ? ' <span class="hint">(나)</span>' : ''}${pl.bot ? ' <span class="tag">AI</span>' : ''}${st.first === pid ? ' <span class="tag first" title="이번 라운드 선 플레이어">선</span>' : ''}
         <span style="flex:1"></span>${p.passed ? '<span class="tag">패스</span>' : ''}<span class="pl-vp" title="연구 ${s.research} · 신전 ${s.temple} · 우상 ${s.idols} · 수호자 ${s.guardians} · 카드 ${s.cards} · 두려움 ${s.fear}">${ico('ic-vp', 16)}${s.total}</span></div>
       <div class="pl-res">${['coin', 'compass', 'tablet', 'arrow', 'gem'].map((k) => `<span>${ico(RES_ICON[k], 16)}${p.res[k]}</span>`).join('')}<span title="남은 고고학자">${ico('ic-arch', 16, '', `color:${color}`)}${p.arch}</span></div>
       <div class="pl-more"><span title="손패 / 덱 / 버림">🃏 ${p.handCount} · 덱 ${p.deckCount} · 버림 ${p.discardCount}</span><span title="우상 (안 쓴 것 / 판에 놓은 것)">${ico('ic-idol', 15)}${p.idols}${p.idolSlots ? `+${p.idolSlots}` : ''}</span>${p.temple.length ? `<span>🏛${p.temple.length}</span>` : ''}</div>
@@ -516,6 +571,7 @@ function renderMine() {
   if (setHTML($('#my-title'), `내 탐험대 <span class="hint">덱 ${p.deckCount}장 · 버림 ${p.discardCount}장</span> <button class="small" id="btn-deck">📚 내 카드 전체 보기</button>`)) $('#btn-deck').onclick = showDeck;
   const c = app.catalog;
   const extras = [];
+  if (p.leader) { const l = c.leaders.find((x) => x.id === p.leader); extras.push(`<span class="ex leader-ex ${l.power && p.leaderUsed ? 'used' : ''}" title="${esc(l.desc)}">${l.icon} ${esc(l.name)}: ${esc(l.desc.split('.')[0])}${l.power && p.leaderUsed ? ' (이번 라운드 사용함)' : ''}</span>`); }
   if (p.idols || p.idolSlots) extras.push(`<span class="ex">${ico('ic-idol', 18)} 우상 ${p.idols}개${p.idolSlots ? ` (판에 ${p.idolSlots})` : ''}${p.idolUsedRound ? ' · 이번 라운드 사용함' : ''}</span>`);
   for (const a of p.assistants) { const ad = c.assistants[a.id]; extras.push(`<span class="ex ${a.used ? 'used' : ''}">${ico('ic-assist', 18)} ${esc(ad.name)}${a.up ? '⭐' : ''}: ${resHTML(a.up ? ad.up : ad.base, 14)}${a.used ? ' (사용함)' : ''}</span>`); }
   p.guardians.forEach((g) => { const gd = c.guardians[g.id]; const b = gd.boon; extras.push(`<span class="ex ${g.used ? 'used' : ''}">${GUARDIAN_ART[g.id]} ${esc(gd.name)} 혜택: ${b.kind === 'gain' ? resHTML(b.res, 14) : b.kind === 'draw' ? `카드 ${b.n}장` : b.kind === 'research' ? '연구 1칸' : '추방'}${g.used ? ' (사용함)' : ''}</span>`); });

@@ -64,3 +64,55 @@ for (const [n, random] of [[1, false], [2, false], [3, true], [4, false], [4, tr
     }
   });
 }
+
+const mkExp = (n, seed = 1, settings = { leaders: true, expansion: true, track: 'snake' }, leaders = []) =>
+  new Game(Array.from({ length: n }, (_, i) => ({ id: 'p' + i, name: 'P' + i, bot: true, leader: leaders[i] })), { seed, settings });
+
+test('확장: 탐험대장 전용 카드가 두려움 1장을 대신함, 고른 대장이 배정됨', () => {
+  const g = mkExp(3, 1, { leaders: true }, ['captain', 'captain', 'mystic']);
+  g.setup();
+  const leaders = g.order.map((pid) => g.P(pid).leader);
+  assert.strictEqual(leaders[0], 'captain');
+  assert.notStrictEqual(leaders[1], 'captain', '같은 대장은 한 명만');
+  assert.strictEqual(leaders[2], 'mystic');
+  for (const pid of g.order) {
+    const ids = g.P(pid).deck.map((u) => g.cards[u]);
+    assert.strictEqual(ids.filter((x) => x === 'fear').length, 1);
+    assert.strictEqual(ids.length, 6);
+  }
+});
+
+test('확장: 대장 능력 (리나 탐사 할인, 비비안 물건 할인, 볼트 지프=비행기)', () => {
+  const g = mkExp(3, 2, { leaders: true }, ['explorer', 'baroness', 'mechanic']);
+  g.setup();
+  const s1 = Object.values(g.sites).find((s) => s.level === 1);
+  assert.strictEqual(g.discoverCost('p0', s1), 2);
+  assert.strictEqual(g.discoverCost('p1', s1), 3);
+  const item = g.row.find((u) => u && g.def(u).kind === 'item');
+  assert.strictEqual(g.cardCost(item, 0, 'p1'), Math.max(0, g.def(item).cost - 1));
+  const car = g.newCard('exploration');
+  g.P('p2').res.coin = 0;
+  assert.ok(g.travelPlan('p2', { plane: 1 }, [car]), '볼트: 지프 카드로 비행기 비용');
+  g.P('p1').res.coin = 0;
+  assert.ok(!g.travelPlan('p1', { plane: 1 }, [car]), '다른 대장은 불가');
+});
+
+test('확장: 뱀 신전 트랙은 비용과 점수가 다름', () => {
+  const g = mkExp(1, 1, { track: 'snake' });
+  g.setup();
+  assert.deepStrictEqual(g.researchCost(7, {}), { gem: 2, arrow: 1 });
+  g.P('p0').glass = 7;
+  assert.strictEqual(g.score('p0').research, 20);
+});
+
+for (const n of [1, 2, 4]) {
+  test(`확장 전부 켜고 봇 ${n}명 게임이 끝까지 진행`, async () => {
+    for (const seed of [3, 9]) {
+      const g = mkExp(n, seed);
+      attachBots(g, { random: seed === 9 });
+      await Promise.race([g.run(), new Promise((_, rej) => setTimeout(() => rej(new Error('시간 초과')), 20000))]);
+      assert.ok(g.result);
+      for (const pid of g.order) { const r = g.P(pid).res; for (const k of D.RES) assert.ok(r[k] >= 0, `${k} 음수`); }
+    }
+  });
+}

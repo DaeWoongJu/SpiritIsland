@@ -129,6 +129,14 @@ const Guide = (() => {
         <dt>두려움 카드는 어떻게 없애요?</dt><dd>"추방" 효과가 있는 카드(연구 지원금, 제례용 북, 뼈 피리 등)나 경비병 조수, 악어 왕 수호자의 혜택을 쓰세요.</dd>
         <dt>게임은 언제 끝나요?</dt><dd>5라운드가 끝나면 바로 점수를 계산해요.</dd>
       </dl>` },
+    { title: '📦 확장 — 탐험대장 · 뱀 신전 · 새 카드', body: () => `
+      <p>대기실의 <b>⚙ 게임 설정</b>에서 방장이 켤 수 있어요. (원작 확장 「탐험대장들」과 판 뒷면의 구조를 따라 만든 자체 제작 내용)</p>
+      <ul>
+        <li><b>👑 탐험대장</b>: 6명 중 한 명을 골라요. 대장마다 <b>고유 능력</b>이 있고, 두려움 카드 1장 대신 <b>대장 전용 카드</b>로 시작해요.
+          <div class="g-leaders">${(app.catalog ? app.catalog.leaders : []).map((l) => `<div>${l.icon} <b>${esc(l.name)}</b> <span class="hint">${esc(l.title)}</span><br><span class="hint">${esc(l.desc)}</span></div>`).join('')}</div></li>
+        <li><b>🐍 뱀 신전 연구 트랙</b>: 판 뒷면. 연구 비용(특히 보석)이 비싸지만, 돋보기를 신전까지 올리면 20점! 익숙해진 뒤에 도전하세요.</li>
+        <li><b>📦 새 카드·수호자·조수·유적</b>: 무전기, 모터보트, 화물 비행기, 재규어 가면 등 새 카드와 수호자 4종, 조수 3명, 유적 4곳이 섞여요.</li>
+      </ul>` },
     { title: '🏆 점수 계산', body: () => `
       <table class="g-table">
         <tr><td>🔍 연구 트랙</td><td>돋보기 줄 점수 + 수첩 줄 점수</td></tr>
@@ -153,7 +161,7 @@ const Guide = (() => {
 
   /** 한 장짜리 빠른 참고표 */
   function reference() {
-    const c = app.catalog;
+    const c = { ...app.catalog, research: trackData().rows, glassVP: trackData().glassVP, noteVP: trackData().noteVP };
     const rows = c.research.slice(1).map((r) => `<tr><td>${r.row === 7 ? '🏛 신전' : `${r.row}줄`}</td><td>${resHTML(r.cost, 15)}</td><td>${!r.reward ? '' : r.reward.kind === 'gain' ? resHTML(r.reward.res, 15) : r.reward.kind === 'assistant' ? '👤 조수 고용' : r.reward.kind === 'upgrade' ? '⭐ 조수 강화' : '도착 보너스 6/4/2/1점'}</td><td>${c.glassVP[r.row]} / ${c.noteVP[r.row]}</td></tr>`).join('');
     $('#guide .modal-inner').innerHTML = `<div class="g-head"><h2>📋 빠른 참고표</h2><button class="small" data-g="close">닫기 ✕</button></div>
       <div class="ref-grid">
@@ -218,6 +226,7 @@ function optionDesc(o, p, st, me) {
     temple: '<b>🏛 신전 타일 구매</b><br>돋보기가 신전에 도착하면 살 수 있어요.<br>11점 (석판+화살촉+보석) · 6점 (화살촉 2+석판) · 2점 (석판 2)',
     pass: '<b>이번 라운드 패스</b><br>이번 라운드에서 더 이상 차례를 받지 않아요. 모든 사람이 패스하면 라운드가 끝나요.<br><span class="hint">아직 할 수 있는 행동이 있다면 패스하기 전에 해 두세요!</span>',
     end: '<b>턴 끝내기</b><br>주요 행동을 했으니 다음 사람에게 차례를 넘겨요.',
+    leader: (() => { const l = me.leader && app.catalog.leaders.find((x) => x.id === me.leader); return l ? `<b>${l.icon} ${esc(l.name)}의 능력</b> (자유 행동, 라운드마다 1번)<br>${esc(l.desc)}` : ''; })(),
     idol: `<b>🗿 우상 놓기</b> (자유 행동, 라운드마다 1번)<br>우상 1개를 판에 놓고 동전 2 / 나침반 2 / 석판 1 / 화살촉 1 / 카드 2장 중 하나를 얻어요.<br>대신 그 우상의 점수가 <b>3점 → 1점</b>이 돼요.`,
     cancel: '방금 고른 행동을 취소하고 행동 고르기로 돌아가요. (아직 아무 비용도 내지 않았어요)',
   };

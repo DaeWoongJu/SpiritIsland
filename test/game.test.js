@@ -255,3 +255,35 @@ test('침략자 단계: 직접 넘기기면 모두 다음을 눌러야 진행', 
   await pr;
   assert.strictEqual(done, true);
 });
+
+test('쉬운 난이도: 연습·체험 설정 값', () => {
+  const g = new Game([{ id: 'a', name: 'A', spiritId: 'river' }], { seed: 1, settings: { difficulty: { preset: 'learn' } } });
+  assert.strictEqual(g.fear.poolSize, 2);
+  assert.strictEqual(g.invader.deck.filter((c) => c.stage === 1).length, 5, '1단계 카드 +2');
+  g.setup();
+  assert.ok(g.energyPerTurn('a') >= 2, '턴당 에너지 +1');
+  // 황폐가 번지지 않음
+  const id = Object.keys(g.lands).find((k) => !Object.values(g.lands[k].presence).some(Boolean));
+  g.lands[id].blight = 1;
+  const before = Object.values(g.lands).reduce((a, x) => a + x.blight, 0);
+  g.addBlight(id);
+  assert.strictEqual(Object.values(g.lands).reduce((a, x) => a + x.blight, 0), before + 1);
+});
+
+test('쉬운 난이도: 체험 모드는 지지 않음 (봇 게임 여러 판)', async () => {
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const g = new Game([{ id: 'a', name: 'A', spiritId: 'earth' }, { id: 'b', name: 'B', spiritId: 'lightning' }], { seed, settings: { difficulty: { preset: 'sandbox' } } });
+    attachBots(g);
+    const r = await g.run();
+    assert.ok(r.win, `seed ${seed}: ${r.reason}`);
+  }
+});
+
+test('쉬운 난이도: 연습 모드 봇 게임이 끝까지 진행', async () => {
+  for (const seed of [1, 2, 3]) {
+    const g = new Game([{ id: 'a', name: 'A', spiritId: 'river' }], { seed, settings: { difficulty: { preset: 'learn' } } });
+    attachBots(g);
+    const r = await g.run();
+    assert.ok(!r.reason.startsWith('서버 오류'), r.reason);
+  }
+});

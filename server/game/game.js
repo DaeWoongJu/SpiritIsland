@@ -92,6 +92,8 @@ class Game extends EventEmitter {
     const s2 = this.shuffle([...['M', 'J', 'S', 'W'].map((t) => ({ stage: 2, terrains: [t] })), { stage: 2, coastal: true, terrains: [] }]).slice(0, 4);
     const s3 = this.shuffle(['MJ', 'MS', 'MW', 'JS', 'JW', 'SW'].map((s) => ({ stage: 3, terrains: s.split('') }))).slice(0, 5);
     s1.splice(0, Math.min(s1.length, d.removeStage1 || 0));
+    // 쉬운 난이도: 1단계 카드를 더 넣어 침략자가 천천히 강해진다 (기존 순서 뒤에 추가)
+    for (let i = 0; i < (d.addStage1 || 0); i++) s1.push({ stage: 1, terrains: [['M', 'J', 'S', 'W'][(i + s1.length) % 4]] });
     s2.splice(0, Math.min(s2.length - 1, d.removeStage2 || 0));
     this.invader = { deck: [...s1, ...s2, ...s3], ravage: null, build: null, lastExplore: null, discard: [] };
 
@@ -284,7 +286,7 @@ class Game extends EventEmitter {
   energyPerTurn(pid) {
     const s = this.spirits[pid];
     const def = this.spiritDef(pid);
-    let e = def.energyTrack[s.energyRevealed - 1] + (def.energyBonus || 0);
+    let e = def.energyTrack[s.energyRevealed - 1] + (def.energyBonus || 0) + ((this.diff && this.diff.turnEnergy) || 0);
     if (def.energyPerSacred) e += Math.min(3, this.sacredLands(pid).length);
     return e;
   }
@@ -514,6 +516,10 @@ class Game extends EventEmitter {
   }
 
   takeBlightFromPool() {
+    if (this.blight.pool <= 0 && this.diff.noLose) {
+      if (!this.blight.warned) { this.blight.warned = true; this.log('⚠ 황폐 카드가 비었습니다! (체험 모드라 지지 않고 계속합니다. 실제 게임이라면 위험한 상황이에요)'); }
+      return;
+    }
     if (this.blight.pool <= 0) {
       if (!this.blight.flipped) {
         this.blight.flipped = true;
@@ -546,9 +552,13 @@ class Game extends EventEmitter {
       if (this.spiritDef(pid).blightFear && this.presenceCount(pid, landId) > 0) { this.log(`${this.pname(pid)}: 땅의 복수 — 공포 +1`); this.addFear(1); }
     }
     for (const pid of this.playerIds) {
-      if (this.presenceCount(pid, landId) > 0 && !this.spiritDef(pid).blightImmune) this.destroyPresence(pid, landId, 1, '황폐');
+      if (this.presenceCount(pid, landId) > 0 && !this.spiritDef(pid).blightImmune) {
+        if (this.diff.presenceSafe) this.log(`${this.pname(pid)}: ${landId}의 존재는 쉬운 난이도라 황폐로 파괴되지 않습니다 (원래 규칙: 존재 1개 파괴)`);
+        else this.destroyPresence(pid, landId, 1, '황폐');
+      }
     }
-    if (had && depth < 20) {
+    if (had && this.diff.noCascade) this.log(`${landId}: 이미 황폐가 있던 곳이지만, 쉬운 난이도라 황폐가 번지지 않습니다 (원래 규칙: 옆 지역으로 번짐)`);
+    else if (had && depth < 20) {
       const target = [...l.adj].sort((a, b) => this.lands[a].blight - this.lands[b].blight || a.localeCompare(b))[0];
       if (target) {
         this.log(`${landId}: 황폐가 ${target}(으)로 번집니다!`);
@@ -579,7 +589,7 @@ class Game extends EventEmitter {
       this.log(`🌋 ${this.pname(pid)}: 분출! ${landId}에 피해 ${2 * k}`);
       this.damageInvaders(landId, 2 * k);
     }
-    if (this.islandPresence(pid) === 0) this.endGame(false, `${this.pname(pid)}의 존재가 섬에서 모두 사라졌습니다.`);
+    if (this.islandPresence(pid) === 0 && !this.diff.noLose) this.endGame(false, `${this.pname(pid)}의 존재가 섬에서 모두 사라졌습니다.`);
   }
 
   // ───────────── 승패 ─────────────
@@ -1217,7 +1227,10 @@ class Game extends EventEmitter {
       }
     }
     // 탐험
-    if (!this.invader.deck.length) this.endGame(false, '침략자 덱이 바닥났습니다. 시간이 다 되었습니다.');
+    if (!this.invader.deck.length) {
+      if (this.diff.noLose) this.endGame(true, '체험 완료! 침략자 덱이 모두 끝날 때까지 섬을 지켰어요. 이제 "연습"이나 "입문" 난이도에 도전해 보세요.');
+      this.endGame(false, '침략자 덱이 바닥났습니다. 시간이 다 되었습니다.');
+    }
     const card = this.invader.deck.shift();
     this.log(`탐험: [${invaderCardName(card)}] (${card.stage}단계)`);
     const exploreTargets = Object.values(this.lands).filter((land) => this.cardMatches(card, land)

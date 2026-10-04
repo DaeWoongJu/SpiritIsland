@@ -21,8 +21,11 @@ const BOT_NAMES = ['AI 탐험가 로라', 'AI 교수 헨리', 'AI 사냥꾼 카�
 const cardInfo = (c) => ({ id: c.id, kind: c.kind, name: c.name, cost: c.cost || 0, vp: c.vp, travel: c.travel, text: c.text, free: !!c.free });
 const CATALOG = {
   cards: Object.fromEntries(Object.values(D.CARD_MAP).map((c) => [c.id, cardInfo(c)])),
-  guardians: Object.fromEntries(D.GUARDIANS.map((g) => [g.id, g])),
-  assistants: Object.fromEntries(D.ASSISTANTS.map((a) => [a.id, a])),
+  guardians: Object.fromEntries([...D.GUARDIANS, ...D.EXP_GUARDIANS].map((g) => [g.id, g])),
+  assistants: Object.fromEntries([...D.ASSISTANTS, ...D.EXP_ASSISTANTS].map((a) => [a.id, a])),
+  leaders: D.LEADERS.map((l) => ({ id: l.id, name: l.name, title: l.title, icon: l.icon, desc: l.desc, card: l.card, power: !!l.power })),
+  tracks: Object.values(D.TRACKS).map((t) => ({ id: t.id, name: t.name, desc: t.desc })),
+  expansionInfo: { items: D.EXP_ITEMS.length, artifacts: D.EXP_ARTIFACTS.length, guardians: D.EXP_GUARDIANS.length, assistants: D.EXP_ASSISTANTS.length, sites: D.EXP_SITE_TILES_1.length + D.EXP_SITE_TILES_2.length },
   research: D.RESEARCH,
   glassVP: D.GLASS_VP, noteVP: D.NOTE_VP,
   temple: D.TEMPLE_TILES, templeArrival: D.TEMPLE_ARRIVAL_VP,
@@ -63,8 +66,8 @@ function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m
 
 function roomInfo(room) {
   return {
-    code: room.code, hostId: room.hostId, started: !!room.game, solo: !!room.solo,
-    players: room.players.map((p, i) => ({ id: p.id, name: p.name, bot: !!p.bot, color: COLORS[i], connected: p.bot || !!(p.ws && p.ws.readyState === 1) })),
+    code: room.code, hostId: room.hostId, started: !!room.game, solo: !!room.solo, settings: room.settings,
+    players: room.players.map((p, i) => ({ id: p.id, name: p.name, bot: !!p.bot, leader: p.leader || null, color: COLORS[i], connected: p.bot || !!(p.ws && p.ws.readyState === 1) })),
     chat: room.chat.slice(-50), maxPlayers: MAX_PLAYERS,
   };
 }
@@ -108,7 +111,7 @@ function scheduleBots(room) {
 
 function startGame(room) {
   // 차례 순서는 방에 들어온 순서 그대로 (첫 플레이어가 시작, 뒤 플레이어는 시작 자원이 조금 더 많음)
-  const game = new Game(room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot })));
+  const game = new Game(room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, leader: p.leader || null })), { settings: room.settings });
   room.game = game;
   room.botTimers = {};
   game.on('update', () => broadcastState(room));
@@ -132,7 +135,7 @@ setInterval(cleanupRooms, 5 * 60 * 1000).unref();
 
 function newRoom(extra = {}) {
   const code = makeCode();
-  const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), ...extra };
+  const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), settings: { leaders: false, expansion: false, track: 'bird' }, ...extra };
   rooms.set(code, r);
   return r;
 }
@@ -191,7 +194,6 @@ wss.on('connection', (ws) => {
           for (let i = 0; i < n; i++) addBot(r);
         }
         attach(r, p);
-        if (msg.t === 'solo') startGame(r);
         break;
       }
       case 'join': {
@@ -243,6 +245,28 @@ wss.on('connection', (ws) => {
         const j = i + (msg.dir === 'up' ? -1 : 1);
         if (i < 0 || j < 0 || j >= room.players.length) return;
         [room.players[i], room.players[j]] = [room.players[j], room.players[i]];
+        broadcastRoom(room);
+        break;
+      }
+      case 'setSettings': {
+        if (!room || room.game) return;
+        if (room.hostId !== player.id) return fail('방장만 설정을 바꿀 수 있습니다.');
+        const st = msg.settings || {};
+        if (typeof st.leaders === 'boolean') room.settings.leaders = st.leaders;
+        if (typeof st.expansion === 'boolean') room.settings.expansion = st.expansion;
+        if (D.TRACKS[st.track]) room.settings.track = st.track;
+        broadcastRoom(room);
+        break;
+      }
+      case 'pickLeader': {
+        if (!room || room.game) return;
+        const id = msg.leader === null || D.LEADERS.some((l) => l.id === msg.leader) ? msg.leader : undefined;
+        if (id === undefined) return;
+        // 방장은 AI의 대장도 정할 수 있다
+        const target = msg.target && room.hostId === player.id ? room.players.find((x) => x.id === msg.target && x.bot) : player;
+        if (!target) return;
+        if (id && room.players.some((x) => x !== target && x.leader === id)) return fail('다른 사람이 이미 고른 탐험대장입니다.');
+        target.leader = id;
         broadcastRoom(room);
         break;
       }

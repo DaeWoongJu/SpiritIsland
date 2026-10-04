@@ -417,3 +417,31 @@ button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 16p
   *, *::before, *::after { animation-duration: .01s !important; animation-iteration-count: 1 !important; transition-duration: .01s !important; }
   .board-fx { display: none; }
 }
+
+/* ───── 대기실 설정 / 탐험대장 ───── */
+.room-settings, .leader-pick { margin: 12px 0; padding: 10px 12px; border-radius: 14px; background: #0004; border: 1px solid var(--line); }
+.rs-title { font-weight: 800; color: var(--gold2); margin-bottom: 8px; }
+.rs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rs-opt { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; background: #0005; border: 1px solid var(--line); cursor: pointer; line-height: 1.5; transition: background .25s, border-color .25s; }
+.rs-opt.on { background: #3a3018; border-color: var(--gold); }
+.rs-opt.track { grid-column: 1 / -1; flex-direction: column; cursor: default; }
+.rs-radio { display: block; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.rs-radio.on { background: #3a3018; }
+.leaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.leader { position: relative; padding: 10px; border-radius: 14px; background: linear-gradient(180deg, #3a2e1c, #241b10); border: 2px solid #5a4628; cursor: pointer; line-height: 1.45; transition: transform .2s, border-color .2s, box-shadow .2s; }
+.leader:hover { transform: translateY(-3px); box-shadow: 0 8px 20px #000a; }
+.leader.taken { border-color: var(--pc); }
+.leader.mine { box-shadow: 0 0 0 2px var(--gold2), 0 0 20px #d8a84066; }
+.ld-icon { font-size: calc(30px * var(--fs)); }
+.ld-name { font-weight: 800; color: var(--gold2); font-size: calc(16px * var(--fs)); }
+.ld-title { font-size: calc(12.5px * var(--fs)); color: var(--muted); margin-bottom: 4px; }
+.ld-desc { font-size: calc(13.5px * var(--fs)); }
+.ld-card { margin-top: 6px; font-size: calc(12.5px * var(--fs)); color: #d8e8c0; }
+.ld-owner { position: absolute; top: 8px; right: 10px; font-weight: 800; color: var(--pc); font-size: calc(13px * var(--fs)); }
+.ld-bot { margin-top: 6px; margin-right: 4px; }
+.pl-leader { font-size: calc(16px * var(--fs)); margin-right: 2px; }
+.leader-ex { border-color: #b8985a; background: #3a2e1488; }
+.track-badge { text-align: center; font-weight: 800; color: #b8f0a0; background: #1e3a1e; border: 1px solid #5a9a4a; border-radius: 10px; padding: 3px; margin-bottom: 6px; }
+.g-leaders { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+.g-leaders > div { padding: 6px 8px; border-radius: 10px; background: #0005; border: 1px solid var(--line); }
+@media (max-width: 820px) { .rs-grid, .g-leaders { grid-template-columns: 1fr; } }

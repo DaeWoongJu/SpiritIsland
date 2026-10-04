@@ -186,7 +186,88 @@ const HAND_SIZE = 5;
 const ARCHAEOLOGISTS = 2;
 const ROW_SIZE = 6;
 
-const ALL_CARDS = [...START, FEAR, ...ITEMS, ...ARTIFACTS];
+// ═════════════ 확장: 탐험대장들 (원작 확장 「Expedition Leaders」의 구조를 따른 자체 제작 내용) ═════════════
+// 탐험대장: 고유 능력 + 두려움 1장 대신 들어가는 전용 시작 카드
+const LEADER_CARDS = [
+  { id: 'lecture_notes', name: '강의 노트', travel: 'boot', vp: 0, text: '석판 1을 얻습니다.', effect: gain({ tablet: 1 }) },
+  { id: 'wrench', name: '정비 공구', travel: 'car', vp: 0, free: true, text: '⚡ 동전 1을 얻습니다.', effect: gain({ coin: 1 }) },
+  { id: 'walking_stick', name: '등산 지팡이', travel: 'boot', vp: 0, text: '나침반 2를 얻습니다.', effect: gain({ compass: 2 }) },
+  { id: 'ship_log', name: '항해 일지', travel: 'ship', vp: 0, text: '동전 1을 얻고 카드 1장을 뽑습니다.', effect: async (g, pid) => { g.gain(pid, { coin: 1 }); g.drawCards(pid, 1); } },
+  { id: 'crystal_ball', name: '수정 구슬', travel: 'plane', vp: 0, text: '카드 1장을 추방할 수 있고, 나침반 1을 얻습니다.', effect: async (g, pid) => { await g.exileCard(pid); g.gain(pid, { compass: 1 }); } },
+  { id: 'family_jewels', name: '가문의 보석', travel: 'ship', vp: 0, text: '동전 2를 얻습니다.', effect: gain({ coin: 2 }) },
+].map((c) => ({ kind: 'start', leader: true, ...c }));
+
+const LEADERS = [
+  { id: 'professor', name: '교수 아델라', title: '연구가', icon: '🎓', card: 'lecture_notes', passive: 'researchCoin', desc: '연구할 때마다 동전 1을 얻어요. 연구 트랙을 빨리 오르고 싶은 사람에게.' },
+  { id: 'mechanic', name: '기계공 볼트', title: '정비사', icon: '🔧', card: 'wrench', passive: 'carAsPlane', desc: '지프 아이콘 카드를 비행기처럼 쓸 수 있어요 (배·비행기 이동 비용도 지프 카드로). 멀리 있는 유적에 가기 쉬워요.' },
+  { id: 'explorer', name: '탐험가 리나', title: '개척자', icon: '🧭', card: 'walking_stick', passive: 'discoverDiscount', desc: '새 유적을 탐사할 때 나침반을 1개 덜 내요. 우상과 새 유적을 노리는 사람에게.' },
+  { id: 'captain', name: '선장 마르코', title: '항해사', icon: '⚓', card: 'ship_log', power: { coin: 1, compass: 1 }, desc: '라운드마다 1번 자유 행동 "선원 소집": 동전 1 + 나침반 1.' },
+  { id: 'mystic', name: '신비주의자 세라', title: '점술가', icon: '🔮', card: 'crystal_ball', power: 'mysticExile', desc: '라운드마다 1번 자유 행동 "정화 의식": 카드 1장을 추방하고, 두려움 카드였다면 화살촉 1.' },
+  { id: 'baroness', name: '남작 부인 비비안', title: '후원자', icon: '💎', card: 'family_jewels', passive: 'itemDiscount', res: { coin: 1 }, desc: '물건 카드를 동전 1 싸게 사요. 시작 동전 +1.' },
+];
+
+const EXP_ITEMS = [
+  { id: 'radio', name: '무전기', cost: 2, vp: 1, travel: 'plane', text: '동전 1과 나침반 1을 얻습니다.', effect: gain({ coin: 1, compass: 1 }) },
+  { id: 'motorboat', name: '모터보트', cost: 3, vp: 1, travel: 'ship', can: (g, pid) => g.P(pid).arch > 0 && g.digTargets(pid, { free: true, maxLevel: 0 }).length > 0, text: '이동 비용 없이 기본 유적에 발굴합니다.', effect: async (g, pid) => g.doDig(pid, { free: true, maxLevel: 0 }) },
+  { id: 'field_kit', name: '야전 장비', cost: 2, vp: 0, travel: 'boot', text: '석판 1과 나침반 2 중 하나를 고릅니다.', effect: async (g, pid) => g.chooseGain(pid, [{ tablet: 1 }, { compass: 2 }]) },
+  { id: 'camp_stove', name: '휴대용 화로', cost: 1, vp: 0, travel: 'car', free: true, text: '⚡ 나침반 1을 얻습니다.', effect: gain({ compass: 1 }) },
+  { id: 'guidebook', name: '탐험 안내서', cost: 2, vp: 1, travel: 'boot', text: '카드 2장을 뽑고, 카드 1장을 추방할 수 있습니다.', effect: async (g, pid) => { g.drawCards(pid, 2); await g.exileCard(pid); } },
+  { id: 'rifle', name: '사냥총', cost: 4, vp: 2, travel: 'car', text: '화살촉 2를 얻습니다.', effect: gain({ arrow: 2 }) },
+  { id: 'gold_pan', name: '사금 접시', cost: 3, vp: 1, travel: 'ship', text: '동전 3을 내고 보석 1과 나침반 1을 얻을 수 있습니다.', effect: async (g, pid) => g.convert(pid, { coin: 3 }, { gem: 1, compass: 1 }) },
+  { id: 'sextant', name: '육분의', cost: 3, vp: 2, travel: 'ship', text: '나침반 2와 동전 1을 얻습니다.', effect: gain({ compass: 2, coin: 1 }) },
+  { id: 'cargo_plane', name: '화물 비행기', cost: 4, vp: 2, travel: 'plane', can: (g, pid) => g.buyTargets(pid, { kinds: ['item'], discount: 3 }).length > 0, text: '물건 카드를 동전 3 싸게 삽니다.', effect: async (g, pid) => g.doBuy(pid, { kinds: ['item'], discount: 3 }) },
+  { id: 'field_notes', name: '현장 노트', cost: 3, vp: 1, travel: 'boot', can: (g, pid) => g.researchTokens(pid, { discount: { tablet: 2 } }).length > 0, text: '연구 1칸 진행 (비용 중 석판 2개까지 면제).', effect: async (g, pid) => g.doResearch(pid, { discount: { tablet: 2 } }) },
+].map((c) => ({ kind: 'item', exp: 'leaders', ...c }));
+
+const EXP_ARTIFACTS = [
+  { id: 'sun_mirror', name: '태양 거울', cost: 2, vp: 1, travel: 'plane', text: '보석 1을 내고 석판 2와 화살촉 1을 얻을 수 있습니다.', effect: async (g, pid) => g.convert(pid, { gem: 1 }, { tablet: 2, arrow: 1 }) },
+  { id: 'stone_compass', name: '돌 나침반', cost: 3, vp: 2, travel: 'boot', text: '나침반 4를 얻습니다.', effect: gain({ compass: 4 }) },
+  { id: 'jaguar_mask', name: '재규어 가면', cost: 3, vp: 2, travel: 'car', can: (g, pid) => g.overcomeTargets(pid, 1).length > 0, text: '수호자 하나를 제압합니다 (비용 중 아무 자원 1개 면제).', effect: async (g, pid) => g.doOvercome(pid, { discount: 1 }) },
+  { id: 'ancestor_bones', name: '조상의 뼈', cost: 2, vp: 1, travel: 'boot', text: '카드 1장을 추방할 수 있고, 화살촉 1을 얻습니다.', effect: async (g, pid) => { await g.exileCard(pid); g.gain(pid, { arrow: 1 }); } },
+  { id: 'serpent_ring', name: '뱀 반지', cost: 4, vp: 3, travel: 'ship', text: '보석 1과 석판 1을 얻습니다.', effect: gain({ gem: 1, tablet: 1 }) },
+  { id: 'thunder_drum', name: '천둥 북', cost: 3, vp: 1, travel: 'plane', text: '카드 3장을 뽑습니다.', effect: async (g, pid) => g.drawCards(pid, 3) },
+  { id: 'golden_mask', name: '황금 가면', cost: 4, vp: 4, travel: 'car', text: '동전 2를 얻습니다.', effect: gain({ coin: 2 }) },
+  { id: 'eternal_flame', name: '영원의 불꽃', cost: 4, vp: 2, travel: 'plane', can: (g, pid) => g.researchTokens(pid, { discount: { gem: 1, arrow: 1 } }).length > 0, text: '연구 1칸 진행 (비용 중 보석 1개와 화살촉 1개 면제).', effect: async (g, pid) => g.doResearch(pid, { discount: { gem: 1, arrow: 1 } }) },
+].map((c) => ({ kind: 'artifact', exp: 'leaders', ...c }));
+
+const EXP_GUARDIANS = [
+  { id: 'g13', name: '용암 도마뱀', cost: { arrow: 1, tablet: 2 }, boon: { kind: 'gain', res: { gem: 1 } } },
+  { id: 'g14', name: '안개 늑대', cost: { compass: 2, arrow: 1 }, boon: { kind: 'draw', n: 2 } },
+  { id: 'g15', name: '황금 풍뎅이 떼', cost: { coin: 3, arrow: 1 }, boon: { kind: 'research' } },
+  { id: 'g16', name: '고목의 정령', cost: { tablet: 2, gem: 1 }, boon: { kind: 'gain', res: { coin: 2, arrow: 1 } } },
+];
+const EXP_ASSISTANTS = [
+  { id: 'a9', name: '사진가 유키', base: { compass: 1, coin: 1 }, up: { compass: 2, coin: 1 } },
+  { id: 'a10', name: '고고학자 노아', base: { tablet: 1 }, up: { tablet: 1, arrow: 1 } },
+  { id: 'a11', name: '조종사 레이', base: { coin: 2 }, up: { coin: 2, compass: 1 } },
+];
+const EXP_SITE_TILES_1 = [
+  { id: 's1_9', name: '폭포 뒤의 동굴', reward: { compass: 3, coin: 1 } },
+  { id: 's1_10', name: '뱀 석상의 뜰', reward: { arrow: 2 } },
+];
+const EXP_SITE_TILES_2 = [
+  { id: 's2_7', name: '하늘 사원', reward: { gem: 2 } },
+  { id: 's2_8', name: '잃어버린 도서관', reward: { tablet: 2, draw: 2 } },
+];
+const EXP_IDOLS = [{ id: 'i11', reward: { arrow: 1, compass: 1 } }, { id: 'i12', reward: { gem: 1 } }];
+
+// ═════════════ 뱀 신전 연구 트랙 (판 뒷면: 비용이 비싸지만 점수가 큼) ═════════════
+const RESEARCH_SNAKE = [
+  { row: 0, cost: {}, reward: null },
+  { row: 1, cost: { tablet: 1 }, reward: { kind: 'gain', res: { compass: 2 } } },
+  { row: 2, cost: { tablet: 1, arrow: 1 }, reward: { kind: 'assistant' } },
+  { row: 3, cost: { tablet: 2 }, reward: { kind: 'gain', res: { gem: 1 } } },
+  { row: 4, cost: { arrow: 2 }, reward: { kind: 'upgrade' } },
+  { row: 5, cost: { gem: 1, tablet: 1 }, reward: { kind: 'assistant' } },
+  { row: 6, cost: { gem: 1, arrow: 1, tablet: 1 }, reward: { kind: 'gain', res: { gem: 1, coin: 2 } } },
+  { row: 7, cost: { gem: 2, arrow: 1 }, reward: { kind: 'temple' } },
+];
+const TRACKS = {
+  bird: { id: 'bird', name: '새 신전 (기본)', desc: '기본 면. 비용이 적당하고 배우기 쉬워요.', rows: null, glassVP: null, noteVP: null },
+  snake: { id: 'snake', name: '뱀 신전 (어려움)', desc: '판 뒷면. 연구 비용이 비싸지만 점수가 훨씬 커요.', rows: RESEARCH_SNAKE, glassVP: [0, 1, 3, 5, 8, 11, 15, 20], noteVP: [0, 1, 2, 3, 5, 7, 9, 12] },
+};
+
+const ALL_CARDS = [...START, FEAR, ...ITEMS, ...ARTIFACTS, ...LEADER_CARDS, ...EXP_ITEMS, ...EXP_ARTIFACTS];
 const CARD_MAP = Object.fromEntries(ALL_CARDS.map((c) => [c.id, c]));
 
 module.exports = {
@@ -195,4 +276,5 @@ module.exports = {
   BASIC_SITES, LOCATIONS, SITE_TILES_1, SITE_TILES_2, IDOLS, IDOL_SLOT_CHOICES, IDOL_VP, IDOL_PLACED_VP,
   GUARDIANS, GUARDIAN_VP, RESEARCH, GLASS_VP, NOTE_VP, TEMPLE_TILES, TEMPLE_ARRIVAL_VP, ASSISTANTS,
   START_RES, ROUNDS, HAND_SIZE, ARCHAEOLOGISTS, ROW_SIZE,
+  LEADERS, LEADER_CARDS, EXP_ITEMS, EXP_ARTIFACTS, EXP_GUARDIANS, EXP_ASSISTANTS, EXP_SITE_TILES_1, EXP_SITE_TILES_2, EXP_IDOLS, RESEARCH_SNAKE, TRACKS,
 };
