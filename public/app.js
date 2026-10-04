@@ -462,7 +462,8 @@ function stepFoot(step) {
   const total = app.state.players.length;
   const acks = step.acks || [];
   const mine = (app.mySeats || [app.you]).every((id) => acks.includes(id));
-  return `<div class="ib-next-row">${mine ? `<span class="hint">다른 플레이어를 기다리는 중… (${acks.length}/${total})</span>` : `<button class="primary ib-next" data-ack="${step.no}">다 봤어요, 다음 ▶</button>${total > 1 ? `<span class="hint">${acks.length}/${total}명 확인</span>` : ''}<span class="hint">(Enter 키)</span>`}</div>`;
+  const waitMsg = acks.length >= total ? (app.prompt ? '효과를 처리하는 중… 위 안내에 따라 지도에서 골라 주세요' : '효과를 처리하는 중…') : `다른 플레이어를 기다리는 중… (${acks.length}/${total})`;
+  return `<div class="ib-next-row">${mine ? `<span class="hint">${waitMsg}</span>` : `<button class="primary ib-next" data-ack="${step.no}">다 봤어요, 다음 ▶</button>${total > 1 ? `<span class="hint">${acks.length}/${total}명 확인</span>` : ''}<span class="hint">(Enter 키)</span>`}</div>`;
 }
 function bindStepFoot(b) {
   const btn = b.querySelector('[data-ack]');
@@ -474,16 +475,35 @@ function renderInvaderBanner() {
   // 지도 영역이 좁으면 배너를 화면 가운데에 띄움
   const b = $('#inv-banner');
   const wrap = document.querySelector('.map-wrap');
-  const float = !b.classList.contains('hidden') && wrap && (wrap.clientHeight < 440 || wrap.clientWidth < 760);
+  const float = !b.classList.contains('hidden') && !b.classList.contains('ib-mini') && wrap && (wrap.clientHeight < 440 || wrap.clientWidth < 760);
   b.classList.toggle('ib-float', !!float);
   if (wrap) wrap.classList.toggle('ib-float-on', !!float);
 }
 
+// 배너 접기 상태: 내가 고를 것이 있으면(공포 카드 효과 등) 자동으로 작게 접어서 지도를 가리지 않게 함
+function bannerMinimized(step) {
+  if (app.bannerToggle && app.bannerToggle.no === step.no) return app.bannerToggle.min;
+  return !!app.prompt;
+}
 function renderInvaderBannerInner() {
   const b = $('#inv-banner');
   const step = app.state.invaderStep;
   if (!step || app.state.result) { b.classList.add('hidden'); return; }
   const meta = { fear: ['😱', '공포 카드'], ravage: ['⚔', '약탈'], ravageLand: ['⚔', '약탈'], build: ['🏠', '건설'], explore: ['🧭', '탐험'], advance: ['➡', '카드 이동'] }[step.kind] || ['•', ''];
+  const toggle = (min) => { app.bannerToggle = { no: step.no, min }; Sound.play('click'); renderInvaderBanner(); };
+  if (bannerMinimized(step)) {
+    const label = step.kind === 'ravageLand' && step.report ? `⚔ 약탈 계산 — ${step.report.landId}` : `${meta[0]} ${meta[1]}${step.card ? ` [${esc(step.card)}]` : ''}`;
+    b.className = `inv-banner ib-${step.kind === 'ravageLand' ? 'ravage' : step.kind} ib-mini`;
+    b.innerHTML = `<span class="ib-mini-title">${label}</span>${app.prompt ? '<span class="ib-mini-hint">지도에서 고르세요</span>' : ''}<button class="small" data-open>▾ 펼치기</button>`;
+    b.querySelector('[data-open]').onclick = () => toggle(false);
+    return;
+  }
+  const addFold = () => {
+    const btn = document.createElement('button');
+    btn.className = 'small ib-fold'; btn.textContent = '▴ 접기'; btn.title = '배너를 작게 접어 지도를 봅니다';
+    btn.onclick = () => toggle(true);
+    b.prepend(btn);
+  };
   if (step.kind === 'ravageLand' && step.report) {
     const r = step.report;
     const l = app.state.lands[r.landId];
@@ -493,12 +513,14 @@ function renderInvaderBannerInner() {
       <div class="ib-foot"><button class="small" data-combat>⚔ 전투 계산법 자세히</button></div>${stepFoot(step)}`;
     b.querySelector('[data-combat]').onclick = openCombatHelp;
     bindStepFoot(b);
+    addFold();
     return;
   }
   b.className = `inv-banner ib-${step.kind}`;
   b.innerHTML = `<div class="ib-title">${meta[0]} 침략자 단계 — ${meta[1]}${step.card ? ` <span class="ib-card">[${esc(step.card)}]</span>` : ''}</div>
     <div class="ib-text">${esc(step.text)}</div>${step.lands && step.lands.length ? `<div class="ib-lands">${step.lands.map((id) => `<span>${id}</span>`).join('')}</div>` : ''}${stepFoot(step)}`;
   bindStepFoot(b);
+  addFold();
 }
 
 function renderGame() {

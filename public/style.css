@@ -646,3 +646,10 @@ body.hand-collapsed .hand-area { display: none; }
 .inn-now.on b { color: #fff; }
 .inn-now.off { background: #00000055; color: #c9c3b1; }
 .inn-now.used { background: #00000055; color: #9fb0a8; }
+
+/* 침략자 배너 접힌 모습: 지도 왼쪽 위의 작은 띠 (지역 선택을 가리지 않음) */
+.inv-banner.ib-mini, .map-wrap.coach-on .inv-banner.ib-mini { top: 10px; left: 10px; right: auto; transform: none; width: auto; max-width: min(520px, calc(100% - 20px)); padding: 6px 8px 6px 12px; border-radius: 999px; display: flex; align-items: center; gap: 10px; text-align: left; opacity: .92; box-shadow: 0 4px 16px #0009; animation: none; }
+.inv-banner.ib-mini .ib-mini-title { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-banner.ib-mini .ib-mini-hint { color: var(--gold); font-size: .85em; white-space: nowrap; }
+.inv-banner.ib-mini button { flex: none; }
+.inv-banner .ib-fold { position: sticky; top: 0; float: right; margin: -4px -8px 0 6px; opacity: .85; }
