@@ -1,5 +1,5 @@
 #!/bin/bash
-# 정령섬 자동 업데이트 (macOS / Linux). 실패해도 현재 버전으로 계속한다.
+# 정령섬·아르낙 자동 업데이트 (macOS / Linux). 실패해도 현재 버전으로 계속한다.
 main() {
   local ROOT REPO BRANCH SHA CUR TMP SRC
   ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +17,7 @@ main() {
   (cd "$SRC" && tar --exclude=node_modules --exclude=.git -cf - .) | (cd "$ROOT" && tar -xf -)
   echo "$SHA" > "$ROOT/.version"
   rm -rf "$TMP"
-  chmod +x "$ROOT"/start-*.sh "$ROOT"/start-mac.command "$ROOT"/scripts/*.sh 2>/dev/null
+  chmod +x "$ROOT"/start-*.sh "$ROOT"/start-*.command "$ROOT"/scripts/*.sh 2>/dev/null
   echo " 업데이트 완료! 필요한 파일을 설치합니다..."
   (cd "$ROOT" && npm install --omit=dev --no-audit --no-fund)
 }

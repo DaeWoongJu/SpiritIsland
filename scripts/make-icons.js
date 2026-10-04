@@ -1,11 +1,13 @@
 'use strict';
 // public/icons/icon.svg 로부터 PNG(192/512)와 Windows용 icon.ico 를 생성한다. (playwright 필요)
-// 사용법: node scripts/make-icons.js
+// 사용법: node scripts/make-icons.js            (정령섬: public/icons)
+//         node scripts/make-icons.js arnak      (아르낙: arnak/public/icon.svg → icon.ico)
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const dir = path.join(__dirname, '..', 'public', 'icons');
+const ARNAK = process.argv[2] === 'arnak';
+const dir = ARNAK ? path.join(__dirname, '..', 'arnak', 'public') : path.join(__dirname, '..', 'public', 'icons');
 const svg = fs.readFileSync(path.join(dir, 'icon.svg'), 'utf8');
 
 (async () => {

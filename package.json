@@ -1,7 +1,7 @@
 {
   "name": "spirit-island-online",
   "version": "0.1.0",
-  "description": "정령섬(Spirit Island) 협력 보드게임을 친구와 함께 브라우저에서 플레이하는 온라인 멀티플레이 구현",
+  "description": "정령섬(Spirit Island)·아르낙 스타일 탐험 보드게임을 친구와 함께 브라우저에서 플레이하는 온라인 멀티플레이 구현",
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {
@@ -10,8 +10,12 @@
     "dev": "node --watch server/index.js",
     "share": "npx -y cloudflared tunnel --url http://localhost:3000",
     "icons": "node scripts/make-icons.js",
-    "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e.js"
+    "test": "node --test test/*.test.js arnak/test/*.test.js",
+    "test:e2e": "node test/e2e.js",
+    "arnak": "node arnak/server/index.js",
+    "arnak:play": "node arnak/server/index.js --open",
+    "share:arnak": "npx -y cloudflared tunnel --url http://localhost:3100",
+    "test:e2e:arnak": "node arnak/test/e2e.js"
   },
   "engines": {
     "node": ">=18"

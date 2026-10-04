@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>아르낙 온라인</title>
+  <meta name="theme-color" content="#1c140c">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Noto+Sans+KR:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- 첫 화면 -->
+  <section id="home" class="screen">
+    <div class="home-card">
+      <div class="logo"><img src="/icon.svg" width="104" height="104" alt=""></div>
+      <h1>아르낙 온라인</h1>
+      <p class="sub">잊혀진 섬의 유적을 탐험하고, 수호자를 물리치고, 고대 신전의 비밀을 밝혀내세요.<br>친구와 각자의 컴퓨터에서 함께 하는 1~4인 경쟁 탐험 게임</p>
+      <label class="field">내 이름 <input id="in-name" maxlength="16" placeholder="탐험가 이름"></label>
+      <div class="home-actions">
+        <button id="btn-create" class="primary big">🏕 새 방 만들기</button>
+        <div class="join-row"><input id="in-code" maxlength="4" placeholder="방 코드"><button id="btn-join">입장</button></div>
+      </div>
+      <div class="solo-box">
+        <div class="solo-title">🤖 혼자 하기 — AI와 대결</div>
+        <div class="solo-row">
+          <button class="solo" data-bots="1">AI 1명</button>
+          <button class="solo" data-bots="2">AI 2명</button>
+          <button class="solo" data-bots="3">AI 3명</button>
+          <button class="solo" data-bots="0">혼자 연습</button>
+        </div>
+      </div>
+      <div class="home-links"><button class="btn-guide link">📖 게임 방법 (처음이라면 꼭!)</button><button class="btn-sound link">🔊 소리</button></div>
+      <div id="lan" class="hint"></div>
+    </div>
+  </section>
+
+  <!-- 대기실 -->
+  <section id="room" class="screen hidden">
+    <div class="room-card">
+      <div class="room-head"><h2>대기실</h2><div class="code-box">방 코드 <b id="room-code"></b><button id="btn-copy" class="small">초대 문구 복사</button></div></div>
+      <p class="hint" id="invite-hint"></p>
+      <div id="room-players" class="room-players"></div>
+      <div class="room-actions">
+        <button id="btn-add-bot" class="small">🤖 AI 추가</button>
+        <span style="flex:1"></span>
+        <button class="btn-guide small">📖 게임 방법</button>
+        <button id="btn-leave" class="small">나가기</button>
+        <button id="btn-start" class="primary">게임 시작 ▶</button>
+      </div>
+      <div class="chat-box"><div id="room-chat" class="chat-log"></div><form class="chat-form" data-chat><input maxlength="200" placeholder="채팅"><button>보내기</button></form></div>
+    </div>
+  </section>
+
+  <!-- 게임 -->
+  <section id="game" class="screen hidden">
+    <header id="topbar"></header>
+    <div id="prompt" class="prompt"></div>
+    <div id="hint" class="hint-bar"></div>
+    <main class="game-main">
+      <div class="board-col">
+        <div class="board-wrap"><div id="board" class="board"></div></div>
+      </div>
+      <aside class="side-col">
+        <div id="research" class="research"></div>
+      </aside>
+      <aside class="players-col">
+        <div id="players" class="players"></div>
+        <div class="tabs"><button data-tab="log" class="on">기록</button><button data-tab="chat">채팅</button></div>
+        <div id="log" class="log"></div>
+        <div id="chat" class="chat hidden"><div id="game-chat" class="chat-log"></div><form class="chat-form" data-chat><input maxlength="200" placeholder="채팅"><button>보내기</button></form></div>
+      </aside>
+    </main>
+    <footer class="my-area">
+      <div class="my-head"><span id="my-title"></span><span id="my-extras" class="my-extras"></span><span id="play" class="play"></span></div>
+      <div class="my-cards">
+        <div class="hand-zone"><div class="sub-title">✋ 내 손패 <span class="hint">빛나는 카드를 누르면 사용</span></div><div id="hand" class="hand"></div></div>
+        <div class="row-zone"><div class="sub-title">🛒 카드 줄 <span class="hint">🌙 왼쪽 유물(나침반) · 오른쪽 물건(동전)</span></div><div id="card-row" class="card-row"></div></div>
+      </div>
+    </footer>
+  </section>
+
+  <!-- 카드 선택 창 (이동 비용 / 추방) -->
+  <div id="modal" class="modal hidden"><div class="modal-inner"></div></div>
+  <!-- 게임 방법 -->
+  <div id="guide" class="modal hidden"><div class="modal-inner guide"></div></div>
+  <!-- 결과 -->
+  <div id="result" class="modal hidden"><div class="modal-inner result"></div></div>
+  <!-- 소리 -->
+  <div id="sound-panel" class="modal hidden"><div class="modal-inner small-modal">
+    <h2>🔊 소리 설정</h2>
+    <label class="set-check"><input type="checkbox" id="snd-music"> 배경음악</label>
+    <label class="set-row">음악 크기 <input type="range" id="snd-music-vol" min="0" max="1" step="0.05"></label>
+    <label class="set-check"><input type="checkbox" id="snd-sfx"> 효과음</label>
+    <label class="set-row">효과음 크기 <input type="range" id="snd-sfx-vol" min="0" max="1" step="0.05"></label>
+    <div class="actions"><button id="snd-test" class="small">소리 테스트</button><button id="snd-close" class="primary">닫기</button></div>
+  </div></div>
+
+  <div id="tip" class="tip hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/icons.js"></script>
+  <script src="/audio.js"></script>
+  <script src="/guide.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

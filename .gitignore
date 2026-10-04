@@ -8,3 +8,4 @@ launcher/*.res
 *.exe.old
 custom-art/*
 !custom-art/README.md
+.shortcut-created-arnak
