@@ -341,3 +341,61 @@ test('번개의 은총: 권능 선택 창을 띄워 둔 정령에게도 선택�
   if (pr) g.answer('p0', pr.id, 'done');
   await phase;
 });
+
+test('힘의 선물(반복): 이미 권능 단계를 끝낸 다른 정령도 바로 카드를 한 번 더 쓸 수 있음', async () => {
+  const g = mkGame(['earth', 'river'], 5);
+  g.setup();
+  const E = g.spirits.p0;
+  const R = g.spirits.p1;
+  E.played = [];
+  E.bonusElements = { sun: 1, earth: 2, plant: 2 }; // 힘의 선물 1단계 (비용 1 이하 반복)
+  R.played = [{ id: 'boon_of_vigor', used: true }]; // 이미 쓴 빠른 카드 (비용 0)
+  const tick = () => new Promise((r) => setImmediate(r));
+  const phase = g.powerPhase('fast');
+  await tick();
+  assert.strictEqual(g.currentPrompt('p1'), null);
+  let pr = g.currentPrompt('p0');
+  g.answer('p0', pr.id, 'innate:gift_of_strength');
+  await tick();
+  pr = g.currentPrompt('p0');
+  g.answer('p0', pr.id, 'p1');
+  await tick();
+  const rp = g.currentPrompt('p1');
+  assert.ok(rp && rp.options.some((o) => o.value === 'repeat:0'), JSON.stringify(rp));
+  g.answer('p1', rp.id, 'repeat:0');
+  for (let i = 0; i < 10; i++) {
+    await tick();
+    for (const q of ['p1', 'p0']) {
+      const p = g.currentPrompt(q);
+      if (!p) continue;
+      if (p.kind === 'power') g.answer(q, p.id, 'done');
+      else if (p.type === 'option') g.answer(q, p.id, p.options[0].value);
+      else if (p.type === 'land') g.answer(q, p.id, p.options[0]);
+    }
+  }
+  await phase;
+  assert.strictEqual(R.repeats.length, 0, '반복 1회 사용됨');
+});
+
+test('반복: 비용 한도가 여러 개면 낮은 한도부터 사용', async () => {
+  const g = mkGame(['river'], 6);
+  g.setup();
+  const R = g.spirits.p0;
+  R.played = [{ id: 'boon_of_vigor', used: true }];
+  R.repeats = [{ maxCost: 6 }, { maxCost: 1 }];
+  const tick = () => new Promise((r) => setImmediate(r));
+  const phase = g.powerPhase('fast');
+  await tick();
+  let pr = g.currentPrompt('p0');
+  g.answer('p0', pr.id, 'repeat:0');
+  for (let i = 0; i < 10; i++) {
+    await tick();
+    const p = g.currentPrompt('p0');
+    if (!p) continue;
+    if (p.kind === 'power') { g.answer('p0', p.id, 'done'); continue; }
+    if (p.type === 'option') g.answer('p0', p.id, p.options[0].value);
+    else if (p.type === 'land') g.answer('p0', p.id, p.options[0]);
+  }
+  await phase;
+  assert.deepStrictEqual(R.repeats, [{ maxCost: 6 }]);
+});

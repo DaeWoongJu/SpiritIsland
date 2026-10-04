@@ -1108,22 +1108,36 @@ class Game extends EventEmitter {
     this.powerAbort = null;
   }
 
-  /** 느린 권능을 빠르게 쓸 수 있는 횟수 추가. 빠른 권능 단계라면 바로 쓸 수 있도록 선택지를 다시 열어 준다 */
+  /** 느린 권능을 빠르게 쓸 수 있는 횟수 추가 (다른 정령의 선택지는 권능을 쓴 뒤 refreshOtherPowers 가 갱신) */
   grantFastAllowance(pid, n) {
-    const s = this.spirits[pid];
-    s.fastAllowance += n;
-    if (this.phase !== 'fast' || !this.powerLoops) return;
-    const stack = this.prompts[pid] || [];
-    const waiting = stack.findIndex((e) => e.prompt.kind === 'power');
-    if (waiting >= 0) {
-      // 권능 선택 창을 띄워 둔 상태 → 새 선택지로 다시 묻기
-      const [entry] = stack.splice(waiting, 1);
-      entry.resolve('__refresh');
-      this.changed();
-    } else if (this.powerLoopDone && this.powerLoopDone[pid]) {
-      // 이미 빠른 권능 단계를 끝낸 정령 → 다시 열어 줌
-      s.status = '권능 사용 중';
-      this.powerLoops[pid] = this.startPowerLoop(pid, 'fast');
+    this.spirits[pid].fastAllowance += n;
+  }
+
+  /**
+   * 권능 하나를 쓴 뒤: 그 효과로 다른 정령이 새로 쓸 수 있는 권능이 생겼으면 (번개의 은총·힘의 선물·
+   * 옆으로 흐르는 시간·권능의 폭풍 같은 '다시 쓰기', 원소를 줘서 내재 권능이 열리는 경우 등) 바로 반영한다.
+   */
+  refreshOtherPowers(pid, speed) {
+    if (!this.powerLoops || this.result) return;
+    for (const q of this.playerIds) {
+      if (q === pid) continue;
+      const avail = this.availablePowers(q, speed).map((o) => o.value);
+      const stack = this.prompts[q] || [];
+      const waiting = stack.findIndex((e) => e.prompt.kind === 'power');
+      if (waiting >= 0) {
+        // 권능 선택 창을 띄워 둔 상태 → 선택지가 달라졌으면 새로 묻기
+        const shown = stack[waiting].prompt.options.map((o) => o.value).filter((v) => v !== 'done');
+        if (shown.length !== avail.length || avail.some((v) => !shown.includes(v))) {
+          const [entry] = stack.splice(waiting, 1);
+          entry.resolve('__refresh');
+          this.changed();
+        }
+      } else if (this.powerLoopDone[q] && avail.some((v) => !(this.powerDoneOpts[q] || []).includes(v))) {
+        // 이미 이번 권능 단계를 끝낸 정령에게 새 권능이 생김 → 다시 열어 줌
+        this.spirits[q].status = '권능 사용 중';
+        this.log(`${this.pname(q)}: 새로 쓸 수 있는 권능이 생겨 다시 고를 수 있습니다.`);
+        this.powerLoops[q] = this.startPowerLoop(q, speed);
+      }
     }
   }
 
@@ -1137,13 +1151,14 @@ class Game extends EventEmitter {
   async powerLoop(pid, speed) {
     const s = this.spirits[pid];
     (this.powerLoopDone ||= {})[pid] = false;
+    (this.powerDoneOpts ||= {})[pid] = [];
     for (;;) {
       const opts = this.availablePowers(pid, speed);
       if (!opts.length) break;
       opts.push({ value: 'done', label: `${speed === 'fast' ? '빠른' : '느린'} 권능 단계 종료` });
       const v = await this.askOption(pid, `${speed === 'fast' ? '빠른' : '느린'} 권능: 사용할 권능을 고르세요`, opts, { kind: 'power' });
       if (v === '__refresh') continue;
-      if (v === 'done') break;
+      if (v === 'done') { this.powerDoneOpts[pid] = opts.map((o) => o.value); break; }
       const [kind, key] = v.split(':');
       const opt = opts.find((o) => o.value === v);
       if (kind === 'card' || kind === 'repeat') {
@@ -1154,11 +1169,14 @@ class Game extends EventEmitter {
             entry.used = true;
             if (opt.convert) s.fastAllowance--;
           } else {
+            // 조건을 만족하는 반복 중 가장 비용 한도가 낮은 것을 사용 (높은 한도는 남겨 둠)
             const c = POWER_MAP[entry.id];
-            const ri = s.repeats.findIndex((r) => r.maxCost >= c.cost);
-            s.repeats.splice(ri, 1);
+            let ri = -1;
+            s.repeats.forEach((r, k) => { if (r.maxCost >= c.cost && (ri < 0 || r.maxCost < s.repeats[ri].maxCost)) ri = k; });
+            if (ri >= 0) s.repeats.splice(ri, 1);
           }
         }
+        this.refreshOtherPowers(pid, speed);
       } else if (kind === 'innate') {
         const inn = this.spiritDef(pid).innates.find((i) => i.id === key);
         const lv = this.innateLevels(pid, inn);
@@ -1167,6 +1185,7 @@ class Game extends EventEmitter {
           s.innatesUsed[inn.id] = true;
           if (opt.convert) s.fastAllowance--;
         }
+        this.refreshOtherPowers(pid, speed);
       }
     }
     s.status = '대기 중';
