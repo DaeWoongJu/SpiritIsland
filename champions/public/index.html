@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>히어로 챔피언스</title>
+  <meta name="theme-color" content="#14102a">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- 첫 화면 -->
+  <section id="home" class="screen">
+    <div class="home-card">
+      <div class="logo"><img src="/icon.svg" width="112" height="112" alt=""></div>
+      <h1>히어로 챔피언스</h1>
+      <p class="sub">영웅이 되어 친구와 함께 악당의 계략을 막아내는 <b>협력 카드게임</b> (1~4인)<br>영웅 모습으로 싸우고, 일상 모습으로 회복하며, 악당을 쓰러뜨리세요!</p>
+      <label class="field">내 이름 <input id="in-name" maxlength="16" placeholder="히어로 이름"></label>
+      <div class="home-actions">
+        <button id="btn-create" class="primary big">🏙 새 방 만들기</button>
+        <div class="join-row"><input id="in-code" maxlength="4" placeholder="방 코드"><button id="btn-join">입장</button></div>
+      </div>
+      <div class="solo-box">
+        <div class="solo-title">🤖 혼자 하기 <span class="hint">(대기실에서 영웅·악당·난이도를 고르고 시작)</span></div>
+        <div class="solo-row">
+          <button class="solo" data-bots="0">영웅 1명으로</button>
+          <button class="solo" data-bots="1">+ AI 동료 1명</button>
+          <button class="solo" data-bots="2">+ AI 동료 2명</button>
+        </div>
+      </div>
+      <div class="home-links"><button class="btn-guide link">📖 게임 방법 (처음이라면 꼭!)</button><button class="btn-sound link">⚙ 설정 (소리 · 글자 크기)</button></div>
+      <div id="lan" class="hint"></div>
+    </div>
+  </section>
+
+  <!-- 대기실 -->
+  <section id="room" class="screen hidden">
+    <div class="room-card">
+      <div class="room-head"><h2>작전 대기실</h2><div class="code-box">방 코드 <b id="room-code"></b><button id="btn-copy" class="small">초대 문구 복사</button></div></div>
+      <p class="hint" id="invite-hint"></p>
+      <div id="room-players" class="room-players"></div>
+      <div id="room-settings" class="room-settings"></div>
+      <div id="hero-pick" class="hero-pick"></div>
+      <div class="room-actions">
+        <button id="btn-add-bot" class="small">🤖 AI 동료 추가</button>
+        <span style="flex:1"></span>
+        <button class="btn-guide small">📖 게임 방법</button>
+        <button id="btn-leave" class="small">나가기</button>
+        <button id="btn-start" class="primary">출동! ▶</button>
+      </div>
+      <div class="chat-box"><div id="room-chat" class="chat-log"></div><form class="chat-form" data-chat><input maxlength="200" placeholder="채팅"><button>보내기</button></form></div>
+    </div>
+  </section>
+
+  <!-- 게임 -->
+  <section id="game" class="screen hidden">
+    <header id="topbar"></header>
+    <div id="prompt" class="prompt"></div>
+    <div id="hint" class="hint-bar"></div>
+    <main class="game-main">
+      <div class="field-col">
+        <div id="villain-zone" class="villain-zone"></div>
+        <div id="hero-zone" class="hero-zone"></div>
+      </div>
+      <aside class="side-col">
+        <div class="tabs"><button data-tab="log" class="on">기록</button><button data-tab="chat">채팅</button></div>
+        <div id="log" class="log"></div>
+        <div id="chat" class="chat hidden"><div id="game-chat" class="chat-log"></div><form class="chat-form" data-chat><input maxlength="200" placeholder="채팅"><button>보내기</button></form></div>
+      </aside>
+    </main>
+    <footer class="my-area">
+      <div class="my-head"><span id="my-title"></span></div>
+      <div id="hand" class="hand"></div>
+    </footer>
+  </section>
+
+  <div id="modal" class="modal hidden"><div class="modal-inner"></div></div>
+  <div id="guide" class="modal hidden"><div class="modal-inner guide"></div></div>
+  <div id="result" class="modal hidden"><div class="modal-inner result"></div></div>
+  <div id="sound-panel" class="modal hidden"><div class="modal-inner small-modal">
+    <h2>⚙ 설정</h2>
+    <div class="set-sec">🔠 글자 크기</div>
+    <div class="fs-row"><button class="small fs-btn" data-fs="1">보통</button><button class="small fs-btn" data-fs="1.12">크게</button><button class="small fs-btn" data-fs="1.25">아주 크게</button></div>
+    <div class="set-sec">🎵 배경음악</div>
+    <label class="set-check"><input type="checkbox" id="snd-music"> 배경음악 켜기</label>
+    <label class="set-row">음악 크기 <input type="range" id="snd-music-vol" min="0" max="1" step="0.05"></label>
+    <div class="now-playing">지금 재생 중: <b id="snd-track">-</b> <button class="small" id="snd-next">다음 곡 ▶</button></div>
+    <label class="set-check"><input type="checkbox" id="snd-shuffle"> 몇 분마다 다른 곡으로 자동 변경 (무작위)</label>
+    <div id="snd-tracks" class="track-list"></div>
+    <div class="set-sec">🔔 효과음</div>
+    <label class="set-check"><input type="checkbox" id="snd-sfx"> 효과음 켜기</label>
+    <label class="set-row">효과음 크기 <input type="range" id="snd-sfx-vol" min="0" max="1" step="0.05"></label>
+    <div class="actions"><button id="snd-test" class="small">소리 테스트</button><button id="snd-close" class="primary">닫기</button></div>
+  </div></div>
+
+  <div id="now-playing-toast" class="np-toast hidden"></div>
+  <div id="fx-layer" class="fx-layer"></div>
+  <div id="tip" class="tip hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/audio.js"></script>
+  <script src="/guide.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
