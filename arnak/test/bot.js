@@ -15,8 +15,8 @@ function attachBots(game, { random = false } = {}) {
         if (!pr) continue;
         let v;
         if (random && pr.type === 'option') {
-          const ok = pr.options.filter((o) => !o.disabled && (pr.kind !== 'turn' || o.value !== 'pass' || game.rand() < 0.15));
-          v = (ok.length ? ok : pr.options.filter((o) => !o.disabled))[Math.floor(game.rand() * (ok.length || 1))].value;
+          const ok = pr.options.filter((o) => !o.disabled && (pr.kind !== 'turn' || o.value !== 'pass' || game.botRand() < 0.15));
+          v = (ok.length ? ok : pr.options.filter((o) => !o.disabled))[Math.floor(game.botRand() * (ok.length || 1))].value;
         } else v = botAnswer(game, pid, pr);
         const err = game.answer(pid, pr.id, v);
         if (err) throw new Error(`봇 응답 오류: ${err} (${pr.kind} ${JSON.stringify(v)})`);

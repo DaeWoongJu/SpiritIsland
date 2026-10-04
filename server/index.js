@@ -13,6 +13,9 @@ const { PRESETS, ADVERSARIES } = require('./game/adversaries');
 const { POWERS } = require('./game/powers');
 const { FEAR_CARDS } = require('./game/fear');
 const { TERRAIN_NAMES } = require('./game/boards');
+const savegame = require('../shared/savegame');
+
+const saves = savegame.store('spirit-island');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -149,11 +152,42 @@ function roomInfo(room) {
     code: room.code,
     hostId: room.hostId,
     started: !!room.game,
+    loading: !!room.loading,
+    resume: room.resume ? resumeInfo(room) : null,
     players: room.players.map((p) => ({ id: p.id, name: p.name, spiritIds: p.spiritIds, connected: !!(p.ws && p.ws.readyState === 1) })),
     settings: room.settings,
     maxSpirits: MAX_SPIRITS,
     chat: room.chat.slice(-50),
   };
+}
+
+/** 이어하기 대기실 정보: 저장된 자리(플레이어)와 누가 앉았는지 */
+function resumeInfo(room) {
+  const sv = room.resume;
+  return {
+    id: sv.id, savedAt: sv.savedAt, summary: sv.summary,
+    slots: sv.roster.map((s) => ({ id: s.id, name: s.name, spiritIds: s.spiritIds, taken: room.players.some((p) => p.id === s.id) })),
+  };
+}
+
+function saveList() { return saves.list(); }
+
+/** 지금 게임을 파일로 저장 (선택할 때마다 자동으로) */
+function saveNow(room) {
+  const g = room.game;
+  if (!g || g.result || room.tutorial || room.loading || !room.saveId) return;
+  clearTimeout(room.saveTimer);
+  saves.write({
+    v: 1, id: room.saveId, savedAt: Date.now(), seed: g.seed,
+    settings: room.settings, roster: room.roster,
+    seats: room.seats.map((x) => ({ id: x.id, owner: x.slot, name: x.name, spiritId: x.spiritId })),
+    history: g.history,
+    summary: { turn: g.turn, spirits: g.players.map((p) => p.spiritId), preset: room.settings.difficulty.preset, adversary: room.settings.difficulty.adversary, level: room.settings.difficulty.level },
+  });
+}
+function scheduleSave(room) {
+  clearTimeout(room.saveTimer);
+  room.saveTimer = setTimeout(() => saveNow(room), 300);
 }
 
 function broadcastRoom(room) {
@@ -178,25 +212,71 @@ function broadcastState(room) {
   for (const p of room.players) send(p.ws, stateMsg(room, p, state));
 }
 
-function startGame(room) {
-  // 한 사람이 정령을 여러 개 조종할 수 있다 — 정령마다 좌석(seat)을 만든다
-  room.seats = [];
-  for (const p of room.players) {
-    p.spiritIds.forEach((sid, k) => {
-      room.seats.push({ id: `${p.id}-${k}`, owner: p.id, name: p.spiritIds.length > 1 ? `${p.name}·${k + 1}` : p.name, spiritId: sid });
-    });
+async function startGame(room) {
+  const sv = room.resume;
+  if (sv) {
+    // 이어하기: 저장된 좌석 그대로. 아무도 앉지 않은 자리는 방장이 대신 조종
+    room.settings = sv.settings;
+    room.roster = sv.roster;
+    room.seats = sv.seats.map((x) => ({ ...x, slot: x.owner, owner: room.players.some((p) => p.id === x.owner) ? x.owner : room.hostId }));
+  } else {
+    // 한 사람이 정령을 여러 개 조종할 수 있다 — 정령마다 좌석(seat)을 만든다
+    room.seats = [];
+    for (const p of room.players) {
+      p.spiritIds.forEach((sid, k) => {
+        room.seats.push({ id: `${p.id}-${k}`, owner: p.id, slot: p.id, name: p.spiritIds.length > 1 ? `${p.name}·${k + 1}` : p.name, spiritId: sid });
+      });
+    }
+    room.roster = room.players.map((p) => ({ id: p.id, name: p.name, spiritIds: [...p.spiritIds] }));
   }
-  const game = new Game(room.seats.map((x) => ({ id: x.id, name: x.name, spiritId: x.spiritId })), {
-    settings: room.settings,
+  const pace = {
     stepDelay: { slow: 5000, normal: 2500 }[room.settings.pace] || 1500,
     stepManual: room.tutorial || !room.settings.pace || room.settings.pace === 'manual',
+  };
+  const game = new Game(room.seats.map((x) => ({ id: x.id, name: x.name, spiritId: x.spiritId })), {
+    settings: room.settings,
+    stepDelay: sv ? 0 : pace.stepDelay,
+    stepManual: sv ? false : pace.stepManual,
     tutorial: !!room.tutorial,
-    seed: room.tutorial ? 20261003 : undefined,
+    seed: sv ? sv.seed : room.tutorial ? 20261003 : undefined,
   });
   room.game = game;
+  room.saveId = sv ? sv.id : savegame.newSaveId(room.code);
+  room.resume = null;
+  savegame.record(game, () => scheduleSave(room));
+  game.run().then(() => {
+    if (room.game !== game) return;
+    if (game.result && room.saveId) { clearTimeout(room.saveTimer); saves.remove(room.saveId); }
+    broadcastState(room);
+  });
+  if (sv) {
+    // 저장된 선택들을 빠르게 다시 진행해서 저장 시점으로 돌아감
+    room.loading = true;
+    broadcastRoom(room);
+    const r = await savegame.replay(game, sv.history || [], () => { game.stepDelay = pace.stepDelay; game.stepManual = pace.stepManual; });
+    room.loading = false;
+    if (room.game !== game) return;
+    if (!r.ok) {
+      room.chat.push({ from: '안내', text: `저장 기록 일부(${r.at + 1}번째 선택부터)를 되살리지 못해 그 시점부터 이어서 진행합니다.`, at: Date.now() });
+    }
+    game.log('💾 저장된 게임을 불러왔습니다. 이어서 진행합니다.');
+    saveNow(room);
+  }
   game.on('update', () => broadcastState(room));
   broadcastRoom(room);
-  game.run().then(() => broadcastState(room));
+  broadcastState(room);
+}
+
+/** 이어하기 대기실에서 내 자리 정하기: 이름이 같은 빈자리 → 아무 빈자리 */
+function freeSlot(room, name, except) {
+  const free = room.resume.roster.filter((s) => s.id !== except && !room.players.some((p) => p.id === s.id));
+  return free.find((s) => s.name === name) || free[0] || null;
+}
+function sitAt(room, player, slot) {
+  if (room.hostId === player.id) room.hostId = slot.id;
+  player.id = slot.id;
+  player.spiritIds = [...slot.spiritIds];
+  if (player.token) sessions.set(player.token, { roomCode: room.code, playerId: slot.id });
 }
 
 function cleanupRooms() {
@@ -241,7 +321,7 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'hello': {
         token = typeof msg.token === 'string' && msg.token.length >= 16 ? msg.token : crypto.randomBytes(16).toString('hex');
-        send(ws, { t: 'welcome', token, catalog: { ...CATALOG, customArt: customArt() }, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`) });
+        send(ws, { t: 'welcome', token, catalog: { ...CATALOG, customArt: customArt() }, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`), saves: saveList() });
         const sess = sessions.get(token);
         if (sess && rooms.has(sess.roomCode)) {
           const r = rooms.get(sess.roomCode);
@@ -278,6 +358,72 @@ wss.on('connection', (ws) => {
         startGame(r);
         break;
       }
+      case 'listSaves': {
+        send(ws, { t: 'saves', list: saveList() });
+        break;
+      }
+      case 'deleteSave': {
+        if (room) return;
+        saves.remove(msg.id);
+        send(ws, { t: 'saves', list: saveList() });
+        break;
+      }
+      case 'resume': {
+        // 저장된 게임으로 새 방을 만들고 대기실에서 친구들을 기다림
+        if (!token) return fail('먼저 연결하세요.');
+        if (room) return fail('이미 방에 있습니다.');
+        const sv = saves.load(msg.id);
+        if (!sv || !Array.isArray(sv.roster) || !sv.roster.length) return fail('저장된 게임을 찾을 수 없습니다.');
+        const code = makeCode();
+        const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), settings: sv.settings, seats: [], resume: sv };
+        const name = cleanName(msg.name);
+        const slot = freeSlot(r, name);
+        const p = { id: slot.id, name, spiritIds: [...slot.spiritIds], token, ws: null };
+        r.players.push(p);
+        r.hostId = p.id;
+        rooms.set(code, r);
+        attach(r, p);
+        break;
+      }
+      case 'claimSlot': {
+        if (!room || room.game || !room.resume) return;
+        const slot = room.resume.roster.find((s) => s.id === msg.slot);
+        if (!slot || room.players.some((p) => p.id === slot.id)) return fail('이미 누가 앉은 자리입니다.');
+        sitAt(room, player, slot);
+        broadcastRoom(room);
+        break;
+      }
+      case 'cancelResume': {
+        if (!room || room.game || !room.resume) return;
+        if (room.hostId !== player.id) return fail('방장만 할 수 있습니다.');
+        room.resume = null;
+        room.settings = cleanSettings(room.settings, DEFAULT_SETTINGS());
+        broadcastRoom(room);
+        break;
+      }
+      case 'quitGame': {
+        // 게임 도중 그만두기: 저장하고 대기실로 (나중에 '이어하기'로 계속)
+        if (!room || !room.game) return;
+        if (room.hostId !== player.id) return fail('방장만 게임을 그만둘 수 있습니다.');
+        if (room.loading) return fail('불러오는 중입니다. 잠시 후 다시 시도하세요.');
+        const g = room.game;
+        const savable = !g.result && !room.tutorial;
+        if (savable) saveNow(room);
+        clearTimeout(room.saveTimer);
+        g.removeAllListeners();
+        room.game = null;
+        const sv = savable ? saves.load(room.saveId) : null;
+        // 게임 중에 '나가기'로 완전히 떠난 사람은 방에서 정리
+        room.players = room.players.filter((p) => p.id === room.hostId || sessions.has(p.token));
+        if (sv) {
+          room.resume = sv;
+          // 지금 방에 없는 저장 자리는 비워 둠, 방에 있는데 자리가 없는 사람은 빈자리로
+          for (const p of room.players) if (!sv.roster.some((s) => s.id === p.id)) { const slot = freeSlot(room, p.name, p.id); if (slot) sitAt(room, p, slot); }
+          room.chat.push({ from: '안내', text: `게임을 저장했습니다 (${g.turn}턴). '저장된 게임 이어하기'로 계속할 수 있어요.`, at: Date.now() });
+        }
+        broadcastRoom(room);
+        break;
+      }
       case 'join': {
         if (!token) return fail('먼저 연결하세요.');
         if (room) return fail('이미 방에 있습니다.');
@@ -287,6 +433,11 @@ wss.on('connection', (ws) => {
         if (r.game) return fail('이미 게임이 시작된 방입니다.');
         if (r.players.length >= MAX_PLAYERS) return fail(`방이 가득 찼습니다 (최대 ${MAX_PLAYERS}명).`);
         const p = { id: crypto.randomBytes(6).toString('hex'), name: cleanName(msg.name), spiritIds: [], token, ws: null };
+        if (r.resume) {
+          const slot = freeSlot(r, p.name);
+          if (!slot) return fail('저장된 게임의 자리가 모두 찼습니다.');
+          p.id = slot.id; p.spiritIds = [...slot.spiritIds];
+        }
         r.players.push(p);
         attach(r, p);
         break;
@@ -313,6 +464,7 @@ wss.on('connection', (ws) => {
       case 'pickSpirit': {
         // mode: 'replace'(이 정령 하나만) | 'add'(추가로 조종) | 'remove'
         if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 정령을 바꿀 수 없습니다.');
         const mode = ['replace', 'add', 'remove'].includes(msg.mode) ? msg.mode : 'replace';
         let sid = msg.spiritId;
         if (sid === 'random') {
@@ -335,6 +487,7 @@ wss.on('connection', (ws) => {
       }
       case 'setSettings': {
         if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 설정을 바꿀 수 없습니다.');
         if (room.hostId !== player.id) return fail('방장만 설정을 바꿀 수 있습니다.');
         room.settings = cleanSettings(msg.settings, room.settings);
         // 꺼진 확장판의 정령은 선택 해제
@@ -345,13 +498,14 @@ wss.on('connection', (ws) => {
       case 'start': {
         if (!room || room.game) return;
         if (room.hostId !== player.id) return fail('방장만 게임을 시작할 수 있습니다.');
+        if (room.resume) { startGame(room); break; }
         if (room.players.some((p) => !p.spiritIds.length)) return fail('모든 플레이어가 정령을 하나 이상 골라야 합니다.');
         if (totalSpirits(room) > MAX_SPIRITS) return fail(`정령은 최대 ${MAX_SPIRITS}개까지입니다.`);
         startGame(room);
         break;
       }
       case 'answer': {
-        if (!room || !room.game || !player) return;
+        if (!room || !room.game || !player || room.loading) return;
         const seat = room.seats.find((x) => x.id === msg.seat && x.owner === player.id) || room.seats.find((x) => x.owner === player.id);
         if (!seat) return;
         const err = room.game.answer(seat.id, msg.promptId, msg.value);
@@ -359,7 +513,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'ackStep': {
-        if (!room || !room.game || !player) return;
+        if (!room || !room.game || !player || room.loading) return;
         for (const seat of room.seats) {
           // 내 좌석 + 접속이 끊긴 사람의 좌석은 대신 확인
           const owner = room.players.find((x) => x.id === seat.owner);

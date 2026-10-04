@@ -27,7 +27,9 @@ class Game extends EventEmitter {
    */
   constructor(players, opts = {}) {
     super();
-    this.rand = mulberry32(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
+    this.seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    this.rand = mulberry32(this.seed);
+    this.botRand = mulberry32((this.seed ^ 0x5bd1e995) >>> 0); // AI 선택용 (게임 진행 난수와 분리: 저장/이어하기 재현을 위해)
     this.players = players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, leader: p.leader || null }));
     // 설정: leaders(탐험대장 확장), expansion(확장 카드·수호자·조수·유적), track('bird' | 'snake')
     this.settings = { leaders: false, expansion: false, track: 'bird', ...(opts.settings || {}) };
@@ -844,11 +846,11 @@ function botAnswer(g, pid, prompt) {
     if (has('idol') && g.round >= 4) return 'idol';
     if (has('overcome')) return 'overcome';
     if (has('temple')) return 'temple';
-    if (has('research') && (p.res.gem || p.res.arrow || p.res.tablet >= 2 || g.rand() < 0.5)) return 'research';
-    if (has('discover') && g.rand() < 0.8) return 'discover';
+    if (has('research') && (p.res.gem || p.res.arrow || p.res.tablet >= 2 || g.botRand() < 0.5)) return 'research';
+    if (has('discover') && g.botRand() < 0.8) return 'discover';
     const play = opts.filter((o) => o.group === 'card');
-    if (play.length && g.rand() < 0.6) return play[Math.floor(g.rand() * play.length)].value;
-    if (has('buy') && g.rand() < 0.7) return 'buy';
+    if (play.length && g.botRand() < 0.6) return play[Math.floor(g.botRand() * play.length)].value;
+    if (has('buy') && g.botRand() < 0.7) return 'buy';
     if (has('dig')) return 'dig';
     if (play.length) return play[0].value;
     if (has('buy')) return 'buy';

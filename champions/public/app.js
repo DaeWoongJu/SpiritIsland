@@ -51,7 +51,13 @@ function onMessage(msg) {
       app.catalog = msg.catalog;
       try { sessionStorage.setItem('champ-token', msg.token); localStorage.setItem('champ-token', msg.token); } catch { /* 무시 */ }
       $('#lan').innerHTML = msg.lan.length ? `같은 와이파이 친구 접속 주소: ${msg.lan.map((u) => `<b>${u}</b>`).join(' 또는 ')}` : '';
+      app.saves = msg.saves || [];
+      renderSaves();
       if (!app.room) show('home');
+      break;
+    case 'saves':
+      app.saves = msg.list || [];
+      renderSaves();
       break;
     case 'room':
       app.room = msg.room;
@@ -72,6 +78,7 @@ function onMessage(msg) {
     case 'left':
       app.room = null; app.state = null; app.prompt = null;
       show('home');
+      send({ t: 'listSaves' });
       break;
     case 'error':
       toast(msg.msg);
@@ -123,10 +130,78 @@ function initHome() {
   if (!localStorage.getItem('champ-guided')) setTimeout(() => Guide.open(), 400);
 }
 
+// ───────────── 저장된 게임 이어하기 ─────────────
+function saveTitle(sv) {
+  const sm = sv.summary || {};
+  const c = app.catalog;
+  const v = c.villains.find((x) => x.id === sm.villain);
+  const d = c.difficulties.find((x) => x.id === sm.difficulty);
+  return `<b>${sm.round || 1}라운드</b>${v ? ` · 😈 ${esc(v.name)}` : ''}${d ? ` · ${esc(d.name)}` : ''}`;
+}
+function slotDesc(s) {
+  const h = app.catalog.heroes.find((x) => x.id === s.hero);
+  const a = app.catalog.aspects[s.aspect];
+  return h ? `${esc(h.name)}${a ? ` <span class="hint">(${esc(a.name)})</span>` : ''}` : '';
+}
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function renderSaves() {
+  const box = $('#saves-box');
+  if (!box) return;
+  const list = app.saves || [];
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="saves-title">💾 저장된 게임 이어하기</div>${list.map((sv) => `<div class="save-row"><div class="save-info">${saveTitle(sv)}<br><span class="hint">${esc(sv.names.join(', '))} · ${fmtTime(sv.savedAt)} 저장</span></div>
+      <button class="primary small" data-resume="${esc(sv.id)}">▶ 이어하기</button><button class="small" data-delsave="${esc(sv.id)}" title="저장 삭제">🗑</button></div>`).join('')}
+    <p class="hint">게임 중에 그만두거나 창을 닫아도 자동으로 저장돼요. 친구는 방 코드로 들어와 자기 자리에 앉으면 되고, 빈자리는 AI가 대신해요.</p>`;
+  for (const b of box.querySelectorAll('[data-resume]')) b.onclick = () => send({ t: 'resume', id: b.dataset.resume, name: $('#in-name').value });
+  for (const b of box.querySelectorAll('[data-delsave]')) b.onclick = () => { if (confirm('이 저장된 게임을 삭제할까요? 되돌릴 수 없어요.')) send({ t: 'deleteSave', id: b.dataset.delsave }); };
+}
+
+function renderResumeRoom(r, isHost) {
+  const rs = r.resume;
+  const sitter = (s) => r.players.find((p) => p.id === s.id);
+  $('#room-players').innerHTML = rs.slots.map((s, i) => {
+    const p = sitter(s);
+    return `<div class="rp" style="--pc:${app.catalog.colors[i]}"><span class="rp-order">${i + 1}</span>
+      <span class="rp-name">${s.bot ? `${esc(s.name)} <span class="tag">AI</span>` : p ? `${esc(p.name)}${p.id === app.you ? ' <span class="hint">(나)</span>' : ''}${p.id === r.hostId ? ' 👑' : ''}` : `<span class="hint">${esc(s.name)}의 빈자리 — AI가 대신</span>`}</span>
+      <span class="rp-res">${slotDesc(s)}</span></div>`;
+  }).join('');
+  $('#room-settings').innerHTML = `<div class="resume-box"><div class="resume-head">💾 저장된 게임 이어하기</div>
+    <p>${saveTitle(rs)}부터 계속합니다 <span class="hint">(${fmtTime(rs.savedAt)} 저장)</span></p>
+    <p class="hint">설정·순서·캐릭터는 저장할 때 그대로예요. 아무도 앉지 않은 자리는 AI가 대신 진행합니다.</p>
+    ${isHost ? '<button class="small" id="btn-new-instead">이어하지 않고 새 게임 준비하기</button>' : ''}</div>`;
+  const nb = $('#btn-new-instead');
+  if (nb) nb.onclick = () => { if (confirm('저장된 게임은 그대로 두고, 이 방에서 새 게임을 준비할까요?')) send({ t: 'cancelResume' }); };
+  $('#hero-pick').innerHTML = `<div class="rs-title">🪑 내 자리 고르기 <span class="hint">저장할 때 누가 어느 자리였는지 보고 고르세요.</span></div>
+    <div class="slot-list">${rs.slots.filter((s) => !s.bot).map((s) => {
+      const mine = s.id === app.you;
+      return `<div class="slot-card ${mine ? 'mine' : ''} ${s.taken && !mine ? 'taken' : ''}"><div class="slot-name">${esc(s.name)}의 자리</div><div>${slotDesc(s)}</div>
+        ${mine ? '<span class="slot-tag">✔ 내 자리</span>' : s.taken ? '<span class="hint">다른 사람이 앉음</span>' : `<button class="small primary" data-slot="${esc(s.id)}">이 자리에 앉기</button>`}</div>`;
+    }).join('')}</div>`;
+  for (const b of document.querySelectorAll('[data-slot]')) b.onclick = () => send({ t: 'claimSlot', slot: b.dataset.slot });
+  $('#btn-start').disabled = !isHost || r.loading;
+  $('#btn-add-bot').disabled = true;
+  $('#btn-start').textContent = r.loading ? '불러오는 중…' : isHost ? '▶ 이어서 시작' : '방장이 이어서 시작하기를 기다리는 중…';
+}
+
+/** 게임 도중 그만두기 버튼 (방장) */
+function quitButtonHTML() {
+  if (!app.room || app.state.result || app.room.hostId !== app.you) return '';
+  return '<button class="small" id="btn-quit" title="지금까지 진행을 저장하고 대기실로 돌아가기">💾 저장하고 그만하기</button>';
+}
+function bindQuitButton() {
+  const b = $('#btn-quit');
+  if (b) b.onclick = () => { if (confirm('게임을 저장하고 대기실로 돌아갈까요?\n\n나중에 첫 화면의 "💾 저장된 게임 이어하기"에서 지금 상태 그대로 계속할 수 있어요.\n(함께하는 친구들도 모두 대기실로 이동합니다)')) send({ t: 'quitGame' }); };
+}
+
 function renderRoom() {
   const r = app.room;
-  const c = app.catalog;
   const isHost = r.hostId === app.you;
+  if (r.resume) { $('#room-code').textContent = r.code; renderResumeRoom(r, isHost); return; }
+  const c = app.catalog;
   $('#room-code').textContent = r.code;
   $('#invite-hint').innerHTML = `친구에게 주소 <b>${esc(location.origin)}</b> 와 방 코드 <b>${r.code}</b>를 알려 주세요. (최대 ${r.maxPlayers}명, AI 동료로 빈자리를 채울 수 있어요)`;
   $('#room-players').innerHTML = r.players.map((p, i) => {
@@ -268,11 +343,12 @@ function renderTop() {
     <div class="tb-phase ${st.phase === 'villain' ? 'villain' : ''}">${phase}</div>
     <div class="tb-turn">${cur ? `<span class="dot" style="background:${colorOf(cur.id)}"></span>${cur.id === app.you ? '<b class="mine">내 차례!</b>' : `<b>${esc(cur.name)}</b>의 차례`}` : ''}</div>
     <div class="tb-info">${v.icon} ${esc(v.name)} · ${esc(diff ? diff.name : '')}</div>
-    <div class="tb-btns"><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-ref">📋 빠른 참고</button><button class="small btn-sound2">⚙ 설정</button>${st.result ? '<button class="small" id="btn-show-result">🏁 결과</button>' : ''}</div>`;
+    <div class="tb-btns"><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-ref">📋 빠른 참고</button><button class="small btn-sound2">⚙ 설정</button>${quitButtonHTML()}${st.result ? '<button class="small" id="btn-show-result">🏁 결과</button>' : ''}</div>`;
   if (setHTML($('#topbar'), html)) {
     $('#topbar .btn-guide2').onclick = () => Guide.open();
     $('#topbar .btn-ref').onclick = () => Guide.reference();
     $('#topbar .btn-sound2').onclick = openSound;
+    bindQuitButton();
     const rb = $('#btn-show-result');
     if (rb) rb.onclick = () => { app.hideResult = false; renderResult(); };
   }

@@ -64,6 +64,12 @@ function onMessage(msg) {
       sessionStorage.setItem('si-token', msg.token);
       app.catalog = msg.catalog;
       app.lan = msg.lan || [];
+      app.saves = msg.saves || [];
+      renderSaves();
+      break;
+    case 'saves':
+      app.saves = msg.list || [];
+      renderSaves();
       break;
     case 'room':
       if (app.room && msg.room.chat.length > app.room.chat.length && msg.room.chat[msg.room.chat.length - 1].from !== myName()) Sound.play('chat');
@@ -104,6 +110,7 @@ function onMessage(msg) {
     case 'left':
       app.room = null; app.state = null; app.prompt = null;
       render();
+      send({ t: 'listSaves' });
       break;
     case 'error':
       Sound.play('error');
@@ -188,16 +195,79 @@ function initHome() {
 // ───────────── 대기실 ─────────────
 const EXP_SHORT = { base: '기본', bc: '가지와 발톱', ff: '깃털과 불꽃', je: '들쭉날쭉한 대지', hz: '지평선', ni: '자연의 화신' };
 
+// ───────────── 저장된 게임 ─────────────
+function saveTitle(sv) {
+  const c = app.catalog;
+  const sm = sv.summary || {};
+  const sp = (sm.spirits || []).map((id) => { const x = c && c.spirits.find((s) => s.id === id); return x ? x.name : id; });
+  const preset = c && c.presets.find((p) => p.id === sm.preset);
+  return { turn: sm.turn || 0, spirits: sp.join(', '), diff: preset ? preset.name : '' };
+}
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+function renderSaves() {
+  const box = $('#saves-box');
+  if (!box) return;
+  const list = app.saves || [];
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="saves-title">💾 저장된 게임 이어하기</div>${list.map((sv) => {
+    const t = saveTitle(sv);
+    return `<div class="save-row"><div class="save-info"><b>${t.turn}턴</b> · ${esc(t.spirits)}<br><span class="hint">${esc(sv.names.join(', '))}${t.diff ? ` · ${esc(t.diff)}` : ''} · ${fmtTime(sv.savedAt)} 저장</span></div>
+      <button class="primary small" data-resume="${esc(sv.id)}">▶ 이어하기</button><button class="small" data-delsave="${esc(sv.id)}" title="저장 삭제">🗑</button></div>`;
+  }).join('')}<p class="hint">게임 중에 그만두거나 창을 닫아도 자동으로 저장돼요. 이어하기를 누르면 방이 만들어지고, 친구는 방 코드로 들어와 자기 자리에 앉으면 돼요.</p>`;
+  for (const b of box.querySelectorAll('[data-resume]')) b.onclick = () => { localStorage.setItem('si-name', $('#in-name').value.trim()); send({ t: 'resume', id: b.dataset.resume, name: $('#in-name').value }); };
+  for (const b of box.querySelectorAll('[data-delsave]')) b.onclick = () => { if (confirm('이 저장된 게임을 삭제할까요? 되돌릴 수 없어요.')) send({ t: 'deleteSave', id: b.dataset.delsave }); };
+}
+
+/** 이어하기 대기실: 저장된 자리 고르기 */
+function renderResumeRoom(r, isHost) {
+  const c = app.catalog;
+  const rs = r.resume;
+  const t = saveTitle(rs);
+  const spiritName = (id) => { const sp = c.spirits.find((x) => x.id === id); return sp ? `<span style="color:${sp.color}">${esc(sp.name)}</span>` : id; };
+  $('#room-players').innerHTML = r.players.map((p) => `<li class="${p.connected ? '' : 'off'}"><span>${p.id === r.hostId ? '👑 ' : ''}${esc(p.name)}${p.id === app.personId ? ' (나)' : ''}${p.connected ? '' : ' · 연결 끊김'}</span>
+    <span style="text-align:right">${p.spiritIds.map(spiritName).join('<br>')}</span></li>`).join('');
+  const empty = rs.slots.filter((s) => !s.taken).length;
+  $('#btn-start').disabled = !isHost || r.loading;
+  $('#btn-start').classList.toggle('hidden', !isHost);
+  $('#btn-start').textContent = r.loading ? '불러오는 중…' : '▶ 이어서 시작';
+  $('#start-hint').textContent = isHost
+    ? (empty ? `빈자리 ${empty}개는 방장이 대신 조종합니다. 친구가 들어오면 자기 자리를 고를 수 있어요.` : '모든 자리가 찼어요. 이어서 시작하세요!')
+    : '방장이 게임을 이어서 시작하기를 기다리는 중...';
+  $('#room-settings').innerHTML = `<div class="resume-box"><div class="resume-head">💾 저장된 게임 이어하기</div>
+    <p><b>${t.turn}턴</b>부터 계속합니다${t.diff ? ` · 난이도 ${esc(t.diff)}` : ''} <span class="hint">(${fmtTime(rs.savedAt)} 저장)</span></p>
+    <p class="hint">설정과 정령은 저장할 때 그대로예요.</p>
+    ${isHost ? '<button class="small" id="btn-new-instead">이어하지 않고 새 게임 준비하기</button>' : ''}</div>`;
+  const nb = $('#btn-new-instead');
+  if (nb) nb.onclick = () => { if (confirm('저장된 게임은 그대로 두고, 이 방에서 새 게임을 준비할까요?')) send({ t: 'cancelResume' }); };
+  document.querySelector('.room-right h2').innerHTML = '내 자리 고르기 <span class="hint" style="font-family:var(--sans);font-weight:400">— 저장할 때 누가 어느 정령이었는지 보고 내 자리를 고르세요.</span>';
+  $('#spirit-filter').innerHTML = '';
+  $('#spirit-list').innerHTML = `<div class="slot-list">${rs.slots.map((s) => {
+    const mine = s.id === app.personId;
+    return `<div class="slot-card ${mine ? 'mine' : ''} ${s.taken && !mine ? 'taken' : ''}"><div class="slot-name">${esc(s.name)}의 자리</div><div>${s.spiritIds.map(spiritName).join(' · ')}</div>
+      ${mine ? '<span class="slot-tag">✔ 내 자리</span>' : s.taken ? '<span class="hint">다른 사람이 앉음</span>' : `<button class="small primary" data-slot="${esc(s.id)}">이 자리에 앉기</button>`}</div>`;
+  }).join('')}</div>`;
+  for (const b of document.querySelectorAll('[data-slot]')) b.onclick = () => send({ t: 'claimSlot', slot: b.dataset.slot });
+}
+
 function renderRoom() {
   const r = app.room;
   const c = app.catalog;
   if (!c) return;
   $('#room-code').textContent = r.code;
+  const roomH2 = document.querySelector('.room-right h2');
+  if (!r.resume && roomH2.dataset.orig) roomH2.innerHTML = roomH2.dataset.orig;
+  if (!roomH2.dataset.orig) roomH2.dataset.orig = roomH2.innerHTML;
+  if (!r.resume) $('#btn-start').textContent = '게임 시작';
   const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
   $('#lan-hint').innerHTML = local && app.lan && app.lan.length
     ? `같은 와이파이 친구 접속 주소: <b>${app.lan.map(esc).join(' / ')}</b><br>멀리 있는 친구는 README의 "npm run share" 방법을 이용하세요.`
     : `친구에게 이 주소를 알려주세요: <b>${esc(location.origin)}</b>`;
   const isHost = r.hostId === app.personId;
+  if (r.resume) { renderResumeRoom(r, isHost); renderChat($('#room-chat')); return; }
   const spiritById = (id) => c.spirits.find((x) => x.id === id);
   $('#room-players').innerHTML = r.players.map((p) => {
     const names = p.spiritIds.map((id) => { const sp = spiritById(id); return `<span style="color:${sp.color}">${esc(sp.name)}</span>`; }).join('<br>');
@@ -564,9 +634,10 @@ function renderTopbar() {
         <div class="it-slot ravage"><span class="it-l">⚔ 약탈 <small>이번 턴</small></span><span class="it-c">${invCardHTML(st.invader.ravage)}</span></div>
       </div></div>
     <div class="tb-box" style="flex:1;min-width:180px"><span class="k">승리 조건 (공포 ${f.terrorLevel}단계) · 난이도 ${esc(st.difficulty || '보통')}</span><span style="font-size:12px">${['', '섬에 침략자가 하나도 없으면 승리', '섬에 마을·도시가 없으면 승리', '섬에 도시가 없으면 승리'][f.terrorLevel]}${st.turnRules.length ? `<br><span style="color:var(--accent2)">이번 턴: ${st.turnRules.map(esc).join(', ')}</span>` : ''}</span></div>
-    <div class="tb-actions"><button class="btn-guide small">📖 게임 방법</button>${soundButtonHTML()}<button id="btn-help" class="small">❓ 규칙 요약</button></div>
+    <div class="tb-actions"><button class="btn-guide small">📖 게임 방법</button>${soundButtonHTML()}<button id="btn-help" class="small">❓ 규칙 요약</button>${quitButtonHTML()}</div>
   `;
   $('#btn-help').onclick = () => $('#help').classList.remove('hidden');
+  bindQuitButton();
 }
 
 function renderPrompt() {
@@ -936,6 +1007,21 @@ function renderLog() {
 
 // ───────────── 모달 (카드 선택 / 결과) ─────────────
 function closeModal() { $('#modal').classList.add('hidden'); }
+
+// 게임 도중 그만두기: 방장은 저장하고 대기실로, 튜토리얼은 그냥 나가기
+function quitButtonHTML() {
+  if (!app.room || app.state.result) return '';
+  if (app.room.hostId !== app.personId) return '';
+  return `<button id="btn-quit" class="small" title="${app.state.tutorial ? '튜토리얼을 그만두고 첫 화면으로' : '지금까지 진행을 저장하고 대기실로 돌아가기'}">${app.state.tutorial ? '🚪 그만하기' : '💾 저장하고 그만하기'}</button>`;
+}
+function bindQuitButton() {
+  const b = $('#btn-quit');
+  if (!b) return;
+  b.onclick = () => {
+    if (app.state.tutorial) { if (confirm('튜토리얼을 그만두고 첫 화면으로 갈까요?')) send({ t: 'leave' }); return; }
+    if (confirm('게임을 저장하고 대기실로 돌아갈까요?\n\n나중에 첫 화면의 "💾 저장된 게임 이어하기"에서 지금 상태 그대로 계속할 수 있어요.\n(함께하는 친구들도 모두 대기실로 이동합니다)')) send({ t: 'quitGame' });
+  };
+}
 
 function renderModal() {
   const st = app.state;

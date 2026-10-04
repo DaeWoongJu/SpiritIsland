@@ -11,6 +11,7 @@
     "share": "npx -y cloudflared tunnel --url http://localhost:3000",
     "icons": "node scripts/make-icons.js",
     "test": "node --test test/*.test.js arnak/test/*.test.js champions/test/*.test.js",
+    "test:e2e:save": "node test/e2e-save.js",
     "test:e2e": "node test/e2e.js",
     "arnak": "node arnak/server/index.js",
     "arnak:play": "node arnak/server/index.js --open",

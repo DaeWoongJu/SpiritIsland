@@ -9,6 +9,9 @@ const { exec } = require('child_process');
 const { WebSocketServer } = require('ws');
 const { Game, botAnswer } = require('./game/game');
 const D = require('./game/data');
+const savegame = require('../../shared/savegame');
+
+const saves = savegame.store('champions');
 
 const PORT = Number(process.env.PORT) || 3200;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -64,9 +67,41 @@ function send(ws, msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m
 function roomInfo(room) {
   return {
     code: room.code, hostId: room.hostId, started: !!room.game, solo: !!room.solo, settings: room.settings,
+    loading: !!room.loading, resume: room.resume ? resumeInfo(room) : null,
     players: room.players.map((p, i) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero || null, aspect: p.aspect || null, color: COLORS[i], connected: p.bot || !!(p.ws && p.ws.readyState === 1) })),
     chat: room.chat.slice(-50), maxPlayers: MAX_PLAYERS,
   };
+}
+
+/** 이어하기 대기실 정보: 저장된 자리와 누가 앉았는지 (AI 자리는 자동) */
+function resumeInfo(room) {
+  const sv = room.resume;
+  return {
+    id: sv.id, savedAt: sv.savedAt, summary: sv.summary,
+    slots: sv.roster.map((s) => ({ ...s, taken: !s.bot && room.players.some((p) => p.id === s.id) })),
+  };
+}
+
+/** 지금 게임을 파일로 저장 (선택할 때마다 자동으로) */
+function saveNow(room) {
+  const g = room.game;
+  if (!g || g.result || room.loading || !room.saveId) return;
+  clearTimeout(room.saveTimer);
+  saves.write({ v: 1, id: room.saveId, savedAt: Date.now(), seed: g.seed, settings: room.settings, roster: room.roster, history: g.history, summary: { round: g.round, heroes: g.players.map((x) => x.hero), villain: room.settings.villain, difficulty: room.settings.difficulty } });
+}
+function scheduleSave(room) {
+  clearTimeout(room.saveTimer);
+  room.saveTimer = setTimeout(() => saveNow(room), 300);
+}
+/** 이어하기 대기실에서 내 자리 정하기: 이름이 같은 빈자리 → 아무 빈자리 */
+function freeSlot(room, name, except) {
+  const free = room.resume.roster.filter((s) => !s.bot && s.id !== except && !room.players.some((p) => p.id === s.id));
+  return free.find((s) => s.name === name) || free[0] || null;
+}
+function sitAt(room, player, slot) {
+  if (room.hostId === player.id) room.hostId = slot.id;
+  player.id = slot.id;
+  if (player.token) sessions.set(player.token, { roomCode: room.code, playerId: slot.id });
 }
 
 function broadcastRoom(room) {
@@ -106,20 +141,48 @@ function scheduleBots(room) {
   }
 }
 
-function startGame(room) {
+async function startGame(room) {
   // 차례 순서는 방에 들어온 순서 그대로 (첫 플레이어가 시작, 뒤 플레이어는 시작 자원이 조금 더 많음)
-  // 영웅을 안 고른 사람은 남은 영웅 중 무작위
-  const taken = new Set(room.players.map((p) => p.hero).filter(Boolean));
-  for (const p of room.players) {
-    if (!p.hero) { const free = D.HEROES.filter((h) => !taken.has(h.id)); p.hero = free[crypto.randomInt(free.length)].id; taken.add(p.hero); }
-    if (!p.aspect) { const as = Object.keys(D.ASPECTS); p.aspect = as[crypto.randomInt(as.length)]; }
+  if (!room.resume) {
+    // 영웅을 안 고른 사람은 남은 영웅 중 무작위
+    const taken = new Set(room.players.map((p) => p.hero).filter(Boolean));
+    for (const p of room.players) {
+      if (!p.hero) { const free = D.HEROES.filter((h) => !taken.has(h.id)); p.hero = free[crypto.randomInt(free.length)].id; taken.add(p.hero); }
+      if (!p.aspect) { const as = Object.keys(D.ASPECTS); p.aspect = as[crypto.randomInt(as.length)]; }
+    }
   }
-  const game = new Game(room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect })), { settings: room.settings });
+  const sv = room.resume;
+  if (sv) {
+    // 이어하기: 저장된 순서 그대로. 아무도 앉지 않은 사람 자리는 AI가 대신 진행
+    room.settings = sv.settings;
+    const humans = new Map(room.players.filter((p) => !p.bot).map((p) => [p.id, p]));
+    room.players = sv.roster.map((s) => humans.get(s.id) || { ...s, bot: true, sub: !s.bot });
+    room.roster = sv.roster;
+  } else room.roster = room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect }));
+  const game = new Game(room.roster, { settings: room.settings, seed: sv ? sv.seed : undefined });
   room.game = game;
   room.botTimers = {};
+  room.saveId = sv ? sv.id : savegame.newSaveId(room.code);
+  room.resume = null;
+  savegame.record(game, () => scheduleSave(room));
+  game.run().then(() => {
+    if (room.game !== game) return;
+    if (game.result && room.saveId) { clearTimeout(room.saveTimer); saves.remove(room.saveId); }
+    broadcastState(room);
+  }).catch((e) => console.error(e));
+  if (sv) {
+    room.loading = true;
+    broadcastRoom(room);
+    const r = await savegame.replay(game, sv.history || []);
+    room.loading = false;
+    if (room.game !== game) return;
+    if (!r.ok) room.chat.push({ name: '안내', text: `저장 기록 일부(${r.at + 1}번째 선택부터)를 되살리지 못해 그 시점부터 이어서 진행합니다.`, at: Date.now() });
+    game.log('💾 저장된 게임을 불러왔습니다. 이어서 진행합니다.');
+    saveNow(room);
+  }
   game.on('update', () => broadcastState(room));
   broadcastRoom(room);
-  game.run().then(() => broadcastState(room)).catch((e) => console.error(e));
+  broadcastState(room);
 }
 
 function cleanupRooms() {
@@ -176,7 +239,7 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'hello': {
         token = typeof msg.token === 'string' && msg.token.length >= 16 ? msg.token : crypto.randomBytes(16).toString('hex');
-        send(ws, { t: 'welcome', token, catalog: CATALOG, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`) });
+        send(ws, { t: 'welcome', token, catalog: CATALOG, lan: lanAddresses().map((ip) => `http://${ip}:${PORT}`), saves: saves.list() });
         const sess = sessions.get(token);
         if (sess && rooms.has(sess.roomCode)) {
           const r = rooms.get(sess.roomCode);
@@ -199,6 +262,68 @@ wss.on('connection', (ws) => {
         attach(r, p);
         break;
       }
+      case 'listSaves': {
+        send(ws, { t: 'saves', list: saves.list() });
+        break;
+      }
+      case 'deleteSave': {
+        if (room) return;
+        saves.remove(msg.id);
+        send(ws, { t: 'saves', list: saves.list() });
+        break;
+      }
+      case 'resume': {
+        // 저장된 게임으로 새 방을 만들고 대기실에서 친구들을 기다림
+        if (!token) return fail('먼저 연결하세요.');
+        if (room) return fail('이미 방에 있습니다.');
+        const sv = saves.load(msg.id);
+        if (!sv || !Array.isArray(sv.roster) || !sv.roster.some((s) => !s.bot)) return fail('저장된 게임을 찾을 수 없습니다.');
+        const r = newRoom({ resume: sv, settings: sv.settings });
+        const name = cleanName(msg.name);
+        const slot = freeSlot(r, name);
+        const p = { id: slot.id, name, token, ws: null };
+        r.players.push(p);
+        r.hostId = p.id;
+        attach(r, p);
+        break;
+      }
+      case 'claimSlot': {
+        if (!room || room.game || !room.resume) return;
+        const slot = room.resume.roster.find((s) => s.id === msg.slot && !s.bot);
+        if (!slot || room.players.some((p) => p.id === slot.id)) return fail('이미 누가 앉은 자리입니다.');
+        sitAt(room, player, slot);
+        broadcastRoom(room);
+        break;
+      }
+      case 'cancelResume': {
+        if (!room || room.game || !room.resume) return;
+        if (room.hostId !== player.id) return fail('방장만 할 수 있습니다.');
+        room.resume = null;
+        broadcastRoom(room);
+        break;
+      }
+      case 'quitGame': {
+        // 게임 도중 그만두기: 저장하고 대기실로 (나중에 '이어하기'로 계속)
+        if (!room || !room.game) return;
+        if (room.hostId !== player.id) return fail('방장만 게임을 그만둘 수 있습니다.');
+        if (room.loading) return fail('불러오는 중입니다. 잠시 후 다시 시도하세요.');
+        const g = room.game;
+        const savable = !g.result;
+        if (savable) saveNow(room);
+        clearTimeout(room.saveTimer);
+        g.removeAllListeners();
+        room.game = null;
+        const sv = savable ? saves.load(room.saveId) : null;
+        // AI가 대신하던 자리, 완전히 떠난 사람은 정리
+        room.players = room.players.filter((p) => !p.sub && (p.id === room.hostId || p.bot || sessions.has(p.token)));
+        if (sv) {
+          room.resume = sv;
+          room.players = room.players.filter((p) => !p.bot);
+          room.chat.push({ name: '안내', text: `게임을 저장했습니다 (${g.round}라운드). '저장된 게임 이어하기'로 계속할 수 있어요.`, at: Date.now() });
+        }
+        broadcastRoom(room);
+        break;
+      }
       case 'join': {
         if (!token) return fail('먼저 연결하세요.');
         if (room) return fail('이미 방에 있습니다.');
@@ -208,6 +333,11 @@ wss.on('connection', (ws) => {
         if (r.game) return fail('이미 게임이 시작된 방입니다.');
         if (r.players.length >= MAX_PLAYERS) return fail(`방이 가득 찼습니다 (최대 ${MAX_PLAYERS}명).`);
         const p = { id: crypto.randomBytes(6).toString('hex'), name: cleanName(msg.name), token, ws: null };
+        if (r.resume) {
+          const slot = freeSlot(r, p.name);
+          if (!slot) return fail('저장된 게임의 자리가 모두 찼습니다.');
+          p.id = slot.id;
+        }
         r.players.push(p);
         attach(r, p);
         break;
@@ -233,6 +363,7 @@ wss.on('connection', (ws) => {
       }
       case 'addBot': case 'removeBot': {
         if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 바꿀 수 없습니다.');
         if (room.hostId !== player.id) return fail('방장만 할 수 있습니다.');
         if (msg.t === 'addBot') {
           if (room.players.length >= MAX_PLAYERS) return fail(`최대 ${MAX_PLAYERS}명입니다.`);
@@ -244,6 +375,7 @@ wss.on('connection', (ws) => {
       case 'move': {
         // 차례 순서 바꾸기 (방장)
         if (!room || room.game || room.hostId !== player.id) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 바꿀 수 없습니다.');
         const i = room.players.findIndex((p) => p.id === msg.id);
         const j = i + (msg.dir === 'up' ? -1 : 1);
         if (i < 0 || j < 0 || j >= room.players.length) return;
@@ -253,6 +385,7 @@ wss.on('connection', (ws) => {
       }
       case 'setSettings': {
         if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 바꿀 수 없습니다.');
         if (room.hostId !== player.id) return fail('방장만 설정을 바꿀 수 있습니다.');
         const st = msg.settings || {};
         if (D.VILLAINS.some((v) => v.id === st.villain)) room.settings.villain = st.villain;
@@ -262,6 +395,7 @@ wss.on('connection', (ws) => {
       }
       case 'pickHero': {
         if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 바꿀 수 없습니다.');
         const target = msg.target && room.hostId === player.id ? room.players.find((x) => x.id === msg.target && x.bot) : player;
         if (!target) return;
         if (msg.hero !== undefined) {
@@ -276,11 +410,12 @@ wss.on('connection', (ws) => {
       case 'start': {
         if (!room || room.game) return;
         if (room.hostId !== player.id) return fail('방장만 게임을 시작할 수 있습니다.');
+        if (room.loading) return;
         startGame(room);
         break;
       }
       case 'answer': {
-        if (!room || !room.game || !player) return;
+        if (!room || !room.game || !player || room.loading) return;
         const err = room.game.answer(player.id, msg.promptId, msg.value);
         if (err) { fail(err); sendState(room, player); }
         break;

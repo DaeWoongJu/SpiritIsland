@@ -43,7 +43,8 @@ class Game extends EventEmitter {
   constructor(players, opts = {}) {
     super();
     if (!players.length || players.length > 6) throw new Error('정령은 1~6개여야 합니다.');
-    this.rand = mulberry32(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
+    this.seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    this.rand = mulberry32(this.seed);
     this.players = players.map((p) => ({ ...p }));
     this.playerIds = this.players.map((p) => p.id);
     const settings = opts.settings || {};
@@ -768,6 +769,8 @@ class Game extends EventEmitter {
       const land = await this.askLand(pid, `공포: ${desc} 지역에서 교체 — 지역 선택 (취소 가능)`, opts, true, {}, { kind: 'fear' });
       if (!land) return;
       const avail = types.filter((t) => this.count(land, t) > 0);
+      // 다른 플레이어가 같은 지역을 먼저 골라 이미 교체했을 수 있음
+      if (!avail.length) { this.log(`${land}: 교체할 침략자가 이미 없습니다`); return; }
       const t = avail.length === 1 ? avail[0] : await this.askOption(pid, '무엇을 교체할까요?', avail.map((x) => ({ value: x, label: x === 'city' ? '도시 → 마을' : '마을 → 탐험가' })));
       this.replacePiece(land, t, t === 'city' ? 'town' : 'explorer');
     }));

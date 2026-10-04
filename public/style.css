@@ -653,3 +653,20 @@ body.hand-collapsed .hand-area { display: none; }
 .inv-banner.ib-mini .ib-mini-hint { color: var(--gold); font-size: .85em; white-space: nowrap; }
 .inv-banner.ib-mini button { flex: none; }
 .inv-banner .ib-fold { position: sticky; top: 0; float: right; margin: -4px -8px 0 6px; opacity: .85; }
+
+/* 저장된 게임 이어하기 */
+.saves-box { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--gold); border-radius: 12px; background: #1d1a10cc; text-align: left; }
+.saves-title { font-weight: 800; color: var(--gold); margin-bottom: 6px; }
+.save-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #ffffff14; }
+.save-row:first-of-type { border-top: 0; }
+.save-info { flex: 1; min-width: 0; line-height: 1.45; }
+.saves-box > .hint { margin: 6px 0 0; font-size: 12px; }
+.resume-box { padding: 10px 12px; border: 1px solid var(--gold); border-radius: 12px; background: #1d1a10aa; }
+.resume-box p { margin: 6px 0; }
+.resume-head { font-weight: 800; color: var(--gold); }
+.slot-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.slot-card { padding: 12px; border: 1px solid #ffffff22; border-radius: 12px; background: #ffffff0a; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.slot-card.mine { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.slot-card.taken { opacity: .6; }
+.slot-name { font-weight: 800; }
+.slot-tag { color: var(--gold); font-weight: 700; }

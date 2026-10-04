@@ -22,7 +22,9 @@ class Game extends EventEmitter {
    */
   constructor(players, opts = {}) {
     super();
-    this.rand = mulberry32(opts.seed ?? Math.floor(Math.random() * 2 ** 31));
+    this.seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    this.rand = mulberry32(this.seed);
+    this.botRand = mulberry32((this.seed ^ 0x5bd1e995) >>> 0); // AI 선택용 (게임 진행 난수와 분리: 저장/이어하기 재현을 위해)
     this.settings = { villain: 'brute', difficulty: 'standard', ...(opts.settings || {}) };
     this.villainDef = D.VILLAINS.find((v) => v.id === this.settings.villain) || D.VILLAINS[0];
     this.diff = D.DIFFICULTIES.find((d) => d.id === this.settings.difficulty) || D.DIFFICULTIES[2];
@@ -823,7 +825,7 @@ function botAnswer(g, pid, pr) {
       || (threatRatio > 0.5 ? cards.find((x) => /위협/.test(x.d.text)) : null)
       || cards.find((x) => x.d.attack)
       || cards.find((x) => !/회복/.test(x.d.text) || p.hp < max - 2);
-    if (pick && g.rand() < 0.9) return pick.o.value;
+    if (pick && g.botRand() < 0.9) return pick.o.value;
     const tech = ok.find((o) => o.group === 'tech');
     if (tech) return tech.value;
     const allyOpts = ok.filter((o) => o.group === 'ally');
