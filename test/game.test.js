@@ -287,3 +287,57 @@ test('쉬운 난이도: 연습 모드 봇 게임이 끝까지 진행', async () 
     assert.ok(!r.reason.startsWith('서버 오류'), r.reason);
   }
 });
+
+test('번개의 은총: 이미 빠른 권능 단계를 끝낸 정령에게 써도 바로 느린 권능을 빠르게 쓸 수 있음', async () => {
+  const g = mkGame(['lightning', 'river'], 3);
+  g.setup();
+  const L = g.spirits.p0;
+  const R = g.spirits.p1;
+  L.played = [{ id: 'lightnings_boon', used: false }];
+  R.played = [{ id: 'wash_away', used: false }]; // 느린 카드
+  const tick = () => new Promise((r) => setImmediate(r));
+  const phase = g.powerPhase('fast');
+  await tick();
+  // 강의 정령은 쓸 빠른 권능이 없어 바로 끝남
+  assert.strictEqual(g.currentPrompt('p1'), null);
+  let pr = g.currentPrompt('p0');
+  assert.strictEqual(g.answer('p0', pr.id, pr.options.find((o) => o.card === 'lightnings_boon').value), null);
+  await tick();
+  pr = g.currentPrompt('p0'); // 대상 정령 고르기
+  assert.strictEqual(g.answer('p0', pr.id, 'p1'), null);
+  await tick();
+  // 강의 정령에게 느린 카드를 빠르게 쓰는 선택지가 바로 열림
+  const rp = g.currentPrompt('p1');
+  assert.ok(rp && rp.options.some((o) => o.card === 'wash_away' && /빠르게/.test(o.label)), JSON.stringify(rp));
+  g.answer('p1', rp.id, 'done');
+  await tick();
+  pr = g.currentPrompt('p0');
+  if (pr) g.answer('p0', pr.id, 'done');
+  await phase;
+  assert.strictEqual(R.fastAllowance, 2);
+});
+
+test('번개의 은총: 권능 선택 창을 띄워 둔 정령에게도 선택지가 바로 갱신됨', async () => {
+  const g = mkGame(['lightning', 'river'], 4);
+  g.setup();
+  g.spirits.p0.played = [{ id: 'lightnings_boon', used: false }];
+  g.spirits.p1.played = [{ id: 'wash_away', used: false }, { id: 'flash_floods', used: false }]; // 느림 + 빠름
+  const tick = () => new Promise((r) => setImmediate(r));
+  const phase = g.powerPhase('fast');
+  await tick();
+  const before = g.currentPrompt('p1');
+  assert.ok(!before.options.some((o) => o.card === 'wash_away'));
+  let pr = g.currentPrompt('p0');
+  g.answer('p0', pr.id, pr.options.find((o) => o.card === 'lightnings_boon').value);
+  await tick();
+  pr = g.currentPrompt('p0');
+  g.answer('p0', pr.id, 'p1');
+  await tick();
+  const after = g.currentPrompt('p1');
+  assert.ok(after.options.some((o) => o.card === 'wash_away'), JSON.stringify(after));
+  g.answer('p1', after.id, 'done');
+  await tick();
+  pr = g.currentPrompt('p0');
+  if (pr) g.answer('p0', pr.id, 'done');
+  await phase;
+});

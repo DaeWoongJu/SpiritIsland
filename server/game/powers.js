@@ -29,7 +29,7 @@ const POWERS = [
     elements: ['fire', 'air'], target: S('any'),
     text: '대상 정령은 이번 턴에 느린 권능을 최대 2개까지 빠른 권능처럼 사용할 수 있습니다.',
     async effect(ctx) {
-      ctx.target.fastAllowance += 2;
+      ctx.game.grantFastAllowance(ctx.target.pid, 2);
       ctx.log(`${ctx.targetName}: 느린 권능 2개를 빠르게 사용할 수 있습니다.`);
     },
   },

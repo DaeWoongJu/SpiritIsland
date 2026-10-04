@@ -1092,16 +1092,57 @@ class Game extends EventEmitter {
     this.phase = speed;
     this.log(`── ${speed === 'fast' ? '빠른' : '느린'} 권능 단계 ──`);
     for (const pid of this.playerIds) this.spirits[pid].status = '권능 사용 중';
-    await Promise.all(this.playerIds.map((pid) => this.powerLoop(pid, speed)));
+    // 다른 정령이 '번개의 은총' 등으로 권능을 새로 쓸 수 있게 되면 그 정령의 차례가 다시 열릴 수 있으므로,
+    // 모든 정령의 권능 사용이 끝날 때까지 기다린다.
+    this.powerLoops = {};
+    // 나중에 다시 열린 루프에서 게임이 끝나도(GameOver) 바로 전달되도록
+    const abort = new Promise((_, reject) => { this.powerAbort = reject; });
+    abort.catch(() => {});
+    for (const pid of this.playerIds) this.powerLoops[pid] = this.startPowerLoop(pid, speed);
+    for (;;) {
+      const loops = Object.values(this.powerLoops);
+      await Promise.race([Promise.all(loops), abort]);
+      if (Object.values(this.powerLoops).every((l, i) => l === loops[i]) && Object.keys(this.powerLoops).length === loops.length) break;
+    }
+    this.powerLoops = null;
+    this.powerAbort = null;
+  }
+
+  /** 느린 권능을 빠르게 쓸 수 있는 횟수 추가. 빠른 권능 단계라면 바로 쓸 수 있도록 선택지를 다시 열어 준다 */
+  grantFastAllowance(pid, n) {
+    const s = this.spirits[pid];
+    s.fastAllowance += n;
+    if (this.phase !== 'fast' || !this.powerLoops) return;
+    const stack = this.prompts[pid] || [];
+    const waiting = stack.findIndex((e) => e.prompt.kind === 'power');
+    if (waiting >= 0) {
+      // 권능 선택 창을 띄워 둔 상태 → 새 선택지로 다시 묻기
+      const [entry] = stack.splice(waiting, 1);
+      entry.resolve('__refresh');
+      this.changed();
+    } else if (this.powerLoopDone && this.powerLoopDone[pid]) {
+      // 이미 빠른 권능 단계를 끝낸 정령 → 다시 열어 줌
+      s.status = '권능 사용 중';
+      this.powerLoops[pid] = this.startPowerLoop(pid, 'fast');
+    }
+  }
+
+  /** 권능 루프 시작. 게임 종료(GameOver)로 끝나도 처리되지 않은 오류가 되지 않게 표시 (powerPhase에서 기다림) */
+  startPowerLoop(pid, speed) {
+    const p = this.powerLoop(pid, speed);
+    p.catch((e) => { if (this.powerAbort) this.powerAbort(e); });
+    return p;
   }
 
   async powerLoop(pid, speed) {
     const s = this.spirits[pid];
+    (this.powerLoopDone ||= {})[pid] = false;
     for (;;) {
       const opts = this.availablePowers(pid, speed);
       if (!opts.length) break;
       opts.push({ value: 'done', label: `${speed === 'fast' ? '빠른' : '느린'} 권능 단계 종료` });
       const v = await this.askOption(pid, `${speed === 'fast' ? '빠른' : '느린'} 권능: 사용할 권능을 고르세요`, opts, { kind: 'power' });
+      if (v === '__refresh') continue;
       if (v === 'done') break;
       const [kind, key] = v.split(':');
       const opt = opts.find((o) => o.value === v);
@@ -1129,6 +1170,7 @@ class Game extends EventEmitter {
       }
     }
     s.status = '대기 중';
+    this.powerLoopDone[pid] = true;
     this.changed();
   }
 
