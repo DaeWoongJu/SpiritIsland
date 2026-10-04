@@ -7,6 +7,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const app = {
   ws: null, token: null, catalog: null, room: null, you: null, state: null, prompt: null,
   sel: [], lastLog: 0, tab: 'log', lastChat: 0, wasMyTurn: false,
+  seen: { hand: new Set(), row: new Set(), sites: {}, occ: new Set(), guard: new Set() }, prevRes: null, tipOwner: null,
 };
 window.app = app;
 
@@ -170,7 +171,6 @@ function promptMap() {
 function renderGame() {
   const st = app.state;
   if (!st || !st.ps[app.you] && !st.players.length) return;
-  hideTip();
   renderTop();
   renderPrompt();
   renderBoard();
@@ -182,6 +182,7 @@ function renderGame() {
   renderTabs();
   renderCardModal();
   renderResult();
+  if (app.tipOwner && !document.body.contains(app.tipOwner)) hideTip();
   // 내 차례 알림
   const myTurn = st.current === app.you && !st.result;
   if (myTurn && !app.wasMyTurn) { Sound.play('turn'); flashTurn(); }
@@ -197,24 +198,72 @@ function flashTurn() {
 
 function me() { return app.state.ps[app.you]; }
 
+/** 내용이 바뀐 경우에만 다시 그린다 (깜빡임·애니메이션 재시작 방지). 다시 그렸으면 true */
+function setHTML(el, html) {
+  if (el._html === html) return false;
+  el._html = html;
+  el.innerHTML = html;
+  return true;
+}
+
+/** 새로 나타난 요소에만 등장 애니메이션 */
+function animateNew(root, selector, keyOf, set, cls) {
+  for (const el of root.querySelectorAll(selector)) {
+    const k = keyOf(el);
+    if (!k || set.has(k)) continue;
+    set.add(k);
+    el.classList.add(cls);
+  }
+}
+
+/** 숫자가 바뀌면 그 자리에서 +1 / -2 가 떠오른다 */
+function spawnFloat(el, text, good) {
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  const f = document.createElement('div');
+  f.className = `float-num ${good ? 'up' : 'down'}`;
+  f.textContent = text;
+  f.style.left = `${r.left + r.width / 2}px`;
+  f.style.top = `${r.top}px`;
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 1300);
+}
+
 function renderTop() {
   const st = app.state;
   const cur = st.players.find((p) => p.id === st.current);
   const colorOf = (pid) => app.catalog.colors[st.order.indexOf(pid)];
   const m = me();
   const rounds = Array.from({ length: st.rounds }, (_, i) => `<span class="rd ${i + 1 < st.round ? 'done' : i + 1 === st.round ? 'now' : ''}">${i + 1}</span>`).join('');
-  $('#topbar').innerHTML = `
+  const html = `
     <div class="tb-logo"><img src="/icon.svg" width="34" height="34" alt=""><b>아르낙</b></div>
     <div class="tb-round"><span class="hint">라운드</span><div class="rds">${rounds}</div></div>
     <div class="tb-turn">${st.result ? '🏆 게임 종료' : cur ? `<span class="dot" style="background:${colorOf(cur.id)}"></span>${cur.id === app.you ? '<b class="mine">내 차례!</b>' : `<b>${esc(cur.name)}</b>의 차례`}` : '진행 중…'}</div>
     ${m ? `<div class="tb-res">${['coin', 'compass', 'tablet', 'arrow', 'gem'].map((k) => `<span class="big-res" title="${app.catalog.resNames[k]}">${ico(RES_ICON[k], 26)}<b>${m.res[k]}</b></span>`).join('')}
       <span class="big-res" title="남은 고고학자">${ico('ic-arch', 26, '', `color:${colorOf(app.you)}`)}<b>${m.arch}</b></span>
       <span class="big-res vp" title="지금 점수">${ico('ic-vp', 24)}<b>${m.score.total}</b></span></div>` : ''}
-    <div class="tb-btns"><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-sound2">🔊</button>${st.result ? '<button class="small" id="btn-show-result">🏆 결과</button>' : ''}</div>`;
-  $('#topbar .btn-guide2').onclick = () => Guide.open();
-  $('#topbar .btn-sound2').onclick = openSound;
-  const rb = $('#btn-show-result');
-  if (rb) rb.onclick = () => { app.hideResult = false; renderResult(); };
+    <div class="tb-btns"><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-ref">📋 빠른 참고</button><button class="small btn-sound2" title="소리 · 배경음악 · 글자 크기">⚙ 설정</button>${st.result ? '<button class="small" id="btn-show-result">🏆 결과</button>' : ''}</div>`;
+  if (setHTML($('#topbar'), html)) {
+    $('#topbar .btn-guide2').onclick = () => Guide.open();
+    $('#topbar .btn-ref').onclick = () => Guide.reference();
+    $('#topbar .btn-sound2').onclick = openSound;
+    const rb = $('#btn-show-result');
+    if (rb) rb.onclick = () => { app.hideResult = false; renderResult(); };
+  }
+  // 내 자원이 바뀌면 숫자가 떠오른다
+  if (m) {
+    const cur = { ...m.res, vp: m.score.total };
+    if (app.prevRes) {
+      const els = $('#topbar').querySelectorAll('.tb-res .big-res');
+      ['coin', 'compass', 'tablet', 'arrow', 'gem'].forEach((k, i) => {
+        const d = cur[k] - app.prevRes[k];
+        if (d) { spawnFloat(els[i], `${d > 0 ? '+' : ''}${d}`, d > 0); els[i].classList.remove('bump'); void els[i].offsetWidth; els[i].classList.add('bump'); }
+      });
+      const dv = cur.vp - app.prevRes.vp;
+      if (dv) spawnFloat($('#topbar .big-res.vp'), `${dv > 0 ? '+' : ''}${dv}★`, dv > 0);
+    }
+    app.prevRes = cur;
+  }
 }
 
 function renderPrompt() {
@@ -224,6 +273,7 @@ function renderPrompt() {
   if (!p || p.type !== 'option') {
     box.className = 'prompt waiting';
     const cur = st.players.find((x) => x.id === st.current);
+    box._html = null;
     box.innerHTML = p && p.type === 'cards' ? '<div class="p-title">카드를 고르세요 (가운데 창)</div>' : `<div class="p-title">${st.result ? '🏆 게임이 끝났어요' : cur ? `⏳ ${esc(cur.name)}의 차례를 기다리는 중…` : '⏳ 진행 중…'}</div>`;
   } else {
     box.className = 'prompt active';
@@ -238,17 +288,27 @@ function renderPrompt() {
       html += `<div class="p-group end">${groups.end.map((o) => btn(o, o.value === 'pass' ? 'pass' : 'endbtn')).join('')}</div>`;
     } else html += p.options.map((o) => btn(o, o.value === 'cancel' ? 'cancel' : '')).join('');
     html += '</div>';
-    box.innerHTML = html;
+    const fresh = box._html !== html;
+    setHTML(box, html);
+    if (fresh) box.classList.remove('pop'), void box.offsetWidth, box.classList.add('pop');
     for (const b of box.querySelectorAll('button[data-v]')) {
+      const o = p.options.find((x) => x.value === b.dataset.v);
       b.onclick = () => {
-        const o = p.options.find((x) => x.value === b.dataset.v);
-        if (o.disabled) { toast(o.reason || '지금은 할 수 없어요'); return; }
-        if (o.value === 'pass' && !confirm('이번 라운드를 패스할까요? 이번 라운드에는 더 이상 차례가 오지 않아요.')) return;
-        answer(o.value);
+        const cur = app.prompt && app.prompt.options && app.prompt.options.find((x) => x.value === b.dataset.v);
+        if (!cur) return;
+        if (cur.disabled) { toast(cur.reason || '지금은 할 수 없어요'); return; }
+        if (cur.value === 'pass' && !confirm('이번 라운드를 패스할까요? 이번 라운드에는 더 이상 차례가 오지 않아요.')) return;
+        answer(cur.value);
       };
+      const desc = optionDesc(o, p, st, me() || {});
+      if (desc) {
+        b.onmouseenter = (e) => showTip(e, desc + (o.disabled && o.reason ? `<div class="tip-warn">🚫 지금 못 하는 이유: ${esc(o.reason)}</div>` : ''));
+        b.onmousemove = moveTip;
+        b.onmouseleave = hideTip;
+      }
     }
   }
-  $('#hint').innerHTML = `💡 ${promptHint(p, st, me() || {})}`;
+  setHTML($('#hint'), `💡 ${promptHint(p, st, me() || {})}`);
 }
 
 // 지도 좌표 (%)
@@ -290,7 +350,7 @@ function renderBoard() {
   for (const s of st.sites) {
     const [x, y] = SITE_POS[s.id];
     const can = pm.site[s.id] != null;
-    const occ = s.occupants.map((pid) => `<span class="meeple" title="${esc(st.players.find((p) => p.id === pid).name)}">${ico('ic-arch', 26, '', `color:${colorOf(pid)}`)}</span>`).join('');
+    const occ = s.occupants.map((pid) => `<span class="meeple" data-k="${s.id}:${pid}:${st.round}" title="${esc(st.players.find((p) => p.id === pid).name)}">${ico('ic-arch', 26, '', `color:${colorOf(pid)}`)}</span>`).join('');
     let body;
     if (!s.discovered) {
       body = `<div class="st-name unk">❓ 미탐사 유적</div>
@@ -299,13 +359,24 @@ function renderBoard() {
     } else {
       body = `<div class="st-name">${esc(s.name)}</div><div class="st-reward">${resHTML(s.reward, 20)}</div>`;
     }
-    const guard = s.guardian ? `<div class="st-guard" title="제압 비용: ${esc(Object.entries(s.guardian.cost).map(([k, n]) => `${app.catalog.resNames[k]} ${n}`).join(', '))}"><span class="g-art">${GUARDIAN_ART[s.guardian.id] || '👹'}</span><span class="g-txt"><b>${esc(s.guardian.name)}</b><span class="g-cost">제압: ${resHTML(s.guardian.cost, 15)}</span></span></div>` : '';
+    const guard = s.guardian ? `<div class="st-guard" data-k="${s.id}:${s.guardian.id}" title="제압 비용: ${esc(Object.entries(s.guardian.cost).map(([k, n]) => `${app.catalog.resNames[k]} ${n}`).join(', '))}"><span class="g-art">${GUARDIAN_ART[s.guardian.id] || '👹'}</span><span class="g-txt"><b>${esc(s.guardian.name)}</b><span class="g-cost">제압: ${resHTML(s.guardian.cost, 15)}</span></span></div>` : '';
     html += `<div class="site lv${s.level} ${s.discovered ? 'open' : 'closed'} ${can ? 'can' : ''} ${s.guardian ? 'guarded' : ''}" style="left:${x}%;top:${y}%" data-site="${s.id}">
       <div class="st-head"><span class="st-lv">${lvName[s.level]}</span>${s.discovered ? `<span class="st-travel" title="이동 비용">${travelHTML(s.travel, 18)}</span>` : ''}</div>
       ${body}${guard}<div class="st-occ">${occ}</div></div>`;
   }
   const board = $('#board');
-  board.innerHTML = html;
+  if (!setHTML(board, html)) return;
+  for (const el of board.querySelectorAll('.site')) {
+    const key = `${el.dataset.site}:${el.classList.contains('open') ? 'open' : 'closed'}`;
+    if (!app.seen.sites[key]) {
+      // 처음 그릴 때는 부드럽게 등장, 게임 중에 새로 탐사된 유적은 뒤집히며 공개
+      const revealed = el.classList.contains('open') && !el.classList.contains('lv0') && app.seen.sites[`${el.dataset.site}:closed`];
+      app.seen.sites[key] = true;
+      el.classList.add(revealed ? 'reveal' : 'enter');
+    }
+  }
+  animateNew(board, '.meeple', (el) => el.dataset.k, app.seen.occ, 'drop');
+  animateNew(board, '.st-guard', (el) => el.dataset.k, app.seen.guard, 'appear');
   for (const el of board.querySelectorAll('.site')) {
     const id = el.dataset.site;
     el.onclick = () => { if (pm.site[id] != null) answer(pm.site[id]); };
@@ -342,7 +413,8 @@ function renderRow() {
   });
   if (st.staff >= st.row.length) html += `<div class="staff">${ico('ic-moon', 26)}<span></span></div>`;
   const row = $('#card-row');
-  row.innerHTML = html;
+  if (!setHTML(row, html)) return;
+  animateNew(row, '.card[data-uid]', (el) => el.dataset.uid, app.seen.row, 'enter');
   for (const el of row.querySelectorAll('[data-slot]')) {
     el.onclick = () => { const v = pm.slot[el.dataset.slot]; if (v != null) answer(v); };
   }
@@ -368,18 +440,40 @@ function renderResearch() {
       const p = st.ps[pid];
       return `${p.glass === r ? `<span class="tok" title="${esc(st.players.find((x) => x.id === pid).name)}의 돋보기" style="--pc:${colorOf(pid)}">${ico('ic-glass', 18)}</span>` : ''}${p.note === r ? `<span class="tok" title="${esc(st.players.find((x) => x.id === pid).name)}의 수첩" style="--pc:${colorOf(pid)}">${ico('ic-note', 18)}</span>` : ''}`;
     }).join('');
-    rows += `<div class="rr ${r === 7 ? 'temple' : ''}">
+    rows += `<div class="rr ${r === 7 ? 'temple' : ''}" data-row="${r}">
       <div class="rr-n">${r === 7 ? ico('ic-temple', 20) : r === 0 ? '출발' : r}</div>
       <div class="rr-body"><span class="rr-cost" title="이 줄로 올라오는 비용">${r ? resHTML(row.cost, 14) : '<span class="hint">시작</span>'}</span>${row.reward ? `<span class="rr-rew" title="처음 도착하면 받는 보상">→ ${rewardLabel(row.reward)}</span>` : ''}</div>
       <div class="rr-vp" title="게임 끝 점수: 돋보기 / 수첩">${c.glassVP[r]}<span>/${c.noteVP[r]}</span></div>
       <div class="rr-tok">${tokens}</div></div>`;
   }
   const temple = c.temple.map((t) => `<span class="tt" title="${resText(t.cost)} → ${t.vp}점 (남은 ${st.templeSupply[t.id] ?? 0}장)">${t.vp}점 ${resHTML(t.cost, 12)}</span>`).join('');
-  const offer = st.assistantOffer.map((id) => { const a = c.assistants[id]; return `<div class="as-card" title="업그레이드: ${esc(rewardPlain(a.up))}">${ico('ic-assist', 18)}<b>${esc(a.name)}</b><span>${resHTML(a.base, 13)}</span></div>`; }).join('');
-  $('#research').innerHTML = `<div class="r-title" title="줄마다: 올라오는 비용 → 처음 도착 보상 · 오른쪽 숫자는 게임 끝 점수(돋보기/수첩)">🔍 연구 트랙 <span class="hint">비용 → 보상 · 점수</span></div>
+  const offer = st.assistantOffer.map((id) => { const a = c.assistants[id]; return `<div class="as-card" data-as="${id}">${ico('ic-assist', 18)}<b>${esc(a.name)}</b><span>${resHTML(a.base, 13)}</span></div>`; }).join('');
+  const rhtml = `<div class="r-title" title="줄마다: 올라오는 비용 → 처음 도착 보상 · 오른쪽 숫자는 게임 끝 점수(돋보기/수첩)">🔍 연구 트랙 <span class="hint">비용 → 보상 · 점수</span></div>
     <div class="temple-tiles" title="돋보기가 신전에 도착한 뒤 살 수 있어요"><span class="hint">🏛 신전 타일</span>${temple}</div>
     <div class="r-rows">${rows}</div>
-    <div class="r-title small">👤 고용 가능한 조수</div><div class="as-offer">${offer || '<span class="hint">없음</span>'}</div>`;
+    <div class="r-title small">👤 고용 가능한 조수 <span class="hint">(연구 2·5줄에서 1명씩)</span></div><div class="as-offer">${offer || '<span class="hint">없음</span>'}</div>`;
+  if (!setHTML($('#research'), rhtml)) return;
+  for (const el of $('#research').querySelectorAll('.rr')) {
+    const r = Number(el.dataset.row);
+    el.onmouseenter = (e) => showTip(e, researchTip(r));
+    el.onmousemove = moveTip;
+    el.onmouseleave = hideTip;
+  }
+  for (const el of $('#research').querySelectorAll('.as-card')) {
+    const a = c.assistants[el.dataset.as];
+    el.onmouseenter = (e) => showTip(e, `<b>👤 ${esc(a.name)}</b><br>라운드마다 1번(자유 행동): ${resHTML(a.base, 14)} ${a.base.exile ? '카드 추방' : ''}<br>업그레이드하면: ${resHTML(a.up, 14)} ${a.up.exile ? '카드 추방' : ''}<br><span class="hint">연구 트랙 2줄·5줄에 처음 도착하면 이 중 한 명을 고용해요. 4줄에 도착하면 조수 한 명을 업그레이드해요.</span>`);
+    el.onmousemove = moveTip;
+    el.onmouseleave = hideTip;
+  }
+}
+
+function researchTip(r) {
+  const c = app.catalog;
+  const row = c.research[r];
+  const rw = row.reward;
+  const rewardText = !rw ? '' : rw.kind === 'gain' ? `자원 ${resHTML(rw.res, 14)}` : rw.kind === 'assistant' ? '조수 1명 고용 (라운드마다 1번 쓰는 능력)' : rw.kind === 'upgrade' ? '조수 1명 업그레이드 (더 강한 능력, 이번 라운드 다시 사용 가능). 조수가 없으면 나침반 2' : '돋보기 도착 순서대로 6 / 4 / 2 / 1점, 이후 신전 타일 구매 가능';
+  if (!r) return '<b>출발</b><br>모든 탐험가의 돋보기와 수첩이 여기서 시작해요.';
+  return `<b>${r === 7 ? '🏛 신전' : `연구 ${r}줄`}</b><br>올라오는 비용: ${resHTML(row.cost, 14)}<br>처음 도착 보상: ${rewardText}<br>게임 끝 점수: 돋보기 <b>${c.glassVP[r]}</b>점 · 수첩 <b>${c.noteVP[r]}</b>점<br><span class="hint">돋보기와 수첩은 각각 따로 보상을 받아요. 수첩은 돋보기보다 위로 갈 수 없어요.</span>`;
 }
 
 function resText(r) { return Object.entries(r).filter(([, n]) => n).map(([k, n]) => `${app.catalog.resNames[k]} ${n}`).join(' + '); }
@@ -388,14 +482,14 @@ function rewardPlain(r) { return Object.entries(r).filter(([, n]) => n).map(([k,
 function renderPlayers() {
   const st = app.state;
   const c = app.catalog;
-  $('#players').innerHTML = st.order.map((pid, i) => {
+  const phtml = st.order.map((pid, i) => {
     const pl = st.players.find((x) => x.id === pid);
     const p = st.ps[pid];
     const color = c.colors[i];
     const guards = p.guardians.map((g) => `<span class="mini-g ${g.used ? 'used' : ''}" title="${esc(c.guardians[g.id].name)}${g.used ? ' (혜택 사용함)' : ''}">${GUARDIAN_ART[g.id]}</span>`).join('');
     const assists = p.assistants.map((a) => `<span class="mini-a ${a.used ? 'used' : ''} ${a.up ? 'up' : ''}" title="${esc(c.assistants[a.id].name)}: ${esc(rewardPlain(a.up ? c.assistants[a.id].up : c.assistants[a.id].base))}${a.used ? ' (이번 라운드 사용함)' : ''}">${ico('ic-assist', 15)}${esc(c.assistants[a.id].name.split(' ')[1] || '')}</span>`).join('');
     const s = p.score;
-    return `<div class="pl ${st.current === pid ? 'turn' : ''} ${p.passed ? 'passed' : ''}" style="--pc:${color}">
+    return `<div class="pl ${st.current === pid ? 'turn' : ''} ${p.passed ? 'passed' : ''}" data-pid="${pid}" style="--pc:${color}">
       <div class="pl-head"><span class="dot" style="background:${color}"></span><b>${esc(pl.name)}</b>${pid === app.you ? ' <span class="hint">(나)</span>' : ''}${pl.bot ? ' <span class="tag">AI</span>' : ''}${st.first === pid ? ' <span class="tag first" title="이번 라운드 선 플레이어">선</span>' : ''}
         <span style="flex:1"></span>${p.passed ? '<span class="tag">패스</span>' : ''}<span class="pl-vp" title="연구 ${s.research} · 신전 ${s.temple} · 우상 ${s.idols} · 수호자 ${s.guardians} · 카드 ${s.cards} · 두려움 ${s.fear}">${ico('ic-vp', 16)}${s.total}</span></div>
       <div class="pl-res">${['coin', 'compass', 'tablet', 'arrow', 'gem'].map((k) => `<span>${ico(RES_ICON[k], 16)}${p.res[k]}</span>`).join('')}<span title="남은 고고학자">${ico('ic-arch', 16, '', `color:${color}`)}${p.arch}</span></div>
@@ -403,6 +497,15 @@ function renderPlayers() {
       ${guards || assists ? `<div class="pl-extra">${guards}${assists}</div>` : ''}
     </div>`;
   }).join('');
+  if (!setHTML($('#players'), phtml)) return;
+  for (const el of $('#players').querySelectorAll('.pl-vp')) {
+    const pid = el.closest('.pl').dataset.pid;
+    const sc = st.ps[pid].score;
+    el.removeAttribute('title');
+    el.onmouseenter = (e) => showTip(e, `<b>지금 점수 ${sc.total}점</b><table class="tip-tbl"><tr><td>🔍 연구 트랙</td><td>${sc.research}</td></tr><tr><td>🏛 신전</td><td>${sc.temple}</td></tr><tr><td>🗿 우상</td><td>${sc.idols}</td></tr><tr><td>⚔ 수호자</td><td>${sc.guardians}</td></tr><tr><td>🃏 카드 ★</td><td>${sc.cards}</td></tr><tr><td>😱 두려움</td><td>${sc.fear}</td></tr></table>`);
+    el.onmousemove = moveTip;
+    el.onmouseleave = hideTip;
+  }
 }
 
 function renderMine() {
@@ -410,15 +513,16 @@ function renderMine() {
   const p = me();
   if (!p) return;
   const pm = promptMap();
-  $('#my-title').innerHTML = `내 탐험대 <span class="hint">덱 ${p.deckCount}장 · 버림 ${p.discardCount}장</span> <button class="small" id="btn-deck">📚 내 카드 전체 보기</button>`;
+  if (setHTML($('#my-title'), `내 탐험대 <span class="hint">덱 ${p.deckCount}장 · 버림 ${p.discardCount}장</span> <button class="small" id="btn-deck">📚 내 카드 전체 보기</button>`)) $('#btn-deck').onclick = showDeck;
   const c = app.catalog;
   const extras = [];
   if (p.idols || p.idolSlots) extras.push(`<span class="ex">${ico('ic-idol', 18)} 우상 ${p.idols}개${p.idolSlots ? ` (판에 ${p.idolSlots})` : ''}${p.idolUsedRound ? ' · 이번 라운드 사용함' : ''}</span>`);
   for (const a of p.assistants) { const ad = c.assistants[a.id]; extras.push(`<span class="ex ${a.used ? 'used' : ''}">${ico('ic-assist', 18)} ${esc(ad.name)}${a.up ? '⭐' : ''}: ${resHTML(a.up ? ad.up : ad.base, 14)}${a.used ? ' (사용함)' : ''}</span>`); }
   p.guardians.forEach((g) => { const gd = c.guardians[g.id]; const b = gd.boon; extras.push(`<span class="ex ${g.used ? 'used' : ''}">${GUARDIAN_ART[g.id]} ${esc(gd.name)} 혜택: ${b.kind === 'gain' ? resHTML(b.res, 14) : b.kind === 'draw' ? `카드 ${b.n}장` : b.kind === 'research' ? '연구 1칸' : '추방'}${g.used ? ' (사용함)' : ''}</span>`); });
-  $('#my-extras').innerHTML = extras.join('');
-  $('#hand').innerHTML = (p.hand || []).map((cd) => cardHTML(cd, { cls: pm.card[cd.uid] != null ? 'can' : '' })).join('') || '<span class="hint">손패가 없어요</span>';
-  $('#play').innerHTML = p.play.length ? `<span class="hint">이번 라운드에 쓴 카드:</span> ${p.play.map((cd) => `<span class="chip" data-cid="${cd.id}">${CARD_ART[cd.id] || '🃏'} ${esc(app.catalog.cards[cd.id].name)}</span>`).join('')}` : '';
+  setHTML($('#my-extras'), extras.join(''));
+  const handChanged = setHTML($('#hand'), (p.hand || []).map((cd) => cardHTML(cd, { cls: pm.card[cd.uid] != null ? 'can' : '' })).join('') || '<span class="hint">손패가 없어요</span>');
+  if (handChanged) animateNew($('#hand'), '.card[data-uid]', (el) => el.dataset.uid, app.seen.hand, 'enter');
+  setHTML($('#play'), p.play.length ? `<span class="hint">이번 라운드에 쓴 카드:</span> ${p.play.map((cd) => `<span class="chip" data-cid="${cd.id}">${CARD_ART[cd.id] || '🃏'} ${esc(app.catalog.cards[cd.id].name)}</span>`).join('')}` : '');
   for (const el of document.querySelectorAll('#play .chip')) {
     const c = app.catalog.cards[el.dataset.cid];
     el.onmouseenter = (e) => showTip(e, `<b>${esc(c.name)}</b><br>${esc(c.text)}`);
@@ -436,7 +540,6 @@ function renderMine() {
     };
   }
   attachCardTips($('#hand'));
-  $('#btn-deck').onclick = showDeck;
 }
 
 function showDeck() {
@@ -514,7 +617,8 @@ function renderLog() {
   const colorOf = (pid) => app.catalog.colors[st.order.indexOf(pid)];
   const el = $('#log');
   const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  el.innerHTML = st.log.map((l) => `<div class="lg ${l.text.startsWith('══') ? 'round' : ''} ${l.text.startsWith('▶') ? 'turnline' : ''}" style="${l.pid ? `--pc:${colorOf(l.pid)}` : ''}">${esc(l.text)}</div>`).join('');
+  const changed = setHTML(el, st.log.map((l) => `<div class="lg ${l.text.startsWith('══') ? 'round' : ''} ${l.text.startsWith('▶') ? 'turnline' : ''}" style="${l.pid ? `--pc:${colorOf(l.pid)}` : ''}">${esc(l.text)}</div>`).join(''));
+  if (!changed) return;
   if (atBottom || !renderLog.init) el.scrollTop = el.scrollHeight;
   renderLog.init = true;
 }
@@ -561,40 +665,76 @@ function renderResult() {
 }
 
 // ───────────── 툴팁 ─────────────
-function showTip(e, html) { const t = $('#tip'); t.innerHTML = html; t.classList.remove('hidden'); moveTip(e); }
+function showTip(e, html) { const t = $('#tip'); t.innerHTML = html; t.classList.remove('hidden'); app.tipOwner = e.currentTarget; moveTip(e); }
 function moveTip(e) {
   const t = $('#tip');
   const x = Math.min(e.clientX + 16, window.innerWidth - t.offsetWidth - 8);
   const y = Math.min(e.clientY + 16, window.innerHeight - t.offsetHeight - 8);
   t.style.left = x + 'px'; t.style.top = y + 'px';
 }
-function hideTip() { $('#tip').classList.add('hidden'); }
+function hideTip() { $('#tip').classList.add('hidden'); app.tipOwner = null; }
 function attachCardTips(root) {
   for (const el of root.querySelectorAll('.card[data-cid]')) {
     const c = app.catalog.cards[el.dataset.cid];
     if (!c) continue;
-    el.onmouseenter = (e) => showTip(e, `<b>${esc(c.name)}</b> <span class="hint">(${KIND_NAME[c.kind]}${c.cost ? ` · ${c.kind === 'item' ? '동전' : '나침반'} ${c.cost}` : ''})</span><br>${esc(c.text)}<br><span class="hint">이동 아이콘: ${app.catalog.travelNames[c.travel] || '없음'} · 점수 ${c.vp}${c.kind === 'artifact' ? ' · 사자마자 공짜로 한 번 사용 가능' : ''}${c.kind === 'item' ? ' · 사면 덱 맨 아래로' : ''}</span>`);
+    el.onmouseenter = (e) => showTip(e, `<b>${CARD_ART[c.id] || ''} ${esc(c.name)}</b> <span class="hint">(${KIND_NAME[c.kind]}${c.cost ? ` · ${c.kind === 'item' ? '동전' : '나침반'} ${c.cost}개로 구매` : ''})</span>
+      <div class="tip-body">${c.free ? '<b class="free">⚡ 자유 행동</b> — 주요 행동과 별개로 쓸 수 있어요.<br>' : ''}${esc(c.text.replace(/^⚡ /, ''))}</div>
+      <div class="tip-meta">${c.travel ? `이동 아이콘 ${ico(TRAVEL_ICON[c.travel], 16)} ${app.catalog.travelNames[c.travel]} — 발굴·탐사 때 이 카드를 버려 이 비용을 낼 수 있어요.<br>` : ''}게임 끝 점수 ★${c.vp}${c.kind === 'artifact' ? '<br>유물: 사자마자 공짜로 한 번 사용할 수 있어요.' : ''}${c.kind === 'item' ? '<br>물건: 사면 덱 맨 아래로 들어가요.' : ''}</div>${cardAdvice(c)}`);
     el.onmousemove = moveTip;
     el.onmouseleave = hideTip;
   }
 }
 
-// ───────────── 소리 설정 ─────────────
+// ───────────── 설정 (소리 · 글자 크기) ─────────────
+function applyFontScale(v) {
+  document.documentElement.style.setProperty('--fs', String(v));
+  try { localStorage.setItem('arnak-fs', String(v)); } catch { /* 무시 */ }
+  for (const b of document.querySelectorAll('.fs-btn')) b.classList.toggle('on', Number(b.dataset.fs) === Number(v));
+  // 글자 크기가 바뀌면 캐시를 비워 다시 그린다
+  for (const el of document.querySelectorAll('*')) if (el._html) el._html = null;
+  if (app.state) renderGame();
+}
+
+function renderTrackInfo() {
+  const t = Sound.track;
+  $('#snd-track').textContent = t ? t.name : '-';
+  $('#snd-tracks').innerHTML = Sound.tracks.map((x) => `<span class="trk ${t && x.id === t.id ? 'on' : ''}">${x.name}</span>`).join('');
+}
+
 function openSound() {
   Sound.init();
   const s = Sound.settings;
-  $('#snd-music').checked = s.musicOn; $('#snd-sfx').checked = s.sfxOn;
+  $('#snd-music').checked = s.musicOn; $('#snd-sfx').checked = s.sfxOn; $('#snd-shuffle').checked = s.shuffle !== false;
   $('#snd-music-vol').value = s.music; $('#snd-sfx-vol').value = s.sfx;
+  renderTrackInfo();
   $('#sound-panel').classList.remove('hidden');
 }
 function initSound() {
+  let fs = 1;
+  try { fs = Number(localStorage.getItem('arnak-fs')) || 1; } catch { /* 무시 */ }
+  applyFontScale(fs);
+  for (const b of document.querySelectorAll('.fs-btn')) b.onclick = () => applyFontScale(Number(b.dataset.fs));
   $('#snd-music').onchange = (e) => Sound.set('musicOn', e.target.checked);
   $('#snd-sfx').onchange = (e) => Sound.set('sfxOn', e.target.checked);
+  $('#snd-shuffle').onchange = (e) => Sound.set('shuffle', e.target.checked);
   $('#snd-music-vol').oninput = (e) => Sound.set('music', Number(e.target.value));
   $('#snd-sfx-vol').oninput = (e) => Sound.set('sfx', Number(e.target.value));
+  $('#snd-next').onclick = () => { Sound.init(); Sound.nextTrack(); };
   $('#snd-test').onclick = () => Sound.test();
   $('#snd-close').onclick = () => $('#sound-panel').classList.add('hidden');
   $('#sound-panel').onclick = (e) => { if (e.target.id === 'sound-panel') $('#sound-panel').classList.add('hidden'); };
+  // 곡이 바뀌면 화면 구석에 곡 이름을 잠깐 보여 준다
+  Sound.onTrack = (t) => {
+    renderTrackInfo();
+    if (!Sound.settings.musicOn) return;
+    const el = $('#now-playing-toast');
+    el.textContent = `♪ ${t.name}`;
+    el.classList.remove('hidden', 'show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(initSound.npTimer);
+    initSound.npTimer = setTimeout(() => el.classList.add('hidden'), 4200);
+  };
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (Guide.isOpen()) Guide.close();

@@ -39,7 +39,7 @@ const ITEMS = [
   { id: 'compass_item', name: '황동 나침반', cost: 3, vp: 1, travel: 'ship', text: '나침반 3을 얻습니다.', effect: gain({ compass: 3 }) },
   { id: 'trade_goods', name: '교역품', cost: 3, vp: 1, travel: 'ship', text: '동전 2를 내고 보석 1을 얻을 수 있습니다.', effect: async (g, pid) => g.convert(pid, { coin: 2 }, { gem: 1 }) },
   { id: 'climbing_gear', can: (g, pid) => g.researchTokens(pid, { discount: { tablet: 1 } }).length > 0, name: '등반 장비', cost: 3, vp: 1, travel: 'boot', text: '연구 1칸 진행 (비용 중 석판 1개 면제).', effect: async (g, pid) => g.doResearch(pid, { discount: { tablet: 1 } }) },
-  { id: 'old_map', name: '오래된 지도', cost: 3, vp: 2, travel: 'car', text: '나침반 1과 화살촉 1 중 하나를 고릅니다.', effect: async (g, pid) => g.chooseGain(pid, [{ compass: 2 }, { arrow: 1 }]) },
+  { id: 'old_map', name: '오래된 지도', cost: 3, vp: 2, travel: 'car', text: '나침반 2와 화살촉 1 중 하나를 고릅니다.', effect: async (g, pid) => g.chooseGain(pid, [{ compass: 2 }, { arrow: 1 }]) },
   { id: 'pack_mule', name: '짐 나귀', cost: 2, vp: 0, travel: 'boot', free: true, text: '⚡ 카드 1장을 뽑습니다.', effect: async (g, pid) => g.drawCards(pid, 1) },
   { id: 'cargo_ship', name: '화물선', cost: 4, vp: 2, travel: 'ship', text: '동전 3을 얻습니다.', effect: gain({ coin: 3 }) },
   { id: 'chisel', name: '정', cost: 4, vp: 2, travel: 'car', text: '석판 2를 얻습니다.', effect: gain({ tablet: 2 }) },

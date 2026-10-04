@@ -3,7 +3,7 @@
 
 const Sound = (() => {
   const SETTINGS_KEY = 'arnak-sound';
-  const settings = { musicOn: true, sfxOn: true, music: 0.45, sfx: 0.7 };
+  const settings = { musicOn: true, sfxOn: true, music: 0.45, sfx: 0.7, shuffle: true };
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch { /* 무시 */ }
 
   let ctx = null;
@@ -191,28 +191,39 @@ const Sound = (() => {
     try { SFX[name](); } catch (e) { console.warn(e); }
   }
 
-  // ───── 배경음악 (생성형) ─────
-  // D 도리안 / 단조 펜타토닉 기반의 잔잔한 섬 테마. 침략자 단계에는 북과 어두운 화음이 더해진다.
-  const MOODS = {
-    calm: {
-      bpm: 72, pluck: 0.2, drums: false, waves: true,
-      chords: [[50, 57, 60, 64, 65], [46, 53, 57, 62, 65], [41, 53, 57, 60, 64], [48, 55, 62, 64, 67]],
-      scale: [62, 65, 67, 69, 72, 74, 77, 79, 81],
-    },
-    tense: {
-      bpm: 92, pluck: 0.32, drums: true, waves: false,
-      chords: [[50, 57, 62, 65, 69], [46, 53, 58, 62, 65], [43, 50, 55, 58, 62], [45, 52, 57, 61, 64]],
-      scale: [62, 63, 65, 67, 69, 70, 74, 75, 77],
-    },
-  };
+  // ───── 배경음악 (생성형, 여러 곡 무작위 재생) ─────
+  // 곡마다 템포·음계·악기·리듬·배경 소리가 다르고, 몇 분마다 다른 곡으로 자연스럽게 넘어간다.
+  const TRACKS = [
+    { id: 'morning', name: '🌅 정글의 아침', bpm: 84, lead: 'marimba', leadProb: 0.34, drums: 'shaker', amb: 'birds', pad: 'soft',
+      chords: [[48, 55, 60, 64, 67], [53, 57, 60, 65, 69], [45, 52, 57, 60, 64], [43, 50, 55, 59, 62]], scale: [60, 62, 64, 67, 69, 72, 74, 76, 79, 81] },
+    { id: 'temple', name: '🏛 잊혀진 신전', bpm: 64, lead: 'flute', leadProb: 0.16, drums: 'gong', amb: 'none', pad: 'drone',
+      chords: [[40, 47, 52, 56, 59], [41, 48, 53, 57, 60], [40, 47, 52, 56, 59], [38, 45, 50, 53, 57]], scale: [64, 65, 68, 69, 71, 72, 74, 76, 77, 80] },
+    { id: 'river', name: '🛶 강을 따라', bpm: 96, lead: 'pluck', leadProb: 0.3, drums: 'tribal', amb: 'water', pad: 'soft',
+      chords: [[50, 57, 60, 64, 65], [48, 55, 60, 64, 67], [46, 53, 58, 62, 65], [45, 52, 57, 60, 64]], scale: [62, 64, 65, 67, 69, 71, 72, 74, 76, 77] },
+    { id: 'campfire', name: '🔥 모닥불 밤', bpm: 60, lead: 'kalimba', leadProb: 0.42, drums: 'none', amb: 'crickets', pad: 'warm', arp: true,
+      chords: [[45, 52, 57, 60, 64], [41, 48, 53, 57, 60], [48, 55, 60, 64, 67], [43, 50, 55, 59, 62]], scale: [57, 60, 62, 64, 67, 69, 72, 74, 76] },
+    { id: 'march', name: '🧭 탐험대 출발', bpm: 108, lead: 'brass', leadProb: 0.26, drums: 'march', amb: 'birds', pad: 'soft',
+      chords: [[43, 50, 55, 59, 62], [41, 48, 53, 57, 60], [48, 55, 60, 64, 67], [43, 50, 55, 58, 62]], scale: [55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72] },
+  ];
+  const BARS_PER_TRACK = 40; // 약 2~4분마다 곡 교체
+  let track = TRACKS[Math.floor(Math.random() * TRACKS.length)];
+  let trackBars = 0;
+  let melodyIdx = 4;
+  let onTrackChange = null;
+
+  function pickNextTrack() {
+    const others = TRACKS.filter((t) => t.id !== track.id);
+    return others[Math.floor(Math.random() * others.length)];
+  }
 
   function startMusic() {
     if (!ctx || scheduler) return;
-    mood = pendingMood === 'tense' ? 'tense' : 'calm';
     nextBeatTime = ctx.currentTime + 0.2;
     beat = 0;
+    trackBars = 0;
     scheduler = setInterval(schedule, 100);
-    setWaves(MOODS[mood].waves);
+    setWaves(track.amb === 'water');
+    if (onTrackChange) onTrackChange(track);
   }
 
   function stopMusic() {
@@ -220,18 +231,27 @@ const Sound = (() => {
     setWaves(false);
   }
 
+  function nextTrack() {
+    track = pickNextTrack();
+    trackBars = 0;
+    melodyIdx = 4;
+    beat = 0;
+    if (ctx) { setWaves(track.amb === 'water'); delay.delayTime.setTargetAtTime(60 / track.bpm * 0.75, ctx.currentTime, 0.1); }
+    if (onTrackChange) onTrackChange(track);
+  }
+
   function setWaves(on) {
     if (!ctx) return;
     if (on && !ocean) {
       const src = noise();
-      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
       const g = ctx.createGain(); g.gain.value = 0.0;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.11;
-      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.05;
-      const fl = ctx.createGain(); fl.gain.value = 350;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.18;
+      const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.025;
+      const fl = ctx.createGain(); fl.gain.value = 300;
       lfo.connect(lfoGain); lfoGain.connect(g.gain); lfo.connect(fl); fl.connect(f.frequency);
       src.connect(f); f.connect(g); g.connect(musicBus);
-      g.gain.setTargetAtTime(0.06, ctx.currentTime, 2);
+      g.gain.setTargetAtTime(0.04, ctx.currentTime, 2);
       src.start(); lfo.start();
       ocean = { src, lfo, g };
     } else if (!on && ocean) {
@@ -241,27 +261,35 @@ const Sound = (() => {
     }
   }
 
-  function pad(notes, t, dur, m) {
-    for (const n of notes.slice(1)) {
-      for (const det of [-7, 7]) {
-        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(n); o.detune.value = det;
-        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(m === 'tense' ? 650 : 900, t); f.Q.value = 0.5;
-        f.frequency.linearRampToValueAtTime(m === 'tense' ? 1000 : 1500, t + dur / 2);
-        f.frequency.linearRampToValueAtTime(m === 'tense' ? 600 : 800, t + dur);
+  // ── 화음 깔개 ──
+  function pad(notes, t, dur, kind) {
+    const conf = { soft: ['triangle', 1400, 0.022], warm: ['sawtooth', 900, 0.014], drone: ['sawtooth', 700, 0.016] }[kind] || ['triangle', 1400, 0.02];
+    const voices = kind === 'drone' ? [notes[1], notes[2]] : notes.slice(1);
+    for (const n of voices) {
+      for (const det of [-6, 6]) {
+        const o = ctx.createOscillator(); o.type = conf[0]; o.frequency.value = mtof(n); o.detune.value = det;
+        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(conf[1] * 0.7, t); f.Q.value = 0.4;
+        f.frequency.linearRampToValueAtTime(conf[1], t + dur / 2);
+        f.frequency.linearRampToValueAtTime(conf[1] * 0.7, t + dur);
         const g = ctx.createGain();
         g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.018, t + 1.8);
-        g.gain.setValueAtTime(0.018, t + dur - 0.5);
-        g.gain.linearRampToValueAtTime(0.0001, t + dur + 2.2);
+        g.gain.linearRampToValueAtTime(conf[2], t + 1.6);
+        g.gain.setValueAtTime(conf[2], t + dur - 0.5);
+        g.gain.linearRampToValueAtTime(0.0001, t + dur + 2.0);
         o.connect(f); f.connect(g); g.connect(musicBus);
         const w = ctx.createGain(); w.gain.value = 0.7; g.connect(w); w.connect(reverbSend);
-        o.start(t); o.stop(t + dur + 2.4);
+        o.start(t); o.stop(t + dur + 2.2);
       }
     }
-    // 베이스
-    tone({ freq: mtof(notes[0] - 12), type: 'triangle', t, a: 0.6, d: dur, peak: 0.09, out: musicBus, wet: 0.2 });
+    tone({ freq: mtof(notes[0] - 12), type: 'sine', t, a: 0.5, d: dur, peak: kind === 'drone' ? 0.12 : 0.08, out: musicBus, wet: 0.2 });
   }
 
+  // ── 악기 ──
+  function voiceOut(g, dly = 0.3, wet = 0.4) {
+    g.connect(musicBus);
+    const s = ctx.createGain(); s.gain.value = dly; g.connect(s); s.connect(delay);
+    const w = ctx.createGain(); w.gain.value = wet; g.connect(w); w.connect(reverbSend);
+  }
   function pluck(midi, t, vel = 1) {
     const f = mtof(midi);
     const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
@@ -269,38 +297,133 @@ const Sound = (() => {
     const mg = ctx.createGain(); mg.gain.setValueAtTime(f * 1.2, t); mg.gain.exponentialRampToValueAtTime(1, t + 0.25);
     mod.connect(mg); mg.connect(o.frequency);
     const g = ctx.createGain(); env(g, t, 0.004, 0.07 * vel, 1.4);
-    o.connect(g); g.connect(musicBus);
-    const s = ctx.createGain(); s.gain.value = 0.35; g.connect(s); s.connect(delay);
-    const w = ctx.createGain(); w.gain.value = 0.4; g.connect(w); w.connect(reverbSend);
+    o.connect(g); voiceOut(g, 0.35, 0.4);
     o.start(t); mod.start(t); o.stop(t + 1.6); mod.stop(t + 1.6);
+  }
+  function marimba(midi, t, vel = 1) {
+    const f = mtof(midi);
+    for (const [mult, amp, dec] of [[1, 0.08, 0.7], [4, 0.025, 0.15], [10, 0.008, 0.05]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
+      const g = ctx.createGain(); env(g, t, 0.002, amp * vel, dec);
+      o.connect(g); voiceOut(g, 0.25, 0.3);
+      o.start(t); o.stop(t + dec + 0.2);
+    }
+  }
+  function kalimba(midi, t, vel = 1) {
+    const f = mtof(midi);
+    for (const [mult, amp, dec] of [[1, 0.07, 1.6], [5.4, 0.012, 0.3]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
+      const g = ctx.createGain(); env(g, t, 0.003, amp * vel, dec);
+      o.connect(g); voiceOut(g, 0.4, 0.5);
+      o.start(t); o.stop(t + dec + 0.2);
+    }
+  }
+  function flute(midi, t, vel = 1, dur = 1.4) {
+    const f = mtof(midi);
+    const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+    const vib = ctx.createOscillator(); vib.frequency.value = 5.2;
+    const vg = ctx.createGain(); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(f * 0.012, t + 0.5);
+    vib.connect(vg); vg.connect(o.frequency);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 * vel, t + 0.18);
+    g.gain.setValueAtTime(0.06 * vel, t + dur * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp); lp.connect(g); voiceOut(g, 0.3, 0.6);
+    noiseHit({ t, a: 0.05, d: 0.25, peak: 0.012 * vel, type: 'bandpass', freq: f * 2, q: 2, out: musicBus, wet: 0.3 });
+    o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+  }
+  function brass(midi, t, vel = 1, dur = 0.5) {
+    const f = mtof(midi);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1;
+    lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(2200, t + 0.06); lp.frequency.linearRampToValueAtTime(1100, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045 * vel, t + 0.05);
+    g.gain.setValueAtTime(0.04 * vel, t + dur * 0.8); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.15);
+    lp.connect(g); voiceOut(g, 0.2, 0.35);
+    for (const det of [-8, 8]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+      o.connect(lp); o.start(t); o.stop(t + dur + 0.2);
+    }
+  }
+  const LEADS = { pluck, marimba, kalimba, flute, brass };
+
+  // ── 배경 소리 ──
+  function bird(t) {
+    const base = 2200 + Math.random() * 1800;
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const tt = t + i * (0.09 + Math.random() * 0.05);
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(base, tt); o.frequency.exponentialRampToValueAtTime(base * (1.3 + Math.random() * 0.4), tt + 0.06);
+      const g = ctx.createGain(); env(g, tt, 0.005, 0.012, 0.08);
+      const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; o.connect(g); g.connect(pan); pan.connect(musicBus); } else { o.connect(g); g.connect(musicBus); }
+      const w = ctx.createGain(); w.gain.value = 0.5; g.connect(w); w.connect(reverbSend);
+      o.start(tt); o.stop(tt + 0.15);
+    }
+  }
+  function cricket(t) {
+    for (let i = 0; i < 3; i++) {
+      const tt = t + i * 0.06;
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 4400 + Math.random() * 300;
+      const g = ctx.createGain(); env(g, tt, 0.003, 0.006, 0.035);
+      o.connect(g); g.connect(musicBus);
+      o.start(tt); o.stop(tt + 0.06);
+    }
   }
 
   function schedule() {
     if (!ctx) return;
     while (nextBeatTime < ctx.currentTime + 0.4) {
-      const m = MOODS[mood];
+      const m = track;
       const spb = 60 / m.bpm;
       const t = nextBeatTime;
       const barBeat = beat % 8;
-      // 2마디(8박)마다 화음 교체 — 분위기 전환도 이때 반영
       if (barBeat === 0) {
-        if (pendingMood !== mood && MOODS[pendingMood]) { mood = pendingMood; setWaves(MOODS[mood].waves); delay.delayTime.setTargetAtTime(60 / MOODS[mood].bpm * 0.75, t, 0.1); }
-        const mm = MOODS[mood];
+        if (trackBars >= BARS_PER_TRACK && settings.shuffle !== false) nextTrack();
+        const mm = track;
         const chord = mm.chords[Math.floor(beat / 8) % mm.chords.length];
-        pad(chord, t, (60 / mm.bpm) * 8, mood);
+        pad(chord, t, (60 / mm.bpm) * 8, mm.pad);
+        if (mm.drums === 'gong' && Math.floor(beat / 8) % 2 === 0) bell(mtof(chord[0] + 12), t, 0.06, 4.5, musicBus, 0.6);
+        trackBars += 2;
       }
-      // 멜로디 (8분음표 단위로 확률적으로)
-      for (const half of [0, 0.5]) {
-        if (Math.random() < m.pluck) {
-          const n = m.scale[Math.floor(Math.random() * m.scale.length)];
-          pluck(n, t + half * spb + (Math.random() * 0.02), 0.6 + Math.random() * 0.5);
+      // 멜로디: 음계 위를 한두 칸씩 걸어 다니며 (가끔 쉼표)
+      const lead = LEADS[m.lead] || pluck;
+      const steps = m.lead === 'flute' ? [0] : [0, 0.5];
+      for (const half of steps) {
+        if (barBeat === 7 && half) continue; // 마디 끝 숨 고르기
+        if (Math.random() < m.leadProb) {
+          melodyIdx = Math.max(0, Math.min(m.scale.length - 1, melodyIdx + [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]));
+          const n = m.scale[melodyIdx];
+          if (m.lead === 'flute') flute(n, t, 0.8 + Math.random() * 0.3, spb * (1.5 + Math.random()));
+          else if (m.lead === 'brass') brass(n, t + half * spb, 0.8 + Math.random() * 0.3, spb * 0.45);
+          else lead(n, t + half * spb + Math.random() * 0.015, 0.6 + Math.random() * 0.5);
         }
       }
-      if (m.drums) {
-        if (barBeat === 0 || barBeat === 3 || barBeat === 4) drum(t, barBeat === 0 ? 0.32 : 0.2, musicBus, 42);
-        if (barBeat === 6) { drum(t, 0.18, musicBus, 50); drum(t + spb / 2, 0.22, musicBus, 46); }
-        noiseHit({ t: t + spb / 2, d: 0.04, peak: 0.025, type: 'highpass', freq: 6000, out: musicBus, wet: 0.05 });
+      // 아르페지오 (모닥불)
+      if (m.arp) {
+        const chord = m.chords[Math.floor(beat / 8) % m.chords.length];
+        const note = chord[1 + (beat % 4)] + 12;
+        kalimba(note, t + spb * 0.5, 0.35);
       }
+      // 리듬
+      if (m.drums === 'shaker' || m.drums === 'tribal') {
+        noiseHit({ t: t + spb / 2, d: 0.05, peak: 0.02, type: 'highpass', freq: 7000, out: musicBus, wet: 0.05 });
+        noiseHit({ t, d: 0.03, peak: 0.012, type: 'highpass', freq: 8000, out: musicBus, wet: 0.05 });
+      }
+      if (m.drums === 'tribal') {
+        if (barBeat === 0 || barBeat === 3 || barBeat === 5) drum(t, barBeat === 0 ? 0.3 : 0.2, musicBus, 46);
+        if (barBeat === 2 || barBeat === 6) drum(t + spb / 2, 0.14, musicBus, 70);
+        if (barBeat === 7) { drum(t, 0.12, musicBus, 80); drum(t + spb / 2, 0.14, musicBus, 64); }
+      }
+      if (m.drums === 'march') {
+        if (barBeat % 2 === 0) drum(t, 0.26, musicBus, 44);
+        if (barBeat % 2 === 1) noiseHit({ t, d: 0.12, peak: 0.07, type: 'bandpass', freq: 1800, q: 0.8, out: musicBus, wet: 0.15 });
+        if (barBeat === 7) { noiseHit({ t: t + spb / 2, d: 0.08, peak: 0.05, type: 'bandpass', freq: 2000, out: musicBus, wet: 0.1 }); drum(t + spb * 0.75, 0.16, musicBus, 60); }
+      }
+      // 배경 소리
+      if (m.amb === 'birds' && Math.random() < 0.07) bird(t + Math.random() * spb);
+      if (m.amb === 'crickets' && Math.random() < 0.35) cricket(t + Math.random() * spb);
       nextBeatTime += spb;
       beat++;
     }
@@ -325,5 +448,9 @@ const Sound = (() => {
   /** 테스트용: 소리 켜기 버튼에서 호출 */
   function test() { init(); if (ctx) ctx.resume().then(() => play('victory')).catch(() => {}); }
 
-  return { play, setMood, set, settings, init, test, get started() { return !!ctx; }, get state() { return ctx ? ctx.state : 'none'; } };
+  return {
+    play, setMood, set, settings, init, test, nextTrack, tracks: TRACKS,
+    get track() { return track; }, set onTrack(fn) { onTrackChange = fn; },
+    get started() { return !!ctx; }, get state() { return ctx ? ctx.state : 'none'; },
+  };
 })();
