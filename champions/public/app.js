@@ -253,10 +253,15 @@ function renderRoom() {
       <span class="vo-icon">${v.icon}</span><b>${esc(v.name)}</b><span class="vo-level">${esc(v.level)}</span><span class="pack-chip">${esc(c.packs[v.pack || 'core'].name)}</span><span class="vo-desc">${esc(v.desc)}</span>
       <span class="vo-scheme">계략: ${esc(v.scheme.name)}</span></button>`).join('')}</div>
     <div class="diffs">${c.difficulties.map((d) => `<button class="small diff-opt ${st.difficulty === d.id ? 'on' : ''}" data-diff="${d.id}" ${dis} title="${esc(d.desc)}">${esc(d.name)}</button>`).join('')}</div>
-    <div class="hint">${esc((c.difficulties.find((d) => d.id === st.difficulty) || {}).desc || '')}</div>`;
+    <div class="hint">${esc((c.difficulties.find((d) => d.id === st.difficulty) || {}).desc || '')}</div>
+    <div class="rs-title" style="margin-top:10px">🎴 모듈 조우 세트 <span class="hint">원작처럼 악당 덱에 세트 하나를 더 섞어요 (조우 카드가 다양해져요)</span></div>
+    <div class="diffs">${[{ id: 'random', icon: '🎲', name: '무작위', desc: '게임마다 세트 하나를 무작위로 넣어요.' }, { id: 'none', icon: '🚫', name: '없음', desc: '악당 전용 카드만 써요 (조금 쉬워요).' }, ...c.modulars]
+      .map((m) => `<button class="small diff-opt ${(st.modular || 'random') === m.id ? 'on' : ''}" data-modular="${m.id}" ${dis} title="${esc(m.desc)}">${m.icon} ${esc(m.name)}</button>`).join('')}</div>
+    <div class="hint">${esc(([{ id: 'random', desc: '게임마다 세트 하나를 무작위로 넣어요.' }, { id: 'none', desc: '악당 전용 카드만 써요 (조금 쉬워요).' }, ...c.modulars].find((m) => m.id === (st.modular || 'random')) || {}).desc || '')}</div>`;
   if (isHost) {
     for (const b of document.querySelectorAll('[data-villain]')) b.onclick = () => send({ t: 'setSettings', settings: { villain: b.dataset.villain } });
     for (const b of document.querySelectorAll('[data-diff]')) b.onclick = () => send({ t: 'setSettings', settings: { difficulty: b.dataset.diff } });
+    for (const b of document.querySelectorAll('[data-modular]')) b.onclick = () => send({ t: 'setSettings', settings: { modular: b.dataset.modular } });
   }
   // 영웅 고르기
   const meP = r.players.find((p) => p.id === app.you);

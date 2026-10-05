@@ -127,10 +127,15 @@ class Game extends EventEmitter {
     this.sides = [];
     this.encDeck = [];
     for (const [id, k] of Object.entries(this.villainDef.encounter)) for (let i = 0; i < k; i++) this.encDeck.push(id);
+    // 모듈 조우 세트 (원작처럼 악당 덱에 세트 하나를 더 섞음)
+    const mod = this.settings.modular === 'random' ? D.MODULAR_SETS[Math.floor(this.rand() * D.MODULAR_SETS.length)] : D.MODULAR_SETS.find((m) => m.id === this.settings.modular);
+    this.modular = mod ? mod.id : null;
+    if (mod) for (const [id, k] of Object.entries(mod.cards)) for (let i = 0; i < k; i++) this.encDeck.push(id);
     this.shuffle(this.encDeck);
     this.encDiscard = [];
     this.extraAccel = 0;
     this.log(`악당 「${this.villainDef.name}」 (${this.villain.stages.map((s) => s.stage).join('→')}단계) · 난이도 ${this.diff.name}`);
+    if (mod) this.log(`모듈 조우 세트: ${mod.icon} ${mod.name} — ${mod.desc}`);
     this.log(`주 계략 「${sc.name}」: 위협 ${this.scheme.threat} / 한계 ${this.scheme.threshold}`);
     this.log('모든 영웅은 일상 모습으로 시작해요. 내 차례에 "변신"하면 영웅이 됩니다.');
   }

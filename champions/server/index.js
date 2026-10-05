@@ -29,6 +29,8 @@ const CATALOG = {
   encounter: Object.fromEntries(D.ENCOUNTER.map((e) => [e.id, strip({ ...e, reveal: undefined, onEnter: undefined })])),
   villains: D.VILLAINS.map((v) => strip(v)),
   packs: D.PACKS,
+  modulars: D.MODULAR_SETS.map((m) => ({ id: m.id, name: m.name, icon: m.icon, desc: m.desc, cards: m.cards })),
+  deckSize: D.DECK_SIZE,
   difficulties: D.DIFFICULTIES,
   resNames: D.RES_NAMES, resIcon: D.RES_ICON, allyLimit: D.ALLY_LIMIT,
   decks: Object.fromEntries(D.HEROES.flatMap((h) => Object.keys(D.ASPECTS).map((a) => [`${h.id}:${a}`, D.buildDeck(h.id, a)]))),
@@ -203,7 +205,7 @@ setInterval(cleanupRooms, 5 * 60 * 1000).unref();
 
 function newRoom(extra = {}) {
   const code = makeCode();
-  const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), settings: { villain: 'sonix', difficulty: 'easy' }, ...extra };
+  const r = { code, hostId: null, players: [], game: null, chat: [], lastActive: Date.now(), settings: { villain: 'sonix', difficulty: 'easy', modular: 'random' }, ...extra };
   rooms.set(code, r);
   return r;
 }
@@ -392,6 +394,7 @@ wss.on('connection', (ws) => {
         const st = msg.settings || {};
         if (D.VILLAINS.some((v) => v.id === st.villain)) room.settings.villain = st.villain;
         if (D.DIFFICULTIES.some((d) => d.id === st.difficulty)) room.settings.difficulty = st.difficulty;
+        if (st.modular === 'random' || st.modular === 'none' || D.MODULAR_SETS.some((m) => m.id === st.modular)) room.settings.modular = st.modular;
         broadcastRoom(room);
         break;
       }

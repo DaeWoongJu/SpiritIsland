@@ -7,10 +7,10 @@ const { attachBots } = require('./bot');
 
 const mk = (heroes, settings = {}, seed = 1) => new Game(heroes.map((h, i) => ({ id: 'p' + i, name: 'P' + i, bot: true, hero: h[0], aspect: h[1] })), { seed, settings });
 
-test('데이터: 모든 영웅·측면 조합으로 덱 30장, 카드 id 유효', () => {
+test('데이터: 모든 영웅·측면 조합으로 덱 40장, 카드 id 유효', () => {
   for (const h of D.HEROES) for (const a of Object.keys(D.ASPECTS)) {
     const deck = D.buildDeck(h.id, a);
-    assert.strictEqual(deck.length, 30, `${h.id}/${a}`);
+    assert.strictEqual(deck.length, 40, `${h.id}/${a}`);
     for (const id of deck) assert.ok(D.CARD_MAP[id], id);
   }
   for (const v of D.VILLAINS) for (const id of Object.keys(v.encounter)) assert.ok(D.ENC_MAP[id], `${v.id}: ${id}`);
@@ -155,4 +155,17 @@ test('회복 행동(의료실·체육관)은 회복할 체력이 없으면 고�
   g.P('p0').hp -= 2;
   assert.ok(!opt(inf).disabled);
   assert.ok(!opt(gym).disabled);
+});
+
+test('모듈 조우 세트: 고른 세트가 조우 덱에 섞이고, 무작위는 시드마다 하나', () => {
+  const g = mk([['spark', 'justice']], { villain: 'sonix', modular: 'mod_doom' });
+  g.setup();
+  assert.strictEqual(g.modular, 'mod_doom');
+  assert.strictEqual(g.encDeck.filter((id) => id === 'md_doombot').length, 2);
+  const n = mk([['spark', 'justice']], { villain: 'sonix', modular: 'none' });
+  n.setup();
+  assert.strictEqual(n.modular, null);
+  const r = mk([['spark', 'justice']], { villain: 'sonix', modular: 'random' }, 7);
+  r.setup();
+  assert.ok(D.MODULAR_SETS.some((m) => m.id === r.modular));
 });

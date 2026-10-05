@@ -7,6 +7,7 @@
  */
 
 const DLC = require('./dlc');
+const MORE = require('./cards_more');
 
 const RES = ['energy', 'mental', 'physical', 'wild'];
 const RES_NAMES = { energy: '에너지', mental: '정신', physical: '물리', wild: '만능' };
@@ -172,24 +173,26 @@ const PLAYER_CARDS = [
 // 확장(DLC) 영웅·카드
 HEROES.push(...DLC.heroes(fx));
 PLAYER_CARDS.push(...DLC.cards(fx, C));
+PLAYER_CARDS.push(...MORE.make(fx, C));
 const CARD_MAP = Object.fromEntries(PLAYER_CARDS.map((c) => [c.id, c]));
 
-/** 영웅 + 측면으로 덱 30장 자동 구성 */
+const DECK_SIZE = 40;
+const BASIC_RES = ['energy_cell', 'genius', 'strength', 'determination'];
+const BASIC_FILL = ['briefing', 'first_aid', 'citizen', 'emergency', 'bandage', 'maria', 'coulson', 'tac_team', 'helicarrier', 'nick'];
+/** 영웅 + 측면으로 덱 40장 자동 구성 (원작처럼: 영웅 전용 카드 + 측면 카드 + 기본 카드) */
 function buildDeck(heroId, aspect) {
   const sig = PLAYER_CARDS.filter((c) => c.aspect === heroId);
   const asp = PLAYER_CARDS.filter((c) => c.aspect === aspect);
   const deck = [];
-  // 전용 6종: 공격·이벤트는 2장씩, 나머지 1장 (총 10장 내외)
+  // 영웅 전용: 이벤트·아군 2장, 나머지 1장
   for (const c of sig) { deck.push(c.id); if (c.type === 'event' || c.type === 'ally') deck.push(c.id); }
-  // 측면 10종 + 자주 쓰는 이벤트 한 장씩 더
-  for (const c of asp) deck.push(c.id);
-  for (const c of asp.filter((x) => x.type === 'event').slice(0, 4)) deck.push(c.id);
-  // 기본: 자원 카드 + 기본 카드
-  deck.push('energy_cell', 'genius', 'strength', 'briefing', 'citizen', 'first_aid');
-  // 30장이 안 되면 전용 카드를 한 장씩 더 (중복이 적은 것부터)
-  for (let i = 0; deck.length < 30 && i < sig.length * 2; i++) { const c = sig[i % sig.length]; if (deck.filter((x) => x === c.id).length < 2) deck.push(c.id); }
-  while (deck.length > 30) deck.pop();
-  return deck;
+  deck.push(...BASIC_RES);
+  // 측면 카드 1장씩 (자리가 모자라면 뒤쪽부터 뺌)
+  const room = DECK_SIZE - deck.length;
+  deck.push(...asp.slice(0, Math.max(0, room)).map((c) => c.id));
+  // 남는 자리는 기본 카드로
+  for (let i = 0; deck.length < DECK_SIZE; i++) deck.push(BASIC_FILL[i % BASIC_FILL.length]);
+  return deck.slice(0, DECK_SIZE);
 }
 
 // ───────────── 조우 카드 (악당 쪽) ─────────────
@@ -233,6 +236,7 @@ const ENCOUNTER = [
   E({ id: 'nano', name: '나노 재생', type: 'attachment', set: 'omega', boost: 1, mods: {}, regen: 2, text: '부착: 악당 단계마다 악당 체력 2 회복.' }),
 ];
 ENCOUNTER.push(...DLC.encounter(E));
+ENCOUNTER.push(...MORE.modularCards(E));
 const ENC_MAP = Object.fromEntries(ENCOUNTER.map((e) => [e.id, e]));
 
 // ───────────── 악당 ─────────────
@@ -277,5 +281,6 @@ const DIFFICULTIES = [
 const ALLY_LIMIT = 3;
 
 const PACKS = DLC.PACKS;
+const MODULAR_SETS = MORE.MODULAR_SETS;
 
-module.exports = { PACKS, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };
+module.exports = { PACKS, MODULAR_SETS, DECK_SIZE, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };
