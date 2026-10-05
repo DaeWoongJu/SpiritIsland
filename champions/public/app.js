@@ -280,14 +280,15 @@ function renderRoom() {
         <div class="ho-ab"><b>✨ ${esc(h.hero.ability.name)}</b>: ${esc(h.hero.ability.text)}</div>
         <div class="ho-alter">일상: <b>${esc(h.alter.name)}</b> (${esc(h.alter.job)}) · 회복 ${h.alter.rec} · ${esc(h.alter.ability.name)}</div>
         <div class="ho-lore hint">${esc(h.lore)}</div>
+        ${c.recs[h.id] ? `<div class="ho-rec">⭐ 추천 측면: <b style="color:${c.aspects[c.recs[h.id][0]].color}">${esc(c.aspects[c.recs[h.id][0]].name)}</b> <span class="hint">— ${esc(c.recs[h.id][1])}</span></div>` : ''}
         ${o ? `<div class="ho-owner">✔ ${esc(o.name)}</div>` : ''}
         ${isHost ? r.players.filter((p) => p.bot).map((b) => `<button class="small ho-bot" data-bot="${b.id}" data-h="${h.id}">${esc(b.name.replace('AI ', ''))}에게</button>`).join('') : ''}
       </div>`;
     }).join('')}</div>
-    <div class="rs-title" style="margin-top:10px">🎴 내 측면 (덱 성향) <span class="hint">다시 누르면 취소돼요. 안 고르면 시작할 때 무작위로 정해져요.</span></div>
-    <div class="aspects">${Object.values(c.aspects).map((a) => `<button class="asp-opt ${meP && meP.aspect === a.id ? 'on' : ''}" data-aspect="${a.id}" style="--ac:${a.color}"><b>${esc(a.name)}</b> <span class="hint">(${esc(a.en)})</span><br><span class="asp-desc">${esc(a.desc)}</span></button>`).join('')}</div>
+    <div class="rs-title" style="margin-top:10px">🎴 내 측면 (덱 성향) <span class="hint">⭐ 표시가 이 영웅의 추천 측면이에요. 다시 누르면 취소되고, 안 고르면 추천 측면으로 정해져요.</span></div>
+    <div class="aspects">${Object.values(c.aspects).map((a) => `<button class="asp-opt ${meP && meP.aspect === a.id ? 'on' : ''}" data-aspect="${a.id}" style="--ac:${a.color}"><b>${meP && meP.hero && c.recs[meP.hero] && c.recs[meP.hero][0] === a.id ? '⭐ ' : ''}${esc(a.name)}</b> <span class="hint">(${esc(a.en)})</span><br><span class="asp-desc">${esc(a.desc)}</span></button>`).join('')}</div>
     <div class="deck-row"><button class="primary small" id="btn-deck" ${meP && meP.hero && meP.aspect ? '' : 'disabled'}>🃏 내 덱 꾸미기</button>
-      <span class="hint">${meP && meP.hero && meP.aspect ? (meP.deck ? `직접 꾸민 덱 ${meP.deck.length}장 사용 중` : `자동 덱 ${c.deckSize}장 사용 중 — 눌러서 카드를 바꿀 수 있어요`) : '영웅과 측면을 고르면 덱을 꾸밀 수 있어요'}</span></div>`;
+      <span class="hint">${meP && meP.hero && meP.aspect ? (meP.deck ? `직접 꾸민 덱 ${meP.deck.length}장 사용 중` : `⭐ ${esc(heroDef(meP.hero).name)}에게 맞춘 추천 덱 ${c.deckSize}장 사용 중 — 눌러서 카드를 바꿀 수 있어요`) : '영웅과 측면을 고르면 덱을 꾸밀 수 있어요'}</span></div>`;
   for (const el of document.querySelectorAll('.hero-opt')) el.onclick = (e) => { if (e.target.closest('.ho-bot')) return; const id = el.dataset.hero; send({ t: 'pickHero', hero: meP && meP.hero === id ? null : id }); };
   for (const b of document.querySelectorAll('.ho-bot')) b.onclick = () => send({ t: 'pickHero', hero: b.dataset.h, target: b.dataset.bot });
   // 같은 측면을 다시 누르면 선택 취소 (안 고르면 시작할 때 무작위)
@@ -736,14 +737,16 @@ function renderDeckEditor() {
         <div class="pack-tabs">${[['all', '전체'], ...Object.entries(TYPE_NAME)].map(([k, v]) => `<button class="small pack-tab ${d.type === k ? 'on' : ''}" data-dk-type="${k}">${v}</button>`).join('')}</div>
         <div class="dk-list">${pool.map((x) => row(x, false)).join('')}</div></div>
     </div>
-    <div class="actions"><button class="small" id="dk-auto">↺ 자동 덱으로 되돌리기</button><span style="flex:1"></span><button class="small" id="dk-close">닫기</button><button class="primary" id="dk-save" ${prob ? 'disabled' : ''}>💾 이 덱으로 하기</button></div>`;
+    <div class="actions"><button class="small" id="dk-auto">⭐ 추천 덱으로 (${esc(a.name)})</button>${c.recs[d.hero] && c.recs[d.hero][0] !== d.aspect ? `<button class="small" id="dk-rec">⭐ 추천 측면(${esc(c.aspects[c.recs[d.hero][0]].name)})으로 바꾸기</button>` : ''}<span style="flex:1"></span><button class="small" id="dk-close">닫기</button><button class="primary" id="dk-save" ${prob ? 'disabled' : ''}>💾 이 덱으로 하기</button></div>`;
   const box = $('#deck-editor');
   for (const b of box.querySelectorAll('[data-dk-plus]')) b.onclick = () => { d.list.push(b.dataset.dkPlus); renderDeckEditor(); };
   for (const b of box.querySelectorAll('[data-dk-minus]')) b.onclick = () => { const i = d.list.lastIndexOf(b.dataset.dkMinus); if (i >= 0) d.list.splice(i, 1); renderDeckEditor(); };
   for (const b of box.querySelectorAll('[data-dk-type]')) b.onclick = () => { d.type = b.dataset.dkType; renderDeckEditor(); };
   for (const el of box.querySelectorAll('[data-tip-card]')) { el.onmouseenter = (e) => showTip(e, cardTip(c.cards[el.dataset.tipCard])); el.onmouseleave = hideTip; }
   $('#dk-close').onclick = () => { hideTip(); box.classList.add('hidden'); };
-  $('#dk-auto').onclick = () => { d.list = c.decks[`${d.hero}:${d.aspect}`].slice(); send({ t: 'setDeck', deck: null }); hideTip(); box.classList.add('hidden'); toast('자동 덱으로 되돌렸어요.'); };
+  $('#dk-auto').onclick = () => { d.list = c.decks[`${d.hero}:${d.aspect}`].slice(); renderDeckEditor(); toast('이 영웅·측면에 맞춘 추천 덱을 불러왔어요. "이 덱으로 하기"를 누르면 적용돼요.'); };
+  const rec = $('#dk-rec');
+  if (rec) rec.onclick = () => { const asp = c.recs[d.hero][0]; send({ t: 'pickHero', aspect: asp }); d.aspect = asp; d.list = c.decks[`${d.hero}:${asp}`].slice(); renderDeckEditor(); toast('추천 측면으로 바꾸고 추천 덱을 불러왔어요.'); };
   $('#dk-save').onclick = () => { hideTip(); send({ t: 'setDeck', deck: d.list }); };
 }
 

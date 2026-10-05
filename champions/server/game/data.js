@@ -182,22 +182,10 @@ const CARD_MAP = Object.fromEntries(PLAYER_CARDS.map((c) => [c.id, c]));
 const DECK_SIZE = 40;
 const BASIC_RES = ['energy_cell', 'genius', 'strength', 'determination'];
 const BASIC_FILL = ['briefing', 'first_aid', 'citizen', 'emergency', 'bandage', 'maria', 'coulson', 'tac_team', 'helicarrier', 'nick'];
-/** 영웅 + 측면으로 덱 40장 자동 구성 (원작처럼: 영웅 전용 카드 + 측면 카드 + 기본 카드) */
-function buildDeck(heroId, aspect) {
-  const sig = PLAYER_CARDS.filter((c) => c.aspect === heroId);
-  const asp = PLAYER_CARDS.filter((c) => c.aspect === aspect);
-  const deck = [];
-  // 영웅 전용: 이벤트·아군 2장, 나머지 1장
-  for (const c of sig) { deck.push(c.id); if (c.type === 'event' || c.type === 'ally') deck.push(c.id); }
-  deck.push(...BASIC_RES);
-  // 측면 카드 1장씩 (자리가 모자라면 뒤쪽부터 뺌)
-  const room = DECK_SIZE - deck.length;
-  deck.push(...asp.slice(0, Math.max(0, room)).map((c) => c.id));
-  // 남는 자리는 기본 카드로
-  for (let i = 0; deck.length < DECK_SIZE; i++) deck.push(BASIC_FILL[i % BASIC_FILL.length]);
-  return deck.slice(0, DECK_SIZE);
-}
+/** 영웅 + 측면으로 덱 40장 자동 구성: 영웅에 맞춘 추천 덱 (recommend.js) */
+function buildDeck(heroId, aspect) { return RECO.recommendDeck(heroId, aspect); }
 
+const RECO = require('./recommend').make({ PLAYER_CARDS, HEROES, DECK_SIZE });
 const DECK_MIN = 40, DECK_MAX = 50, COPY_MAX = 3;
 /** 영웅 전용 카드 구성 (원작처럼 고정: 이벤트·아군 2장, 나머지 1장) */
 function heroKit(heroId) {
@@ -312,4 +300,6 @@ const ALLY_LIMIT = 3;
 const PACKS = { ...DLC.PACKS, ...FULL.EXTRA_PACKS };
 const MODULAR_SETS = MORE.MODULAR_SETS;
 
-module.exports = { PACKS, MODULAR_SETS, DECK_SIZE, DECK_MIN, DECK_MAX, COPY_MAX, heroKit, validateDeck, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };
+const REC_ASPECT = Object.fromEntries(HEROES.map((h) => [h.id, (require('./recommend').REC[h.id] || ['justice', ''])]));
+
+module.exports = { REC_ASPECT, recommendDeck: RECO.recommendDeck, PACKS, MODULAR_SETS, DECK_SIZE, DECK_MIN, DECK_MAX, COPY_MAX, heroKit, validateDeck, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };

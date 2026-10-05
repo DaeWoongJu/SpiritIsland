@@ -187,9 +187,25 @@ test('덱 꾸미기: 규칙(40~50장, 영웅 카드 고정, 같은 카드 3장, 
   g.setup();
   const all = [...g.P('p0').deck, ...g.P('p0').hand].map((u) => g.cards[u]);
   assert.strictEqual(all.length, custom.length);
-  assert.strictEqual(all.filter((id) => id === 'stakeout').length, 3);
+  assert.strictEqual(all.filter((id) => id === 'stakeout').length, base.filter((id) => id === 'stakeout').length + 2);
   // 규칙에 안 맞는 덱은 자동 덱으로
   const g2 = new Game([{ id: 'p0', name: 'P', bot: true, hero: 'spark', aspect: 'justice', deck: ['assault'] }], { seed: 3 });
   g2.setup();
   assert.strictEqual(g2.P('p0').deck.length + g2.P('p0').hand.length, 40);
+});
+
+test('추천 덱: 모든 영웅에게 추천 측면이 있고, 추천 덱은 규칙에 맞으며 약점을 보완', () => {
+  for (const h of D.HEROES) {
+    const [asp, why] = D.REC_ASPECT[h.id];
+    assert.ok(D.ASPECTS[asp] && why, h.id);
+    const deck = D.recommendDeck(h.id, asp);
+    assert.strictEqual(D.validateDeck(h.id, asp, deck), null, h.id);
+  }
+  // 저지가 약한 헐커(저지 0)의 추천 덱에는 위협을 없애는 카드가 들어감
+  const hulk = D.recommendDeck('hulk', 'aggression').filter((id) => D.CARD_MAP[id].aspect !== 'hulk');
+  assert.ok(hulk.some((id) => /위협/.test(D.CARD_MAP[id].text) || (D.CARD_MAP[id].ally && D.CARD_MAP[id].ally.thw >= 2)));
+  // 핵심 카드는 2장 이상
+  const cnt = {};
+  for (const id of D.recommendDeck('spark', 'justice')) cnt[id] = (cnt[id] || 0) + 1;
+  assert.ok(Object.entries(cnt).some(([id, n]) => D.CARD_MAP[id].aspect === 'justice' && n >= 2));
 });

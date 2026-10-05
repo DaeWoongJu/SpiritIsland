@@ -235,9 +235,9 @@ function cards(fx, C) {
 // ───────────── 악당 ─────────────
 const TIERS = {
   easy: { level: '쉬움', threshold: 8, start: 1, stages: [[2, 1, 11], [2, 2, 13, { threat: true }], [3, 3, 15, { threat: true }]] },
-  normal: { level: '보통', threshold: 8, start: 0, stages: [[1, 2, 12], [1, 2, 14, { tough: true }], [2, 3, 15, { tough: true }]] },
-  hard: { level: '어려움', threshold: 10, start: 0, stages: [[1, 2, 12], [1, 2, 14, { summon: true }], [2, 3, 16, { threat: true }]] },
-  vhard: { level: '아주 어려움', threshold: 11, start: 0, stages: [[1, 2, 14], [2, 2, 16, { summon: true }], [2, 3, 18, { tough: true, threat: true }]] },
+  normal: { level: '보통', threshold: 7, start: 0, stages: [[1, 2, 13], [1, 2, 15, { tough: true }], [2, 3, 16, { tough: true }]] },
+  hard: { level: '어려움', threshold: 10, start: 0, stages: [[1, 2, 13], [2, 2, 15, { summon: true }], [2, 3, 17, { threat: true }]] },
+  vhard: { level: '아주 어려움', threshold: 10, start: 0, stages: [[1, 2, 15], [2, 2, 17, { summon: true }], [2, 3, 19, { tough: true, threat: true }]] },
 };
 
 /*

@@ -392,3 +392,4 @@ h2 { font-family: var(--comic); font-weight: 400; color: var(--yellow); margin: 
 .dk-tag { display: inline-block; font-size: .72em; padding: 0 6px; border-radius: 999px; border: 1px solid var(--ac, var(--line)); color: var(--ac, var(--muted)); font-weight: 700; }
 .dk-tag.hero { border-color: var(--yellow); color: var(--yellow); }
 @media (max-width: 760px) { .dk-body { grid-template-columns: 1fr; overflow-y: auto; } }
+.ho-rec { margin-top: 4px; font-size: calc(12px * var(--fs)); line-height: 1.4; }

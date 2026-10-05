@@ -32,6 +32,7 @@ const CATALOG = {
   modulars: D.MODULAR_SETS.map((m) => ({ id: m.id, name: m.name, icon: m.icon, desc: m.desc, cards: m.cards })),
   deckSize: D.DECK_SIZE, deckMin: D.DECK_MIN, deckMax: D.DECK_MAX, copyMax: D.COPY_MAX,
   kits: Object.fromEntries(D.HEROES.map((h) => [h.id, D.heroKit(h.id)])),
+  recs: D.REC_ASPECT,
   difficulties: D.DIFFICULTIES,
   resNames: D.RES_NAMES, resIcon: D.RES_ICON, allyLimit: D.ALLY_LIMIT,
   decks: Object.fromEntries(D.HEROES.flatMap((h) => Object.keys(D.ASPECTS).map((a) => [`${h.id}:${a}`, D.buildDeck(h.id, a)]))),
@@ -153,7 +154,7 @@ async function startGame(room) {
     const taken = new Set(room.players.map((p) => p.hero).filter(Boolean));
     for (const p of room.players) {
       if (!p.hero) { const free = D.HEROES.filter((h) => !taken.has(h.id)); p.hero = free[crypto.randomInt(free.length)].id; taken.add(p.hero); }
-      if (!p.aspect) { const as = Object.keys(D.ASPECTS); p.aspect = as[crypto.randomInt(as.length)]; }
+      if (!p.aspect) p.aspect = (D.REC_ASPECT[p.hero] || [Object.keys(D.ASPECTS)[crypto.randomInt(4)]])[0]; // 안 고르면 추천 측면
     }
   }
   const sv = room.resume;
@@ -409,6 +410,8 @@ wss.on('connection', (ws) => {
           if (msg.hero && room.players.some((x) => x !== target && x.hero === msg.hero)) return fail('다른 사람이 이미 고른 영웅입니다.');
           if (target.hero !== msg.hero) target.deck = null;
           target.hero = msg.hero;
+          // 측면을 아직 안 골랐으면 그 영웅의 추천 측면으로
+          if (msg.hero && !target.aspect && D.REC_ASPECT[msg.hero]) target.aspect = D.REC_ASPECT[msg.hero][0];
         }
         if (msg.aspect !== undefined && (msg.aspect === null || D.ASPECTS[msg.aspect])) { if (target.aspect !== msg.aspect) target.deck = null; target.aspect = msg.aspect; }
         broadcastRoom(room);

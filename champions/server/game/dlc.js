@@ -232,7 +232,7 @@ const VILLAINS = [
       { stage: 'II', sch: 1, atk: 2, hp: 13, text: '단계 시작: 강인함을 얻습니다.', tough: true },
       { stage: 'III', sch: 2, atk: 3, hp: 16, text: '단계 시작: 모든 플레이어에게 크리 병사가 교전합니다.', summonAll: 'rn_kree' },
     ],
-    scheme: { name: '크리의 심판', threshold: 8, accel: 1, start: 0, text: '로낭이 행성 하나를 통째로 심판하려 해요.' },
+    scheme: { name: '크리의 심판', threshold: 7, accel: 1, start: 0, text: '로낭이 행성 하나를 통째로 심판하려 해요.' },
     encounter: { thug: 1, ambush: 2, dark_plot: 1, hostages: 1, exhaust_trick: 1, rn_kree: 3, rn_merc: 1, rn_hammer: 1, rn_fleet: 1, rn_judgment: 2 } },
   { id: 'magneto', pack: 'mutant', name: '마그네토', icon: '🧲', color: '#8a2a8a', level: '어려움', desc: '자기력을 다루는 뮤턴트의 지도자. 강화 카드를 빼앗고 몸을 지켜요.',
     stages: [
