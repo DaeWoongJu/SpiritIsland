@@ -260,11 +260,12 @@ function renderRoom() {
         ${isHost ? r.players.filter((p) => p.bot).map((b) => `<button class="small ho-bot" data-bot="${b.id}" data-h="${h.id}">${esc(b.name.replace('AI ', ''))}에게</button>`).join('') : ''}
       </div>`;
     }).join('')}</div>
-    <div class="rs-title" style="margin-top:10px">🎴 내 측면 (덱 성향)</div>
+    <div class="rs-title" style="margin-top:10px">🎴 내 측면 (덱 성향) <span class="hint">다시 누르면 취소돼요. 안 고르면 시작할 때 무작위로 정해져요.</span></div>
     <div class="aspects">${Object.values(c.aspects).map((a) => `<button class="asp-opt ${meP && meP.aspect === a.id ? 'on' : ''}" data-aspect="${a.id}" style="--ac:${a.color}"><b>${esc(a.name)}</b> <span class="hint">(${esc(a.en)})</span><br><span class="asp-desc">${esc(a.desc)}</span></button>`).join('')}</div>`;
   for (const el of document.querySelectorAll('.hero-opt')) el.onclick = (e) => { if (e.target.closest('.ho-bot')) return; const id = el.dataset.hero; send({ t: 'pickHero', hero: meP && meP.hero === id ? null : id }); };
   for (const b of document.querySelectorAll('.ho-bot')) b.onclick = () => send({ t: 'pickHero', hero: b.dataset.h, target: b.dataset.bot });
-  for (const b of document.querySelectorAll('.asp-opt')) b.onclick = () => send({ t: 'pickHero', aspect: b.dataset.aspect });
+  // 같은 측면을 다시 누르면 선택 취소 (안 고르면 시작할 때 무작위)
+  for (const b of document.querySelectorAll('.asp-opt')) b.onclick = () => send({ t: 'pickHero', aspect: meP && meP.aspect === b.dataset.aspect ? null : b.dataset.aspect });
   bindPackTabs();
   $('#btn-start').disabled = !isHost;
   $('#btn-add-bot').disabled = !isHost || r.players.length >= r.maxPlayers;
