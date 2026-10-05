@@ -90,7 +90,7 @@ const PLAYER_CARDS = [
   C({ id: 'stone_skin', name: '감마 피부', type: 'upgrade', aspect: 'titan', cost: 2, res: 'physical', text: '강화: 최대 체력 +4.', mods: { hp: 4 } }),
   C({ id: 'law_partner', name: '로펌 동료 맷', type: 'ally', aspect: 'titan', cost: 2, res: 'mental', text: '아군 (저지 특기).', ally: { thw: 2, atk: 0, hp: 2, cons: 1 } }),
   C({ id: 'rage_burst', name: '초록 분노', type: 'event', aspect: 'titan', cost: 1, res: 'physical', form: 'hero', attack: true, text: '공격. 적 하나에게 피해 3.', effect: fx.dmg(3) }),
-  C({ id: 'gym', name: '체육관', type: 'support', aspect: 'titan', cost: 1, res: 'physical', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '훈련', exhaust: true, effect: fx.heal(2) } }),
+  C({ id: 'gym', name: '체육관', type: 'support', aspect: 'titan', cost: 1, res: 'physical', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '훈련', exhaust: true, need: 'selfHeal', effect: fx.heal(2) } }),
 
   // ── 캡틴 마벨 전용 ──
   C({ id: 'photon_beam', name: '광자 빔', type: 'event', aspect: 'star', cost: 1, res: 'energy', form: 'hero', attack: true, text: '공격. 적 하나에게 피해 2. ⚡로 냈다면 피해 +2.', effect: async (g, pid, ctx) => g.damage(pid, 2 + (ctx.paid && ctx.paid.energy ? 2 : 0), { attack: true }, ctx) }),
@@ -114,7 +114,12 @@ const PLAYER_CARDS = [
   C({ id: 'portal', name: '슬링 링 포털', type: 'event', aspect: 'rune', cost: 1, res: 'mental', text: '아무 계략에서 위협 3 제거.', effect: fx.thw(3) }),
   C({ id: 'mystic_cloak', name: '공중부양 망토', type: 'upgrade', aspect: 'rune', cost: 2, res: 'mental', text: '강화: 방어력 +1, 저지력 +1.', mods: { def: 1, thw: 1 } }),
   C({ id: 'apprentice', name: '사서 왕', type: 'ally', aspect: 'rune', cost: 2, res: 'mental', text: '아군. 들어올 때 카드 1장을 뽑습니다.', ally: { thw: 1, atk: 1, hp: 2, cons: 1 }, effect: fx.draw(1) }),
-  C({ id: 'sanctum', name: '생텀 생토럼', type: 'support', aspect: 'rune', cost: 1, res: 'energy', text: '지원. 행동(소진): 아무 영웅의 체력 1 회복.', action: { name: '치유의 빛', exhaust: true, effect: async (g, pid) => g.healAny(pid, 1) } }),
+  C({ id: 'sanctum', name: '생텀 생토럼', type: 'support', aspect: 'rune', cost: 1, res: 'energy', text: '지원. 행동(소진): 아무 계략에서 위협 1 제거, 또는 아무 영웅의 체력 2 회복 (고르기).', action: { name: '생텀의 마법', exhaust: true, effect: async (g, pid) => {
+    const canThw = g.thwartTargets({}).length > 0;
+    const canHeal = g.damagedHeroes().length > 0;
+    const pick = canThw && canHeal ? await g.choose(pid, '생텀 생토럼: 무엇을 할까요?', [{ value: 'thw', label: '🛑 위협 1 제거' }, { value: 'heal', label: '❤ 아무 영웅 체력 2 회복' }]) : canHeal ? 'heal' : 'thw';
+    if (pick === 'heal') await g.healAny(pid, 2); else await g.thwart(pid, 1);
+  } } }),
 
   // ── 분노 (공격) ──
   C({ id: 'assault', name: '맹공', type: 'event', aspect: 'aggression', cost: 1, res: 'physical', form: 'hero', attack: true, text: '공격. 적 하나에게 피해 3.', effect: fx.dmg(3) }),
@@ -160,7 +165,7 @@ const PLAYER_CARDS = [
   C({ id: 'medic', name: '응급 처치', type: 'event', aspect: 'protection', cost: 1, res: 'mental', text: '아무 영웅의 체력 4 회복.', effect: async (g, pid) => g.healAny(pid, 4) }),
   C({ id: 'bear', name: '든든한 동료 곰', type: 'ally', aspect: 'protection', cost: 3, res: 'physical', text: '아군 (튼튼함).', ally: { thw: 1, atk: 1, hp: 5, cons: 1 } }),
   C({ id: 'vest', name: '방탄 조끼', type: 'upgrade', aspect: 'protection', cost: 2, res: 'physical', text: '강화: 최대 체력 +3.', mods: { hp: 3 } }),
-  C({ id: 'infirmary', name: '의료실', type: 'support', aspect: 'protection', cost: 2, res: 'mental', text: '지원. 행동(소진): 아무 영웅의 체력 2 회복.', action: { name: '치료', exhaust: true, effect: async (g, pid) => g.healAny(pid, 2) } }),
+  C({ id: 'infirmary', name: '의료실', type: 'support', aspect: 'protection', cost: 2, res: 'mental', text: '지원. 행동(소진): 아무 영웅의 체력 2 회복.', action: { name: '치료', exhaust: true, need: 'heal', effect: async (g, pid) => g.healAny(pid, 2) } }),
   C({ id: 'full_guard', name: '철벽 방어', type: 'event', aspect: 'protection', cost: 2, res: 'physical', defense: true, text: '방어 이벤트: 이번 공격의 피해를 모두 막습니다.', effect: async (g, pid, ctx) => { if (ctx.attack) ctx.attack.reduce += 99; } }),
   C({ id: 'reflex', name: '반사 신경', type: 'event', aspect: 'protection', cost: 0, res: 'energy', defense: true, text: '방어 이벤트: 이번 공격의 피해 -1, 카드 1장 뽑기.', effect: async (g, pid, ctx) => { if (ctx.attack) ctx.attack.reduce += 1; g.draw(pid, 1); } }),
 ];

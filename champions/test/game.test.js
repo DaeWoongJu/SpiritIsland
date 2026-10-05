@@ -110,3 +110,49 @@ test('확장 악당: 단계 시작 시 모든 영웅에게 미니언 교전 (sum
   assert.strictEqual(g.villainStage().stage, 'II');
   assert.strictEqual(g.allMinions().filter((m) => m.cardId === 'rs_soldier').length - before >= 2, true);
 });
+
+test('생텀 생토럼: 위협 제거 또는 체력 2 회복을 고름, 다친 영웅이 없으면 자동으로 위협 제거', async () => {
+  const g = mk([['rune', 'justice'], ['titan', 'protection']], { villain: 'brute' });
+  g.setup();
+  const card = (id) => { const u = g.newId('c'); g.cards[u] = id; return u; };
+  const u = card('sanctum');
+  g.P('p0').play.push({ uid: u, exhausted: false });
+  const tick = () => new Promise((r) => setImmediate(r));
+  // 1) 다친 영웅 둘 + 위협 있음 → 고르기 → 회복 → 영웅 고르기
+  g.scheme.threat = 3;
+  g.P('p0').hp -= 3; g.P('p1').hp -= 5;
+  const before = g.P('p1').hp;
+  let done = g.useAction('p0', u);
+  await tick();
+  let pr = g.currentPrompt('p0');
+  assert.deepStrictEqual(pr.options.map((o) => o.value), ['thw', 'heal']);
+  g.answer('p0', pr.id, 'heal');
+  await tick();
+  pr = g.currentPrompt('p0');
+  assert.strictEqual(pr.kind, 'hero');
+  g.answer('p0', pr.id, 'p1');
+  await done;
+  assert.strictEqual(g.P('p1').hp, before + 2);
+  // 2) 모두 체력 가득 → 고르지 않고 위협 1 제거
+  g.P('p0').hp = g.maxHp('p0'); g.P('p1').hp = g.maxHp('p1');
+  g.P('p0').play[g.P('p0').play.length - 1].exhausted = false;
+  const t0 = g.scheme.threat;
+  done = g.useAction('p0', u);
+  for (let i = 0; i < 5; i++) { await tick(); const q = g.currentPrompt('p0'); if (q) g.answer('p0', q.id, q.options[0].value); }
+  await done;
+  assert.strictEqual(g.scheme.threat, t0 - 1);
+});
+
+test('회복 행동(의료실·체육관)은 회복할 체력이 없으면 고를 수 없음', () => {
+  const g = mk([['titan', 'protection']], { villain: 'brute' });
+  g.setup();
+  const card = (id) => { const u = g.newId('c'); g.cards[u] = id; return u; };
+  const inf = card('infirmary'); const gym = card('gym');
+  g.P('p0').play.push({ uid: inf, exhausted: false }, { uid: gym, exhausted: false });
+  const opt = (u) => g.turnOptions('p0').find((o) => o.value === 'use:' + u);
+  assert.ok(opt(inf).disabled && /체력/.test(opt(inf).why || opt(inf).reason || JSON.stringify(opt(inf))));
+  assert.ok(opt(gym).disabled);
+  g.P('p0').hp -= 2;
+  assert.ok(!opt(inf).disabled);
+  assert.ok(!opt(gym).disabled);
+});

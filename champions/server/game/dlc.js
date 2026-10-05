@@ -93,7 +93,7 @@ function cards(fx, C) {
     C({ id: 'thor_hammer', name: '묠니르', type: 'upgrade', aspect: 'thor', cost: 3, res: 'energy', icon: '⚒', text: '강화: 공격력 +1. 행동(소진): 적 하나에게 피해 2.', mods: { atk: 1 }, action: { name: '망치 던지기', exhaust: true, form: 'hero', effect: fx.dmg(2, { attack: false }) } }),
     C({ id: 'thor_sif', name: '레이디 시브', type: 'ally', aspect: 'thor', cost: 3, res: 'physical', icon: '⚔', text: '아군 (공격 특기).', ally: { thw: 1, atk: 3, hp: 3, cons: 1 } }),
     C({ id: 'thor_bifrost', name: '비프로스트', type: 'event', aspect: 'thor', cost: 0, res: 'energy', form: 'hero', icon: '🌈', text: '내 영웅을 준비시킵니다.', effect: async (g, pid) => g.readyHero(pid) }),
-    C({ id: 'thor_asgard', name: '아스가르드', type: 'support', aspect: 'thor', cost: 2, res: 'mental', icon: '🏰', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '연회', exhaust: true, effect: fx.heal(2) } }),
+    C({ id: 'thor_asgard', name: '아스가르드', type: 'support', aspect: 'thor', cost: 2, res: 'mental', icon: '🏰', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '연회', exhaust: true, need: 'selfHeal', effect: fx.heal(2) } }),
     // ── 블랙 펜서 ──
     C({ id: 'bp_claws', name: '비브라늄 발톱', type: 'event', aspect: 'panther', cost: 1, res: 'physical', form: 'hero', attack: true, icon: '🐾', text: '공격. 적 하나에게 피해 3.', effect: fx.dmg(3) }),
     C({ id: 'bp_kinetic', name: '키네틱 폭발', type: 'event', aspect: 'panther', cost: 2, res: 'energy', form: 'hero', attack: true, icon: '💥', text: '공격. 적 하나에게 피해 3, 모든 미니언에게 피해 1.', effect: async (g, pid, ctx) => { await g.damage(pid, 3, { attack: true }, ctx); g.damageAllMinions(1, pid); } }),
@@ -107,7 +107,7 @@ function cards(fx, C) {
     C({ id: 'hulk_rage', name: '끓어오르는 분노', type: 'upgrade', aspect: 'hulk', cost: 2, res: 'physical', icon: '😡', text: '강화: 공격력 +1, 최대 체력 +2.', mods: { atk: 1, hp: 2 } }),
     C({ id: 'hulk_leap', name: '대도약', type: 'event', aspect: 'hulk', cost: 0, res: 'physical', form: 'hero', icon: '🦘', text: '내 영웅을 준비시킵니다.', effect: async (g, pid) => g.readyHero(pid) }),
     C({ id: 'hulk_rick', name: '친구 릭 존', type: 'ally', aspect: 'hulk', cost: 2, res: 'mental', icon: '🧑', text: '아군 (저지 특기).', ally: { thw: 2, atk: 0, hp: 2, cons: 1 } }),
-    C({ id: 'hulk_lab', name: '감마 연구소', type: 'support', aspect: 'hulk', cost: 1, res: 'energy', icon: '☢', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '감마 치료', exhaust: true, effect: fx.heal(2) } }),
+    C({ id: 'hulk_lab', name: '감마 연구소', type: 'support', aspect: 'hulk', cost: 1, res: 'energy', icon: '☢', text: '지원. 행동(소진): 내 영웅 체력 2 회복.', action: { name: '감마 치료', exhaust: true, need: 'selfHeal', effect: fx.heal(2) } }),
     // ── 울브린 ──
     C({ id: 'wol_claws', name: '아다만티움 발톱', type: 'upgrade', aspect: 'wolverine', cost: 2, res: 'physical', icon: '🗡', text: '강화: 공격력 +1.', mods: { atk: 1 } }),
     C({ id: 'wol_berserk', name: '버서커 분노', type: 'event', aspect: 'wolverine', cost: 2, res: 'physical', form: 'hero', attack: true, icon: '😤', text: '공격. 적 둘에게 각각 피해 2.', effect: two(2) }),

@@ -283,6 +283,8 @@ class Game extends EventEmitter {
       if (d.action.exhaust && c.exhausted) why = '소진됨';
       else if (d.action.uses && (c.uses || 0) <= 0) why = '사용 횟수를 다 썼어요';
       else if (d.action.form === 'hero' && !hero) why = '영웅 모습일 때만';
+      else if (d.action.need === 'heal' && !this.damagedHeroes().length) why = '체력이 줄어든 영웅이 없어요';
+      else if (d.action.need === 'selfHeal' && p.hp >= this.maxHp(pid)) why = '체력이 가득해요';
       add('use:' + c.uid, `⚙ ${d.action.name}`, 'tech', !why, why, { card: c.uid });
     }
     add('end', '차례 끝내기 ▶', 'end', true, '');
@@ -503,13 +505,21 @@ class Game extends EventEmitter {
     const k = Math.min(n, this.maxHp(pid) - p.hp);
     p.hp += k;
     if (k > 0) this.log(`${this.pname(pid)}: 체력 +${k} (${p.hp}/${this.maxHp(pid)})`, pid, 'heal');
+    else if (n > 0) this.log(`${this.pname(pid)}: 체력이 이미 가득해요`, pid);
     this.changed();
   }
   async chooseHero(pid, title) {
     const opts = this.alive().map((h) => ({ value: h, label: `${this.pname(h)} (체력 ${this.P(h).hp}/${this.maxHp(h)})`, hero: h }));
     return this.choose(pid, title, opts, { kind: 'hero' });
   }
-  async healAny(pid, n) { this.heal(await this.chooseHero(pid, `체력 ${n}을 회복할 영웅을 고르세요`), n); }
+  damagedHeroes() { return this.alive().filter((h) => this.P(h).hp < this.maxHp(h)); }
+  /** 아무 영웅 회복: 체력이 줄어든 영웅 중에서 고름 (한 명뿐이면 자동) */
+  async healAny(pid, n) {
+    const hurt = this.damagedHeroes();
+    if (!hurt.length) { this.log(`${this.pname(pid)}: 체력이 줄어든 영웅이 없어 회복할 수 없어요`, pid); this.changed(); return; }
+    const target = hurt.length === 1 ? hurt[0] : await this.choose(pid, `체력 ${n}을 회복할 영웅을 고르세요`, hurt.map((h) => ({ value: h, label: `${this.pname(h)} (체력 ${this.P(h).hp}/${this.maxHp(h)})`, hero: h })), { kind: 'hero' });
+    this.heal(target, n);
+  }
   toughSelf(pid) { this.P(pid).tough = true; this.log(`${this.pname(pid)}: 강인함 (다음 피해 1번 무효)`, pid); this.changed(); }
   async toughAny(pid) { this.toughSelf(await this.chooseHero(pid, '강인함을 줄 영웅을 고르세요')); }
   readyHero(pid) { this.P(pid).exhausted = false; this.log(`${this.pname(pid)}: 영웅 준비 (다시 행동할 수 있어요)`, pid); this.changed(); }
