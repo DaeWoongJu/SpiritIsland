@@ -82,6 +82,14 @@ function onMessage(msg) {
       break;
     case 'state': {
       const prevPrompt = app.prompt;
+      if (msg.gameNo !== app.gameNo) {
+        // 새 판 (바로 다시 하기 포함): 결과 창·기록 표시 상태 초기화
+        app.gameNo = msg.gameNo;
+        app.resultDismissed = false;
+        app.resultSounded = false;
+        app.logSeq = null;
+        if (msg.state.tutorial && app.gameNo > 1 && window.Tutorial) Tutorial.reset();
+      }
       app.state = msg.state;
       app.prompts = msg.prompts || {};
       app.mySeats = msg.seats || [];
@@ -1030,10 +1038,12 @@ function renderModal() {
   if (st && st.result && !app.resultDismissed) {
     const isHost = app.room.hostId === app.personId;
     inner.innerHTML = `<div class="result ${st.result.win ? 'win' : 'lose'}"><svg class="big-logo" viewBox="0 0 64 64"><use href="#logo"/></svg><h1>${st.result.win ? '승리' : '패배'}</h1><p>${esc(st.result.reason)}</p><p class="hint">${st.result.turn}턴에 게임이 끝났습니다.</p>
-      <div class="actions" style="justify-content:center">${isHost ? '<button id="btn-lobby" class="primary">대기실로 돌아가기 (새 게임)</button>' : '<span class="hint">방장이 새 게임을 준비할 수 있습니다.</span>'}<button id="btn-close-result">지도 보기</button></div></div>`;
+      <div class="actions" style="justify-content:center">${isHost ? '<button id="btn-rematch" class="primary">🔁 바로 다시 하기 (같은 정령·설정)</button><button id="btn-lobby">⚙ 대기실에서 설정 바꾸기</button>' : '<span class="hint">방장이 "바로 다시 하기"를 누르면 같은 구성으로 새 판이 시작돼요.</span>'}<button id="btn-close-result">지도 보기</button></div></div>`;
     $('#modal').classList.remove('hidden');
     const lb = $('#btn-lobby');
     if (lb) lb.onclick = () => send({ t: 'backToLobby' });
+    const rm = $('#btn-rematch');
+    if (rm) rm.onclick = () => { rm.disabled = true; send({ t: 'rematch' }); };
     $('#btn-close-result').onclick = () => { app.resultDismissed = true; closeModal(); };
     return;
   }

@@ -198,7 +198,7 @@ function broadcastRoom(room) {
 function stateMsg(room, player, state) {
   const seats = room.seats.filter((x) => x.owner === player.id).map((x) => x.id);
   const prompts = Object.fromEntries(seats.map((id) => [id, room.game.currentPrompt(id)]));
-  return { t: 'state', state, prompts, seats };
+  return { t: 'state', state, prompts, seats, gameNo: room.gameNo };
 }
 
 function sendState(room, player) {
@@ -213,6 +213,7 @@ function broadcastState(room) {
 }
 
 async function startGame(room) {
+  room.gameNo = (room.gameNo || 0) + 1; // 클라이언트가 새 판을 알아채도록
   const sv = room.resume;
   if (sv) {
     // 이어하기: 저장된 좌석 그대로. 아무도 앉지 않은 자리는 방장이 대신 조종
@@ -519,6 +520,24 @@ wss.on('connection', (ws) => {
           const owner = room.players.find((x) => x.id === seat.owner);
           if (seat.owner === player.id || !owner || !owner.ws) room.game.ackStep(seat.id, msg.no);
         }
+        break;
+      }
+      case 'debugEnd': {
+        // 자동 테스트 전용 (TEST_HOOKS=1 일 때만): 게임을 바로 끝냄
+        if (process.env.TEST_HOOKS !== '1' || !room || !room.game || room.game.result) return;
+        try { room.game.endGame(true, '테스트로 게임을 끝냈습니다.'); } catch { /* GameOver */ } broadcastState(room);
+        break;
+      }
+      case 'rematch': {
+        // 게임이 끝난 뒤 대기실을 거치지 않고 같은 구성으로 바로 새 판
+        if (!room || !room.game) return;
+        if (room.hostId !== player.id) return fail('방장만 다시 시작할 수 있습니다.');
+        if (!room.game.result) return fail('게임이 아직 끝나지 않았습니다.');
+        room.game.removeAllListeners();
+        room.game = null;
+        room.resume = null;
+        room.chat.push({ from: '안내', text: '같은 구성으로 새 게임을 시작합니다!', at: Date.now() });
+        startGame(room);
         break;
       }
       case 'backToLobby': {

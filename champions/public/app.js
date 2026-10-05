@@ -47,6 +47,13 @@ function bindPackTabs() {
 }
 const inPack = (key, x) => !app[key] || app[key] === 'all' || (x.pack || 'core') === app[key];
 
+/** 전체 화면 켜기/끄기 */
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => toast('이 브라우저에서는 전체 화면을 쓸 수 없어요. F11 키를 눌러 보세요.'));
+}
+document.addEventListener('fullscreenchange', () => { const b = document.querySelector('#topbar .btn-full'); if (b) b.textContent = document.fullscreenElement ? '🗗 창 모드' : '⛶ 전체 화면'; });
+
 // ───────────── 연결 ─────────────
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -80,7 +87,15 @@ function onMessage(msg) {
       renderChat();
       break;
     case 'state': {
-      const first = !app.state;
+      const first = !app.state || msg.gameNo !== app.gameNo;
+      if (msg.gameNo !== app.gameNo) {
+        // 새 판 (바로 다시 하기 포함): 결과 창·효과 표시 상태 초기화
+        app.gameNo = msg.gameNo;
+        app.hideResult = false;
+        app.lastEv = 0;
+        app.lastLog = 0;
+        app.prevHp = {};
+      }
       app.state = msg.state;
       app.prompt = msg.prompt;
       show('game');
@@ -361,11 +376,12 @@ function renderTop() {
     <div class="tb-phase ${st.phase === 'villain' ? 'villain' : ''}">${phase}</div>
     <div class="tb-turn">${cur ? `<span class="dot" style="background:${colorOf(cur.id)}"></span>${cur.id === app.you ? '<b class="mine">내 차례!</b>' : `<b>${esc(cur.name)}</b>의 차례`}` : ''}</div>
     <div class="tb-info">${v.icon} ${esc(v.name)} · ${esc(diff ? diff.name : '')}</div>
-    <div class="tb-btns"><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-ref">📋 빠른 참고</button><button class="small btn-sound2">⚙ 설정</button>${quitButtonHTML()}${st.result ? '<button class="small" id="btn-show-result">🏁 결과</button>' : ''}</div>`;
+    <div class="tb-btns"><button class="small btn-full" title="전체 화면 켜기/끄기 (F11도 돼요)">${document.fullscreenElement ? '🗗 창 모드' : '⛶ 전체 화면'}</button><button class="small btn-guide2">📖 게임 방법</button><button class="small btn-ref">📋 빠른 참고</button><button class="small btn-sound2">⚙ 설정</button>${quitButtonHTML()}${st.result ? '<button class="small" id="btn-show-result">🏁 결과</button>' : ''}</div>`;
   if (setHTML($('#topbar'), html)) {
     $('#topbar .btn-guide2').onclick = () => Guide.open();
     $('#topbar .btn-ref').onclick = () => Guide.reference();
     $('#topbar .btn-sound2').onclick = openSound;
+    $('#topbar .btn-full').onclick = toggleFullscreen;
     bindQuitButton();
     const rb = $('#btn-show-result');
     if (rb) rb.onclick = () => { app.hideResult = false; renderResult(); };
@@ -646,11 +662,13 @@ function renderResult() {
   box.querySelector('.modal-inner').innerHTML = `<div class="res-head ${st.result.win ? 'win' : 'lose'}">${st.result.win ? '🎉 승리!' : '💀 패배…'}</div>
     <p class="res-reason">${esc(st.result.reason)}</p>
     <p class="hint">악당: ${vd.icon} ${esc(vd.name)} · ${st.round}라운드</p>
-    <div class="actions"><button class="small" id="res-close">판 보기</button>${isHost ? '<button class="primary" id="res-lobby">대기실로 (다시 하기)</button>' : '<span class="hint">방장이 다시 시작할 수 있어요</span>'}<button class="small" id="res-leave">나가기</button></div>`;
+    <div class="actions"><button class="small" id="res-close">판 보기</button>${isHost ? '<button class="primary" id="res-rematch">🔁 바로 다시 하기</button><button class="small" id="res-lobby">⚙ 대기실에서 설정 바꾸기</button>' : '<span class="hint">방장이 "바로 다시 하기"를 누르면 같은 구성으로 새 판이 시작돼요</span>'}<button class="small" id="res-leave">나가기</button></div>`;
   box.classList.remove('hidden');
   $('#res-close').onclick = () => { app.hideResult = true; box.classList.add('hidden'); };
   const lb = $('#res-lobby');
   if (lb) lb.onclick = () => { app.hideResult = false; send({ t: 'backToLobby' }); };
+  const rm = $('#res-rematch');
+  if (rm) rm.onclick = () => { rm.disabled = true; send({ t: 'rematch' }); };
   $('#res-leave').onclick = () => { app.hideResult = false; box.classList.add('hidden'); send({ t: 'leave' }); };
 }
 

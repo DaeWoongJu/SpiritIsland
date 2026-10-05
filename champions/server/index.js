@@ -112,7 +112,7 @@ function broadcastRoom(room) {
 
 function sendState(room, p) {
   if (!room.game || p.bot) return;
-  send(p.ws, { t: 'state', state: room.game.view(p.id), prompt: room.game.currentPrompt(p.id) });
+  send(p.ws, { t: 'state', state: room.game.view(p.id), prompt: room.game.currentPrompt(p.id), gameNo: room.gameNo });
 }
 
 function broadcastState(room) {
@@ -143,6 +143,7 @@ function scheduleBots(room) {
 }
 
 async function startGame(room) {
+  room.gameNo = (room.gameNo || 0) + 1; // 클라이언트가 새 판을 알아채도록
   // 차례 순서는 방에 들어온 순서 그대로 (첫 플레이어가 시작, 뒤 플레이어는 시작 자원이 조금 더 많음)
   if (!room.resume) {
     // 영웅을 안 고른 사람은 남은 영웅 중 무작위
@@ -419,6 +420,25 @@ wss.on('connection', (ws) => {
         if (!room || !room.game || !player || room.loading) return;
         const err = room.game.answer(player.id, msg.promptId, msg.value);
         if (err) { fail(err); sendState(room, player); }
+        break;
+      }
+      case 'debugEnd': {
+        // 자동 테스트 전용 (TEST_HOOKS=1 일 때만): 게임을 바로 끝냄
+        if (process.env.TEST_HOOKS !== '1' || !room || !room.game || room.game.result) return;
+        try { room.game.endGame(true, '테스트로 게임을 끝냈습니다.'); } catch { /* GameOver */ } broadcastState(room);
+        break;
+      }
+      case 'rematch': {
+        // 게임이 끝난 뒤 대기실을 거치지 않고 같은 구성으로 바로 새 판
+        if (!room || !room.game) return;
+        if (room.hostId !== player.id) return fail('방장만 다시 시작할 수 있습니다.');
+        if (!room.game.result) return fail('게임이 아직 끝나지 않았습니다.');
+        room.game.removeAllListeners();
+        room.game = null;
+        room.resume = null;
+        // 이어하기에서 AI가 대신하던 빈자리는 그대로 AI로 진행
+        room.chat.push({ name: '안내', text: '같은 구성으로 새 게임을 시작합니다!', at: Date.now() });
+        startGame(room);
         break;
       }
       case 'backToLobby': {
