@@ -399,3 +399,27 @@ test('반복: 비용 한도가 여러 개면 낮은 한도부터 사용', async 
   await phase;
   assert.deepStrictEqual(R.repeats, [{ maxCost: 6 }]);
 });
+
+test('공포 카드: 두 정령이 같은 지역을 고르고 먼저 고른 쪽이 다 제거해도 게임이 멈추지 않음', async () => {
+  const g = mkGame(['earth', 'lightning'], 9);
+  g.setup();
+  // 다한이 있는 지역 하나에만 탐험가 2개, 나머지 지역은 침략자 없음
+  const target = Object.values(g.lands).find((l) => l.dahan.length > 0);
+  for (const l of Object.values(g.lands)) { l.explorers = 0; l.towns = []; l.cities = []; }
+  target.explorers = 2;
+  Object.values(g.lands).find((l) => !l.dahan.length && l.id !== target.id).cities = [3]; // 섬이 비어 승리하지 않도록
+  const tick = () => new Promise((r) => setImmediate(r));
+  const done = g.eachPlayerRemovesTwoOrTown((l) => l.dahan.length > 0, '다한이 있는');
+  await tick();
+  const p0 = g.currentPrompt('p0'); const p1 = g.currentPrompt('p1');
+  assert.deepStrictEqual(p0.options, [target.id]);
+  assert.deepStrictEqual(p1.options, [target.id]);
+  g.answer('p0', p0.id, target.id); // 먼저 고른 정령이 탐험가 2개 제거
+  await tick();
+  g.answer('p1', p1.id, target.id); // 같은 지역 → 이미 없음
+  await tick();
+  assert.strictEqual(g.currentPrompt('p1'), null, '버튼 없는 선택 창이 남으면 안 됨');
+  await done;
+  assert.strictEqual(target.explorers, 0);
+  assert.ok(g.logLines.some((l) => /이미 없습니다/.test(l.msg)));
+});

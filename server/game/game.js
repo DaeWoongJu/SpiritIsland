@@ -204,6 +204,8 @@ class Game extends EventEmitter {
   }
 
   askOption(pid, title, options, extra = {}) {
+    // 고를 것이 하나도 없으면 묻지 않고 넘어감 (버튼 없는 창에서 게임이 멈추지 않도록)
+    if (!options || !options.length) return Promise.resolve(null);
     return this.ask(pid, { type: 'option', title, options, ...extra });
   }
 
@@ -733,7 +735,7 @@ class Game extends EventEmitter {
       const land = await this.askLand(pid, `공포: ${desc} 지역에서 ${typeLabel} ${n}개 제거 — 지역 선택`, opts, false, {}, { kind: 'fear' });
       for (let i = 0; i < n; i++) {
         const avail = types.filter((t) => this.count(land, t) > 0);
-        if (!avail.length) break;
+        if (!avail.length) { if (i === 0) this.log(`${land}: 제거할 침략자가 이미 없습니다 (다른 정령이 먼저 처리)`); break; }
         const t = avail.length === 1 ? avail[0] : await this.askOption(pid, `${land}에서 무엇을 제거할까요?`, avail.map((x) => ({ value: x, label: PIECE_NAMES[x] })));
         this.removePieces(land, t, 1);
       }
@@ -748,6 +750,8 @@ class Game extends EventEmitter {
       const o = [];
       if (this.count(land, 'explorer')) o.push({ value: 'e', label: '탐험가 2개 제거' });
       if (this.count(land, 'town')) o.push({ value: 't', label: '마을 1개 제거' });
+      // 다른 플레이어가 같은 지역을 먼저 골라 이미 제거했을 수 있음
+      if (!o.length) { this.log(`${land}: 제거할 침략자가 이미 없습니다 (다른 정령이 먼저 처리)`); return; }
       const c = o.length === 1 ? o[0].value : await this.askOption(pid, '무엇을 제거할까요?', o);
       if (c === 'e') this.removePieces(land, 'explorer', 2); else this.removePieces(land, 'town', 1);
     }));
