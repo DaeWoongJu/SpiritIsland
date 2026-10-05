@@ -8,6 +8,7 @@
 
 const DLC = require('./dlc');
 const MORE = require('./cards_more');
+const FULL = require('./roster_full');
 
 const RES = ['energy', 'mental', 'physical', 'wild'];
 const RES_NAMES = { energy: '에너지', mental: '정신', physical: '물리', wild: '만능' };
@@ -172,8 +173,10 @@ const PLAYER_CARDS = [
 ];
 // 확장(DLC) 영웅·카드
 HEROES.push(...DLC.heroes(fx));
+HEROES.push(...FULL.heroes(fx));
 PLAYER_CARDS.push(...DLC.cards(fx, C));
 PLAYER_CARDS.push(...MORE.make(fx, C));
+PLAYER_CARDS.push(...FULL.cards(fx, C));
 const CARD_MAP = Object.fromEntries(PLAYER_CARDS.map((c) => [c.id, c]));
 
 const DECK_SIZE = 40;
@@ -193,6 +196,30 @@ function buildDeck(heroId, aspect) {
   // 남는 자리는 기본 카드로
   for (let i = 0; deck.length < DECK_SIZE; i++) deck.push(BASIC_FILL[i % BASIC_FILL.length]);
   return deck.slice(0, DECK_SIZE);
+}
+
+const DECK_MIN = 40, DECK_MAX = 50, COPY_MAX = 3;
+/** 영웅 전용 카드 구성 (원작처럼 고정: 이벤트·아군 2장, 나머지 1장) */
+function heroKit(heroId) {
+  const kit = {};
+  for (const c of PLAYER_CARDS.filter((x) => x.aspect === heroId)) kit[c.id] = c.type === 'event' || c.type === 'ally' ? 2 : 1;
+  return kit;
+}
+/** 직접 꾸민 덱 검사. 문제가 있으면 이유(문자열), 없으면 null */
+function validateDeck(heroId, aspect, list) {
+  if (!Array.isArray(list)) return '덱 형식이 잘못됐어요.';
+  if (list.length < DECK_MIN || list.length > DECK_MAX) return `덱은 ${DECK_MIN}~${DECK_MAX}장이어야 해요 (지금 ${list.length}장).`;
+  const count = {};
+  for (const id of list) { if (!CARD_MAP[id]) return '알 수 없는 카드가 있어요.'; count[id] = (count[id] || 0) + 1; }
+  const kit = heroKit(heroId);
+  for (const [id, n] of Object.entries(kit)) if (count[id] !== n) return `영웅 전용 카드 「${CARD_MAP[id].name}」는 ${n}장이 들어가야 해요.`;
+  for (const [id, n] of Object.entries(count)) {
+    if (kit[id]) continue;
+    const c = CARD_MAP[id];
+    if (c.aspect !== 'basic' && c.aspect !== aspect) return `「${c.name}」는 내 측면이나 기본 카드가 아니에요.`;
+    if (n > COPY_MAX) return `「${c.name}」는 ${COPY_MAX}장까지만 넣을 수 있어요.`;
+  }
+  return null;
 }
 
 // ───────────── 조우 카드 (악당 쪽) ─────────────
@@ -237,6 +264,7 @@ const ENCOUNTER = [
 ];
 ENCOUNTER.push(...DLC.encounter(E));
 ENCOUNTER.push(...MORE.modularCards(E));
+ENCOUNTER.push(...FULL.encounter(E));
 const ENC_MAP = Object.fromEntries(ENCOUNTER.map((e) => [e.id, e]));
 
 // ───────────── 악당 ─────────────
@@ -269,6 +297,7 @@ const VILLAINS = [
 ];
 
 VILLAINS.push(...DLC.VILLAINS);
+VILLAINS.push(...FULL.villains());
 
 // 난이도: 단계 구성과 계략 여유
 const DIFFICULTIES = [
@@ -280,7 +309,7 @@ const DIFFICULTIES = [
 
 const ALLY_LIMIT = 3;
 
-const PACKS = DLC.PACKS;
+const PACKS = { ...DLC.PACKS, ...FULL.EXTRA_PACKS };
 const MODULAR_SETS = MORE.MODULAR_SETS;
 
-module.exports = { PACKS, MODULAR_SETS, DECK_SIZE, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };
+module.exports = { PACKS, MODULAR_SETS, DECK_SIZE, DECK_MIN, DECK_MAX, COPY_MAX, heroKit, validateDeck, RES, RES_NAMES, RES_ICON, ASPECTS, HEROES, PLAYER_CARDS, CARD_MAP, buildDeck, ENCOUNTER, ENC_MAP, VILLAINS, DIFFICULTIES, ALLY_LIMIT };

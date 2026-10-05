@@ -372,3 +372,23 @@ h2 { font-family: var(--comic); font-weight: 400; color: var(--yellow); margin: 
 .side-rule { font-size: calc(12px * var(--fs)); line-height: 1.4; margin-top: 3px; color: var(--text); }
 .side-rule b { color: var(--yellow); }
 .side-rule.danger b { color: var(--red); }
+
+/* 덱 꾸미기 */
+.deck-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.modal-inner.deck-ed { width: min(1200px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.dk-head h2 { margin: 0 0 4px; }
+.dk-count { font-size: calc(15px * var(--fs)); margin-bottom: 4px; }
+.dk-count.ok b { color: var(--green); } .dk-count.bad b { color: var(--red); }
+.dk-body { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-height: 0; flex: 1; overflow: hidden; margin: 8px 0; }
+.dk-col { display: flex; flex-direction: column; min-height: 0; }
+.dk-list { overflow-y: auto; flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 4px; background: #0006; max-height: 62vh; }
+.dk-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-bottom: 1px solid #ffffff12; }
+.dk-row.locked { opacity: .8; }
+.dk-ico { font-size: 1.4em; width: 1.6em; text-align: center; }
+.dk-name { flex: 1; min-width: 0; font-size: calc(13px * var(--fs)); line-height: 1.35; }
+.dk-name .hint { font-size: .85em; }
+.dk-n { width: 3.2em; text-align: center; }
+.dk-lock { width: 4.6em; text-align: center; }
+.dk-tag { display: inline-block; font-size: .72em; padding: 0 6px; border-radius: 999px; border: 1px solid var(--ac, var(--line)); color: var(--ac, var(--muted)); font-weight: 700; }
+.dk-tag.hero { border-color: var(--yellow); color: var(--yellow); }
+@media (max-width: 760px) { .dk-body { grid-template-columns: 1fr; overflow-y: auto; } }

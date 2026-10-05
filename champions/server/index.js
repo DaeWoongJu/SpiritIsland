@@ -30,7 +30,8 @@ const CATALOG = {
   villains: D.VILLAINS.map((v) => strip(v)),
   packs: D.PACKS,
   modulars: D.MODULAR_SETS.map((m) => ({ id: m.id, name: m.name, icon: m.icon, desc: m.desc, cards: m.cards })),
-  deckSize: D.DECK_SIZE,
+  deckSize: D.DECK_SIZE, deckMin: D.DECK_MIN, deckMax: D.DECK_MAX, copyMax: D.COPY_MAX,
+  kits: Object.fromEntries(D.HEROES.map((h) => [h.id, D.heroKit(h.id)])),
   difficulties: D.DIFFICULTIES,
   resNames: D.RES_NAMES, resIcon: D.RES_ICON, allyLimit: D.ALLY_LIMIT,
   decks: Object.fromEntries(D.HEROES.flatMap((h) => Object.keys(D.ASPECTS).map((a) => [`${h.id}:${a}`, D.buildDeck(h.id, a)]))),
@@ -71,7 +72,7 @@ function roomInfo(room) {
   return {
     code: room.code, hostId: room.hostId, started: !!room.game, solo: !!room.solo, settings: room.settings,
     loading: !!room.loading, resume: room.resume ? resumeInfo(room) : null,
-    players: room.players.map((p, i) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero || null, aspect: p.aspect || null, color: COLORS[i], connected: p.bot || !!(p.ws && p.ws.readyState === 1) })),
+    players: room.players.map((p, i) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero || null, aspect: p.aspect || null, deck: p.deck || null, color: COLORS[i], connected: p.bot || !!(p.ws && p.ws.readyState === 1) })),
     chat: room.chat.slice(-50), maxPlayers: MAX_PLAYERS,
   };
 }
@@ -162,7 +163,7 @@ async function startGame(room) {
     const humans = new Map(room.players.filter((p) => !p.bot).map((p) => [p.id, p]));
     room.players = sv.roster.map((s) => humans.get(s.id) || { ...s, bot: true, sub: !s.bot });
     room.roster = sv.roster;
-  } else room.roster = room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect }));
+  } else room.roster = room.players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect, deck: p.deck || null }));
   const game = new Game(room.roster, { settings: room.settings, seed: sv ? sv.seed : undefined });
   room.game = game;
   room.botTimers = {};
@@ -406,9 +407,23 @@ wss.on('connection', (ws) => {
         if (msg.hero !== undefined) {
           if (msg.hero !== null && !D.HEROES.some((h) => h.id === msg.hero)) return;
           if (msg.hero && room.players.some((x) => x !== target && x.hero === msg.hero)) return fail('다른 사람이 이미 고른 영웅입니다.');
+          if (target.hero !== msg.hero) target.deck = null;
           target.hero = msg.hero;
         }
-        if (msg.aspect !== undefined && (msg.aspect === null || D.ASPECTS[msg.aspect])) target.aspect = msg.aspect;
+        if (msg.aspect !== undefined && (msg.aspect === null || D.ASPECTS[msg.aspect])) { if (target.aspect !== msg.aspect) target.deck = null; target.aspect = msg.aspect; }
+        broadcastRoom(room);
+        break;
+      }
+      case 'setDeck': {
+        // 내 덱 꾸미기 (null 이면 자동 덱으로)
+        if (!room || room.game) return;
+        if (room.resume) return fail('저장된 게임을 이어하는 중에는 바꿀 수 없습니다.');
+        if (!player.hero || !player.aspect) return fail('먼저 영웅과 측면을 고르세요.');
+        if (msg.deck === null) { player.deck = null; broadcastRoom(room); break; }
+        const err = D.validateDeck(player.hero, player.aspect, msg.deck);
+        if (err) return fail(err);
+        player.deck = msg.deck.slice();
+        send(ws, { t: 'deckSaved' });
         broadcastRoom(room);
         break;
       }

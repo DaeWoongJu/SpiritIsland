@@ -109,6 +109,10 @@ function onMessage(msg) {
       show('home');
       send({ t: 'listSaves' });
       break;
+    case 'deckSaved':
+      toast('덱을 저장했어요!');
+      $('#deck-editor').classList.add('hidden');
+      break;
     case 'error':
       toast(msg.msg);
       Sound.play('error');
@@ -281,12 +285,16 @@ function renderRoom() {
       </div>`;
     }).join('')}</div>
     <div class="rs-title" style="margin-top:10px">🎴 내 측면 (덱 성향) <span class="hint">다시 누르면 취소돼요. 안 고르면 시작할 때 무작위로 정해져요.</span></div>
-    <div class="aspects">${Object.values(c.aspects).map((a) => `<button class="asp-opt ${meP && meP.aspect === a.id ? 'on' : ''}" data-aspect="${a.id}" style="--ac:${a.color}"><b>${esc(a.name)}</b> <span class="hint">(${esc(a.en)})</span><br><span class="asp-desc">${esc(a.desc)}</span></button>`).join('')}</div>`;
+    <div class="aspects">${Object.values(c.aspects).map((a) => `<button class="asp-opt ${meP && meP.aspect === a.id ? 'on' : ''}" data-aspect="${a.id}" style="--ac:${a.color}"><b>${esc(a.name)}</b> <span class="hint">(${esc(a.en)})</span><br><span class="asp-desc">${esc(a.desc)}</span></button>`).join('')}</div>
+    <div class="deck-row"><button class="primary small" id="btn-deck" ${meP && meP.hero && meP.aspect ? '' : 'disabled'}>🃏 내 덱 꾸미기</button>
+      <span class="hint">${meP && meP.hero && meP.aspect ? (meP.deck ? `직접 꾸민 덱 ${meP.deck.length}장 사용 중` : `자동 덱 ${c.deckSize}장 사용 중 — 눌러서 카드를 바꿀 수 있어요`) : '영웅과 측면을 고르면 덱을 꾸밀 수 있어요'}</span></div>`;
   for (const el of document.querySelectorAll('.hero-opt')) el.onclick = (e) => { if (e.target.closest('.ho-bot')) return; const id = el.dataset.hero; send({ t: 'pickHero', hero: meP && meP.hero === id ? null : id }); };
   for (const b of document.querySelectorAll('.ho-bot')) b.onclick = () => send({ t: 'pickHero', hero: b.dataset.h, target: b.dataset.bot });
   // 같은 측면을 다시 누르면 선택 취소 (안 고르면 시작할 때 무작위)
   for (const b of document.querySelectorAll('.asp-opt')) b.onclick = () => send({ t: 'pickHero', aspect: meP && meP.aspect === b.dataset.aspect ? null : b.dataset.aspect });
   bindPackTabs();
+  const db = $('#btn-deck');
+  if (db) db.onclick = openDeckEditor;
   $('#btn-start').disabled = !isHost;
   $('#btn-add-bot').disabled = !isHost || r.players.length >= r.maxPlayers;
   $('#btn-start').textContent = isHost ? '출동! ▶' : '방장이 시작하기를 기다리는 중…';
@@ -677,6 +685,66 @@ function sideTip(s) {
     <div style="margin-top:6px">${sideRules(s).map((r) => `${r.icon} <b>${r.name}</b>: ${esc(r.text)}`).join('<br>')}</div>
     <div class="tip-meta">부가 계략은 악당이 동시에 꾸미는 또 다른 음모예요. 여기에 쌓인 위협으로는 지지 않지만, 위의 효과가 계속 발동해요.<br>
     🛑 <b>저지</b>(기본 저지·저지 카드·아군 저지)로 이 카드를 골라 위협을 0으로 만들면 버려져요. 위협 ${s.threat} 남음.</div>`;
+}
+
+// ───────────── 덱 꾸미기 ─────────────
+function openDeckEditor() {
+  const me = app.room.players.find((p) => p.id === app.you);
+  if (!me || !me.hero || !me.aspect) { toast('먼저 영웅과 측면을 고르세요.'); return; }
+  const c = app.catalog;
+  app.deckEd = { hero: me.hero, aspect: me.aspect, list: (me.deck || c.decks[`${me.hero}:${me.aspect}`]).slice(), type: 'all' };
+  renderDeckEditor();
+  $('#deck-editor').classList.remove('hidden');
+}
+function deckProblem(d) {
+  const c = app.catalog;
+  const n = d.list.length;
+  if (n < c.deckMin) return `${c.deckMin - n}장 더 넣어야 해요 (${c.deckMin}~${c.deckMax}장).`;
+  if (n > c.deckMax) return `${n - c.deckMax}장 빼야 해요 (${c.deckMin}~${c.deckMax}장).`;
+  return '';
+}
+function renderDeckEditor() {
+  const c = app.catalog;
+  const d = app.deckEd;
+  const kit = c.kits[d.hero];
+  const count = {};
+  for (const id of d.list) count[id] = (count[id] || 0) + 1;
+  const h = heroDef(d.hero);
+  const a = c.aspects[d.aspect];
+  const group = (x) => (kit[x.id] ? 0 : x.aspect === d.aspect ? 1 : 2);
+  const sortFn = (x, y) => group(x) - group(y) || (x.type === 'resource') - (y.type === 'resource') || x.cost - y.cost || x.name.localeCompare(y.name);
+  const deckCards = Object.keys(count).map((id) => c.cards[id]).sort(sortFn);
+  const pool = Object.values(c.cards).filter((x) => (x.aspect === d.aspect || x.aspect === 'basic') && (d.type === 'all' || x.type === d.type)).sort(sortFn);
+  const typeCount = {};
+  for (const id of d.list) typeCount[c.cards[id].type] = (typeCount[c.cards[id].type] || 0) + 1;
+  const prob = deckProblem(d);
+  const row = (x, inDeck) => {
+    const n = count[x.id] || 0;
+    const locked = !!kit[x.id];
+    const tag = locked ? '<span class="dk-tag hero">영웅</span>' : x.aspect === 'basic' ? '<span class="dk-tag">기본</span>' : `<span class="dk-tag" style="--ac:${a.color}">${esc(a.name)}</span>`;
+    return `<div class="dk-row ${locked ? 'locked' : ''}" data-tip-card="${x.id}"><span class="dk-ico">${CARD_ART[x.id] || x.icon || '🃏'}</span>
+      <span class="dk-name">${esc(x.name)} ${tag}<br><span class="hint">${TYPE_NAME[x.type]}${x.type !== 'resource' ? ` · 비용 ${x.cost}` : ''} · ${esc(x.text)}</span></span>
+      ${inDeck ? `<b class="dk-n">×${n}</b>` : `<span class="dk-n hint">${n}/${locked ? kit[x.id] : c.copyMax}</span>`}
+      ${locked ? '<span class="hint dk-lock">🔒 고정</span>' : `<button class="small" data-dk-minus="${x.id}" ${n ? '' : 'disabled'}>−</button><button class="small" data-dk-plus="${x.id}" ${n >= c.copyMax || d.list.length >= c.deckMax ? 'disabled' : ''}>＋</button>`}</div>`;
+  };
+  $('#deck-editor .modal-inner').innerHTML = `<div class="dk-head"><h2>🃏 덱 꾸미기 — ${h.icon} ${esc(h.name)} · <span style="color:${a.color}">${esc(a.name)}</span></h2>
+      <div class="dk-count ${prob ? 'bad' : 'ok'}"><b>${d.list.length}</b>장 <span class="hint">(${c.deckMin}~${c.deckMax}장)</span> ${prob ? `· ${esc(prob)}` : '· ✔ 사용할 수 있어요'}</div>
+      <div class="hint">${Object.entries(TYPE_NAME).map(([k, v]) => `${v} ${typeCount[k] || 0}`).join(' · ')} — 영웅 전용 카드는 원작처럼 고정이고, ${esc(a.name)}·기본 카드를 같은 카드 ${c.copyMax}장까지 넣을 수 있어요.</div></div>
+    <div class="dk-body">
+      <div class="dk-col"><div class="rs-title">내 덱</div><div class="dk-list">${deckCards.map((x) => row(x, true)).join('')}</div></div>
+      <div class="dk-col"><div class="rs-title">넣을 수 있는 카드</div>
+        <div class="pack-tabs">${[['all', '전체'], ...Object.entries(TYPE_NAME)].map(([k, v]) => `<button class="small pack-tab ${d.type === k ? 'on' : ''}" data-dk-type="${k}">${v}</button>`).join('')}</div>
+        <div class="dk-list">${pool.map((x) => row(x, false)).join('')}</div></div>
+    </div>
+    <div class="actions"><button class="small" id="dk-auto">↺ 자동 덱으로 되돌리기</button><span style="flex:1"></span><button class="small" id="dk-close">닫기</button><button class="primary" id="dk-save" ${prob ? 'disabled' : ''}>💾 이 덱으로 하기</button></div>`;
+  const box = $('#deck-editor');
+  for (const b of box.querySelectorAll('[data-dk-plus]')) b.onclick = () => { d.list.push(b.dataset.dkPlus); renderDeckEditor(); };
+  for (const b of box.querySelectorAll('[data-dk-minus]')) b.onclick = () => { const i = d.list.lastIndexOf(b.dataset.dkMinus); if (i >= 0) d.list.splice(i, 1); renderDeckEditor(); };
+  for (const b of box.querySelectorAll('[data-dk-type]')) b.onclick = () => { d.type = b.dataset.dkType; renderDeckEditor(); };
+  for (const el of box.querySelectorAll('[data-tip-card]')) { el.onmouseenter = (e) => showTip(e, cardTip(c.cards[el.dataset.tipCard])); el.onmouseleave = hideTip; }
+  $('#dk-close').onclick = () => { hideTip(); box.classList.add('hidden'); };
+  $('#dk-auto').onclick = () => { d.list = c.decks[`${d.hero}:${d.aspect}`].slice(); send({ t: 'setDeck', deck: null }); hideTip(); box.classList.add('hidden'); toast('자동 덱으로 되돌렸어요.'); };
+  $('#dk-save').onclick = () => { hideTip(); send({ t: 'setDeck', deck: d.list }); };
 }
 
 function renderResult() {

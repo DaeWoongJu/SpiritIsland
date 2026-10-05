@@ -77,6 +77,7 @@ const Guide = (() => {
       <p><b>덱이 떨어지면</b>: 버린 카드를 섞어 새 덱을 만들지만, 벌칙으로 다음 악당 단계에 조우 카드를 1장 더 받아요.</p>` },
     { title: '🎴 영웅 · 측면 · 악당 고르기', body: () => `
       <p>덱은 <b>영웅 전용 카드(9종) + 측면 카드(20종) + 기본 카드</b> 40장으로 원작처럼 자동으로 만들어져요. 악당 덱에는 대기실에서 고른 <b>모듈 조우 세트</b>가 하나 더 섞여요.</p>
+      <p>대기실의 <b>🃏 내 덱 꾸미기</b>로 덱을 직접 바꿀 수도 있어요: 40~50장, 영웅 전용 카드는 고정, 측면·기본 카드는 같은 카드 3장까지.</p>
       <div class="g-grid">${Object.values((app.catalog || {}).aspects || {}).map((a) => `<div><b style="color:${a.color}">${a.name}</b> (${a.en})<br><span class="hint">${a.desc}</span></div>`).join('')}</div>
       <p>영웅: ${((app.catalog || {}).heroes || []).map((h) => `${h.icon} ${h.name}`).join(' · ')}</p>
       <p>악당: ${((app.catalog || {}).villains || []).map((v) => `${v.icon} ${v.name} (${v.level})`).join(' · ')}</p>

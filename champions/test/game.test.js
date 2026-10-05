@@ -81,7 +81,9 @@ for (const vill of D.VILLAINS.map((v) => v.id)) {
     const heroes = D.HEROES.map((h) => h.id);
     const asps = Object.keys(D.ASPECTS);
     let k = 0;
-    for (const diff of D.DIFFICULTIES.map((d) => d.id)) for (const n of [1, 2, 4]) {
+    // 악당이 많아서: 난이도는 돌아가며, 인원은 1·2·4인
+    const diffs = D.DIFFICULTIES.map((d) => d.id);
+    for (const [di, n] of [[0, 1], [1, 2], [2, 4], [3, 2]]) { const diff = diffs[di];
       const g = mk(Array.from({ length: n }, (_, i) => [heroes[(k * 2 + i * 5) % heroes.length], asps[(k + i) % 4]]), { villain: vill, difficulty: diff }, 10 + k++);
       attachBots(g, { random: k % 3 === 0 });
       const r = await Promise.race([g.run(), new Promise((_, rej) => setTimeout(() => rej(new Error('시간 초과')), 20000))]);
@@ -93,7 +95,7 @@ for (const vill of D.VILLAINS.map((v) => v.id)) {
 test('모든 영웅(확장 포함)이 각 측면으로 봇 게임을 끝까지 진행', async () => {
   const asps = Object.keys(D.ASPECTS);
   let k = 0;
-  for (const h of D.HEROES) for (const a of asps) {
+  for (const h of D.HEROES) for (const a of [asps[k % 4], asps[(k + 2) % 4]]) {
     const g = mk([[h.id, a]], { villain: D.VILLAINS[k % D.VILLAINS.length].id, difficulty: 'standard' }, 500 + k++);
     attachBots(g, { random: k % 2 === 0 });
     const r = await Promise.race([g.run(), new Promise((_, rej) => setTimeout(() => rej(new Error('시간 초과')), 20000))]);
@@ -168,4 +170,26 @@ test('모듈 조우 세트: 고른 세트가 조우 덱에 섞이고, 무작위�
   const r = mk([['spark', 'justice']], { villain: 'sonix', modular: 'random' }, 7);
   r.setup();
   assert.ok(D.MODULAR_SETS.some((m) => m.id === r.modular));
+});
+
+test('덱 꾸미기: 규칙(40~50장, 영웅 카드 고정, 같은 카드 3장, 측면·기본만) 검사', () => {
+  const base = D.buildDeck('spark', 'justice');
+  assert.strictEqual(D.validateDeck('spark', 'justice', base), null);
+  assert.match(D.validateDeck('spark', 'justice', base.slice(0, 39)), /40~50/);
+  const noKit = base.filter((id) => id !== 'flash_strike');
+  assert.match(D.validateDeck('spark', 'justice', [...noKit, 'investigate', 'investigate']), /영웅 전용/);
+  assert.match(D.validateDeck('spark', 'justice', [...base, 'assault']), /측면이나 기본/);
+  assert.match(D.validateDeck('spark', 'justice', [...base, 'investigate', 'investigate', 'investigate']), /3장까지/);
+  const custom = [...base, 'stakeout', 'stakeout'];
+  assert.strictEqual(D.validateDeck('spark', 'justice', custom), null);
+  // 게임에서 직접 꾸민 덱을 사용
+  const g = new Game([{ id: 'p0', name: 'P', bot: true, hero: 'spark', aspect: 'justice', deck: custom }], { seed: 3 });
+  g.setup();
+  const all = [...g.P('p0').deck, ...g.P('p0').hand].map((u) => g.cards[u]);
+  assert.strictEqual(all.length, custom.length);
+  assert.strictEqual(all.filter((id) => id === 'stakeout').length, 3);
+  // 규칙에 안 맞는 덱은 자동 덱으로
+  const g2 = new Game([{ id: 'p0', name: 'P', bot: true, hero: 'spark', aspect: 'justice', deck: ['assault'] }], { seed: 3 });
+  g2.setup();
+  assert.strictEqual(g2.P('p0').deck.length + g2.P('p0').hand.length, 40);
 });

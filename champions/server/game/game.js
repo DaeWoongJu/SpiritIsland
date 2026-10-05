@@ -28,7 +28,7 @@ class Game extends EventEmitter {
     this.settings = { villain: 'brute', difficulty: 'standard', ...(opts.settings || {}) };
     this.villainDef = D.VILLAINS.find((v) => v.id === this.settings.villain) || D.VILLAINS[0];
     this.diff = D.DIFFICULTIES.find((d) => d.id === this.settings.difficulty) || D.DIFFICULTIES[2];
-    this.players = players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect }));
+    this.players = players.map((p) => ({ id: p.id, name: p.name, bot: !!p.bot, hero: p.hero, aspect: p.aspect, deck: Array.isArray(p.deck) ? [...p.deck] : null }));
     this.order = this.players.map((p) => p.id);
     this.prompts = {};
     this.promptSeq = 1;
@@ -111,7 +111,9 @@ class Game extends EventEmitter {
     for (const pl of this.players) {
       const heroDef = D.HEROES.find((h) => h.id === pl.hero) || D.HEROES[0];
       const aspect = D.ASPECTS[pl.aspect] ? pl.aspect : 'justice';
-      const deck = this.shuffle(D.buildDeck(heroDef.id, aspect).map((id) => { const u = this.newId('c'); this.cards[u] = id; return u; }));
+      // 직접 꾸민 덱이 규칙에 맞으면 그 덱, 아니면 자동 덱
+      const list = pl.deck && !D.validateDeck(heroDef.id, aspect, pl.deck) ? pl.deck : D.buildDeck(heroDef.id, aspect);
+      const deck = this.shuffle(list.map((id) => { const u = this.newId('c'); this.cards[u] = id; return u; }));
       this.ps[pl.id] = {
         heroId: heroDef.id, aspect, form: 'alter', hp: heroDef.hp, exhausted: false, flipped: false, abilityUsed: false,
         stunned: false, confused: false, tough: false, deck, hand: [], discard: [], play: [], engaged: [],
