@@ -450,8 +450,8 @@ function renderVillain() {
     </div>
     <div class="side-schemes">${st.sides.map((s) => `<div class="side-card ${pm.scheme[s.sid] ? 'can' : ''}" data-scheme="${s.sid}">
         <div class="sc-label">📌 부가 계략</div><div class="sc-name">${encArt(s.cardId) || ''} ${esc(s.name)}</div>
-        <div class="threat-num">위협 <b>${s.threat}</b></div>
-        <div class="vc-tags">${s.crisis ? '<span class="kw danger" title="이 계략이 있는 동안 주 계략에서 위협을 제거할 수 없어요">⛔ 위기</span>' : ''}${s.accel ? `<span class="kw" title="악당 단계마다 주 계략 위협 +${s.accel}">⏩ 가속</span>` : ''}${s.hazard ? `<span class="kw" title="악당 단계마다 조우 카드 +${s.hazard}장">☢ 위험</span>` : ''}</div>
+        <div class="threat-num">위협 <b>${s.threat}</b> <span class="hint">→ 0이 되면 사라져요</span></div>
+        ${sideRules(s).map((r) => `<div class="side-rule ${r.cls}">${r.icon} <b>${r.name}</b>: ${esc(r.text)}</div>`).join('')}
       </div>`).join('') || '<div class="hint side-empty">부가 계략 없음</div>'}
     </div>
     <div class="enc-deck" title="악당의 조우 덱: 악당 단계마다 플레이어마다 1장씩 공개돼요. 부스트로도 쓰여요.">
@@ -461,6 +461,10 @@ function renderVillain() {
   const zone = $('#villain-zone');
   if (!setHTML(zone, html)) return;
   for (const el of zone.querySelectorAll('[data-target]')) el.onclick = () => { const val = promptMap().target[el.dataset.target]; if (val != null) answer(val); };
+  for (const el of zone.querySelectorAll('.side-card')) {
+    const sd = st.sides.find((x) => x.sid === el.dataset.scheme);
+    if (sd) { el.onmouseenter = (e) => showTip(e, sideTip(sd)); el.onmouseleave = hideTip; }
+  }
   for (const el of zone.querySelectorAll('[data-scheme]')) el.onclick = () => { const val = promptMap().scheme[el.dataset.scheme]; if (val != null) answer(val); };
   const vEl = zone.querySelector('.villain-card');
   vEl.onmouseenter = (e) => showTip(e, villainTip());
@@ -651,6 +655,23 @@ function encounterBanner(e) {
   el.innerHTML = `<div class="eb-type">🎴 조우 카드 — ${ENC_TYPE[c.type]}${pl ? ` · ${esc(pl.name)}` : ''}</div><div class="eb-name">${encArt(e.card) || ''} ${esc(c.name)}</div><div class="eb-text">${esc(c.text)}</div>`;
   $('#fx-layer').appendChild(el);
   setTimeout(() => el.remove(), 2600);
+}
+
+/** 부가 계략 키워드 설명 (카드에 바로 보이게) */
+function sideRules(s) {
+  const out = [];
+  if (s.crisis) out.push({ cls: 'danger', icon: '⛔', name: '위기', text: '이 계략이 남아 있는 동안 주 계략의 위협을 제거할 수 없어요. 먼저 없애세요!' });
+  if (s.accel) out.push({ cls: '', icon: '⏩', name: '가속', text: `악당 단계마다 주 계략 위협이 +${s.accel} 더 늘어요.` });
+  if (s.hazard) out.push({ cls: '', icon: '☢', name: '위험', text: `악당 단계마다 조우 카드를 ${s.hazard}장 더 공개해요 (나쁜 일이 더 자주 생겨요).` });
+  if (!out.length) out.push({ cls: '', icon: '📌', name: '효과', text: '특별한 효과는 없지만, 남겨 두면 위협이 쌓여 있어요.' });
+  return out;
+}
+function sideTip(s) {
+  const e = app.catalog.encounter[s.cardId] || {};
+  return `<b>${encArt(s.cardId)} ${esc(s.name)}</b> <span class="hint">(부가 계략)</span><br>${esc(e.text || '')}
+    <div style="margin-top:6px">${sideRules(s).map((r) => `${r.icon} <b>${r.name}</b>: ${esc(r.text)}`).join('<br>')}</div>
+    <div class="tip-meta">부가 계략은 악당이 동시에 꾸미는 또 다른 음모예요. 여기에 쌓인 위협으로는 지지 않지만, 위의 효과가 계속 발동해요.<br>
+    🛑 <b>저지</b>(기본 저지·저지 카드·아군 저지)로 이 카드를 골라 위협을 0으로 만들면 버려져요. 위협 ${s.threat} 남음.</div>`;
 }
 
 function renderResult() {
