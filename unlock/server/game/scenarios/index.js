@@ -14,7 +14,7 @@ for (const f of FILES) {
   }
 }
 // 확장 패치: 시나리오 id 별로 카드를 더하거나(add), 기존 카드의 값을 바꾼다(set)
-for (const f of ['expand1', 'expand2', 'expand3', 'expand4']) {
+for (const f of ['expand1', 'expand2', 'expand3', 'expand4', 'expand5']) {
   let patches;
   try { patches = require('./' + f); } catch (e) { if (e.code === 'MODULE_NOT_FOUND' && String(e.message).includes(`'./${f}'`)) continue; throw e; }
   for (const pt of patches) {
