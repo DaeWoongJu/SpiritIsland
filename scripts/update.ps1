@@ -1,5 +1,5 @@
 ﻿# 정령섬·아르낙·챔피언스·킵 더 히어로즈 아웃 자동 업데이트: GitHub 에 새 버전이 있으면 내려받아 게임 폴더를 갱신한다.
-# 정령섬.exe / 아르낙.exe / 챔피언스.exe / 킵더히어로즈.exe / 반지의제왕.exe 가 서버를 켜기 전에 실행한다. 실패해도 게임은 현재 버전으로 실행된다.
+# 정령섬.exe / 아르낙.exe / 챔피언스.exe / 킵더히어로즈.exe / 반지의제왕.exe / 언락.exe 가 서버를 켜기 전에 실행한다. 실패해도 게임은 현재 버전으로 실행된다.
 param([switch]$Force)
 $ErrorActionPreference = 'Stop'
 $repo = 'DaeWoongJu/SpiritIsland'
@@ -24,14 +24,14 @@ try {
   Expand-Archive $zip -DestinationPath $tmp -Force
   $src = Get-ChildItem $tmp -Directory | Select-Object -First 1
   # 실행 중인 exe 는 덮어쓸 수 없으므로 이름을 바꿔 둔다 (정령섬.exe, 아르낙.exe)
-  $exes = @('정령섬.exe', '아르낙.exe', '챔피언스.exe', '킵더히어로즈.exe', '반지의제왕.exe')
+  $exes = @('정령섬.exe', '아르낙.exe', '챔피언스.exe', '킵더히어로즈.exe', '반지의제왕.exe', '언락.exe')
   foreach ($name in $exes) {
     $exe = Join-Path $root $name
     $old = Join-Path $root "$name.old"
     if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
     if (Test-Path $exe) { Rename-Item $exe "$name.old" -ErrorAction SilentlyContinue }
   }
-  robocopy $src.FullName $root /E /R:1 /W:1 /XD node_modules .git /XF .shortcut-created .shortcut-created-arnak .shortcut-created-champions .shortcut-created-keepout .shortcut-created-lotr .version /NFL /NDL /NJH /NJS /NP | Out-Null
+  robocopy $src.FullName $root /E /R:1 /W:1 /XD node_modules .git /XF .shortcut-created .shortcut-created-arnak .shortcut-created-champions .shortcut-created-keepout .shortcut-created-lotr .shortcut-created-unlock .version /NFL /NDL /NJH /NJS /NP | Out-Null
   foreach ($name in $exes) {
     $exe = Join-Path $root $name
     $old = Join-Path $root "$name.old"
