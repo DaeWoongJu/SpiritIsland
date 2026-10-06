@@ -74,7 +74,7 @@ function build(spec) {
   }
   // 원작처럼 덱에 벌점 카드를 섞는다 (틀린 조합의 합이 이 번호면 벌점)
   const used = new Set(cards.map((c) => c.num));
-  const nDecoy = spec.decoys ?? Math.max(2, Math.round(numbered.length * 0.15));
+  const nDecoy = spec.decoys ?? Math.max(2, Math.round(numbered.length * 0.2));
   for (let i = 0; i < nDecoy; i++) {
     let n = null;
     for (let k = 0; k < 400; k++) { const t = 10 + Math.floor(rand() * 90); if (!used.has(t)) { n = t; break; } }
