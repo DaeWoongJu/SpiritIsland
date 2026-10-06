@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.45" r="0.7"><stop offset="0" stop-color="#3a2a1a"/><stop offset="1" stop-color="#120a06"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff2b0"/><stop offset="0.45" stop-color="#e8b830"/><stop offset="1" stop-color="#8a5a10"/></linearGradient>
+    <radialGradient id="fire" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffcc44" stop-opacity="0.9"/><stop offset="1" stop-color="#c83010" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)" stroke="#c8a040" stroke-width="5"/>
+  <circle cx="64" cy="66" r="46" fill="url(#fire)"/>
+  <ellipse cx="64" cy="68" rx="34" ry="30" fill="none" stroke="#5a3a08" stroke-width="16"/>
+  <ellipse cx="64" cy="66" rx="34" ry="30" fill="none" stroke="url(#gold)" stroke-width="12"/>
+  <path d="M38 58 Q64 44 90 58" fill="none" stroke="#ff7a30" stroke-width="2" stroke-dasharray="3 3" opacity="0.9"/>
+  <path d="M40 80 Q64 92 88 80" fill="none" stroke="#ff7a30" stroke-width="2" stroke-dasharray="3 3" opacity="0.9"/>
+  <ellipse cx="52" cy="50" rx="9" ry="4" fill="#fff" opacity="0.55" transform="rotate(-25 52 50)"/>
+</svg>
