@@ -1,0 +1,275 @@
+'use strict';
+// 언락! 확장 패치 3 — 게임 · 엑스트라오디너리 · 슈퍼내추럴 · 리스키 어드벤처를 원작 분량에 가깝게
+// add: 새 카드, set: 기존 카드의 값 바꾸기 (배열은 통째로 바뀜)
+
+module.exports = [
+  // ───── 티켓 투 라이드 ─────
+  {
+    id: 'tickettoride',
+    set: {
+      route: { result: 'denver' },
+      conductor: { text: '“노선 스위치는 시애틀부터 노선 색깔 순서대로! 덴버와 시카고를 지나야 뉴욕이오. 종착역 승강장 번호는 모든 노선 칸 수의 합이고.”' },
+    },
+    add: [
+      { key: 'denver', type: 'place', title: '덴버 — 로키 산맥', art: '🏔️❄️🚂', text: '눈보라! 선로가 눈에 덮였다. 역 옆에 석탄이 떨어진 제설 기관차가 서 있다.', shows: ['plow', 'stationmaster'], spots: [{ label: '급수탑 아래', x: 74, y: 70, reveal: 'coal' }] },
+      { key: 'stationmaster', type: 'item', title: '덴버 역장', art: '👨‍💼', text: '“시카고 분기점은 신호소에서 전신 신호로 길을 연다네. 신호는 전보에 적혀 올 걸세.”' },
+      { key: 'plow', type: 'red', title: '멈춘 제설 기관차', art: '🚜', text: '화실이 텅 비었다.' },
+      { key: 'coal', type: 'blue', title: '석탄 자루', art: '⚫', text: '' },
+      { key: 'plowOn', type: 'item', from: ['plow', 'coal'], discard: ['plow', 'coal'], shows: ['chicago'], title: '제설 완료', art: '🚜💨', text: '제설차가 눈을 밀어내며 앞장선다! 노란 노선을 달려 시카고로.' },
+      { key: 'chicago', type: 'place', title: '시카고 분기점', art: '🏙️🚦🎩', text: '경쟁자 밴더빌트가 선로를 막고 버틴다. “이 구간은 내 땅이오!” 역사 안 전신 사무소에서 전보가 막 도착했다.', shows: ['rival', 'telegraph'], spots: [{ label: '역사 금고', x: 24, y: 64, reveal: 'deed' }] },
+      { key: 'rival', type: 'red', title: '밴더빌트', art: '🎩💰', text: '“권리증도 없이 내 선로를 지나겠다고?”' },
+      { key: 'deed', type: 'blue', title: '선로 권리증', art: '📜', text: '“시카고–뉴욕 구간: 1898년 매입 — 당신 회사 명의”' },
+      { key: 'telegraph', type: 'item', title: '전보', art: '📨', text: '“분기점 신호: 짧게, 짧게, 길게. 순서 틀리면 반대편 노선으로 감.”' },
+      { key: 'rivalOk', type: 'machine', from: ['rival', 'deed'], discard: ['rival', 'deed'], title: '분기점 신호소', art: '🚦', text: '권리증을 보이자 밴더빌트가 투덜대며 물러났다. 신호소 전건을 두드리자.', buttons: ['· 짧게', '— 길게'], solution: ['· 짧게', '· 짧게', '— 길게'], result: 'newyork', hint: ['시카고에 도착한 전보를 보세요.', '· · —'] },
+      { key: 'newyork', type: 'place', title: '뉴욕 진입', art: '🗽🌉🚂', text: '빨간 노선 5칸을 달려 허드슨 강을 건넌다! 종착역 승강장 번호를 정해야 한다.', shows: ['platform'] },
+      { key: 'trap1', type: 'trap', from: ['plow', 'deed'], title: '권리증이 화실로!', text: '종이를 화실에 넣을 뻔했다. 급히 꺼내느라 손을 데었다.', penalty: 1 },
+    ],
+  },
+  // ───── 미스테리움 ─────
+  {
+    id: 'mysterium',
+    set: {
+      spiritbox: { result: 'whisper' },
+      out: { from: ['grave', 'locket'], discard: ['grave', 'locket'], text: '로켓을 묘비 홈에 끼우자 정원사의 자백이 담긴 쪽지가 드러났다. 유령이 미소 지으며 빛 속으로 사라진다.' },
+    },
+    add: [
+      { key: 'whisper', type: 'item', title: '유령의 속삭임', art: '👻💬', shows: ['garden'], text: '“정원사가… 서재에서… 밧줄로…” 하지만 영혼은 아직 떠나지 못한다. “증거를… 내 무덤에…” 유령이 정원을 가리킨다.' },
+      { key: 'garden', type: 'place', title: '안개 낀 정원', art: '🌹🌫️🏚️', text: '장미 덤불 너머 정원사의 오두막. 자물쇠가 단단히 채워져 있다. 허수아비가 오두막을 지켜본다.', shows: ['shed'], spots: [{ label: '허수아비 주머니', x: 22, y: 50, reveal: 'hook' }, { label: '분수대', emoji: '⛲', x: 76, y: 70, text: '물에 비친 달 아래 글자: “나의 마지막 밤을 기억하라.”' }] },
+      { key: 'shed', type: 'red', title: '정원사의 오두막', art: '🏚️🔒', text: '녹슨 자물쇠. 걸쇠를 들어 올릴 갈고리가 있으면…' },
+      { key: 'hook', type: 'blue', title: '쇠갈고리', art: '🪝', text: '' },
+      { key: 'shedin', type: 'place', from: ['shed', 'hook'], discard: ['shed', 'hook'], shows: ['diary', 'cellar'], title: '오두막 안', art: '🪴📔🕯️', text: '흙 묻은 장화, 날 선 가위, 꼬인 밧줄. 작업대 위에 정원사의 일기장, 바닥에 잠긴 지하실 문.', spots: [{ label: '작업대 서랍', x: 70, y: 56, reveal: 'locket' }] },
+      { key: 'diary', type: 'item', title: '정원사의 일기', art: '📔', text: '“10월 31일, 만성절 전야. 주인님이 서재에서 나를 해고하겠다 했다… 그날 밤 일은 지하실 너머 묘지에 묻었다.”' },
+      { key: 'cellar', type: 'code', title: '지하실 문', art: '🚪', text: '숫자 4자리. 문에 새겨진 글: “그 밤의 날짜.”', code: '1031', result: 'crypt', hint: ['정원사의 일기에 날짜가 있어요.', '10월 31일 → 1031'] },
+      { key: 'locket', type: 'blue', title: '은 로켓', art: '📿', text: '유령의 초상이 들어 있다.' },
+      { key: 'crypt', type: 'place', title: '가문 묘지', art: '🪦🌙🦇', text: '지하실 끝 계단이 묘지로 이어진다. 유령의 묘비에 로켓 모양의 홈이 파여 있다.', shows: ['grave'] },
+      { key: 'grave', type: 'red', title: '유령의 묘비', art: '🪦', text: '“여기 워윅 경 잠들다.” 가운데 둥근 홈.' },
+      { key: 'trap2', type: 'trap', from: ['grave', 'hook'], title: '묘비 훼손!', text: '갈고리로 묘비를 긁자 유령이 분노해 촛불을 모두 꺼 버렸다!', penalty: 1 },
+    ],
+  },
+  // ───── 팬데믹 ─────
+  {
+    id: 'pandemic',
+    set: {
+      redcure: { result: 'cureok' },
+      out: { from: ['cooler', 'icepack'], discard: ['cooler', 'icepack'], text: '치료제를 냉장 상자에 담아 수송기에 실었다! 세 치료제가 전 세계 병원으로 날아간다. 인류의 승리!' },
+    },
+    add: [
+      { key: 'cureok', type: 'item', title: '빨강 치료제 완성', art: '✅🔴', shows: ['hangar', 'news'], text: '세 치료제 완성! 하지만 아직 끝이 아니다 — 치료제를 가장 심각한 도시들에 보내야 한다.' },
+      { key: 'news', type: 'item', title: '긴급 뉴스', art: '📺', text: '“감염 큐브 3개 도시 비상! 수송기는 해당 도시들을 가나다순으로 돌아야 연료가 버팁니다.”' },
+      { key: 'hangar', type: 'place', title: '공항 격납고', art: '✈️🛢️👩‍✈️', text: '치료제 수송기가 대기 중. 연료가 바닥났다. 조종사가 지도를 펼친다.', shows: ['plane', 'pilot'], spots: [{ label: '정비 트럭', x: 76, y: 70, reveal: 'fuel' }] },
+      { key: 'pilot', type: 'item', title: '조종사', art: '👩‍✈️', text: '“연료만 채우면 바로 이륙합니다. 비행 경로는 컴퓨터에 도시를 차례로 입력하세요.”' },
+      { key: 'plane', type: 'red', title: '수송기', art: '✈️', text: '연료 게이지: EMPTY' },
+      { key: 'fuel', type: 'blue', title: '항공유 탱크', art: '🛢️', text: '' },
+      { key: 'flight', type: 'machine', from: ['plane', 'fuel'], discard: ['plane', 'fuel'], title: '비행 경로 컴퓨터', art: '🧭', text: '연료 가득! 경로 입력.', buttons: ['파리', '서울', '라고스', '런던', '도쿄'], solution: ['라고스', '서울', '파리'], result: 'cargo', hint: ['감염 지도에서 큐브가 3개인 도시를 찾고, 뉴스대로 가나다순.', '라고스 → 서울 → 파리'] },
+      { key: 'cargo', type: 'place', title: '화물칸', art: '📦❄️💉', text: '이륙 직전! 치료제는 냉장 보관해야 한다. 냉장 상자 냉매가 없다.', shows: ['cooler'], spots: [{ label: '기내 주방 냉동고', x: 30, y: 60, reveal: 'icepack' }] },
+      { key: 'cooler', type: 'red', title: '빈 냉장 상자', art: '🧊📦', text: '온도계: 18℃ — 너무 높다!' },
+      { key: 'icepack', type: 'blue', title: '드라이아이스 팩', art: '🧊', text: '' },
+      { key: 'trap2', type: 'trap', from: ['plane', 'badge'], title: '출입증 오류', text: '출입증을 수송기 연료 주입구에 대자 경보가 울렸다! 공항 보안팀에 해명하느라 시간이 흘렀다.', penalty: 1 },
+      { key: 'trap3', type: 'trap', from: ['cooler', 'badge'], title: '얼어붙은 출입증', text: '출입증을 냉장 상자에 넣었다 꽁꽁 얼어붙었다.', penalty: 1 },
+    ],
+  },
+  // ───── 리스타트 ─────
+  {
+    id: 'restart',
+    set: {
+      village: { shows: ['smith', 'savepoint', 'elder'] },
+      gate: { title: '마왕성 가는 길 비밀번호', result: 'forest' },
+      castle: { title: '레벨 4: 마왕의 방' },
+      boss: { result: 'cage' },
+      sword: { discard: ['smith', 'coin'] },
+    },
+    add: [
+      { key: 'elder', type: 'item', title: '마을 장로', art: '🧙', text: '“숲의 슬라임은 불에 약하고, 호수는 뗏목으로 건너야 하지. 별을 모두 기억해 두게 — 왕비님 새장 자물쇠와 관계가 있다네.”' },
+      { key: 'forest', type: 'place', title: '레벨 2: 슬라임 숲', art: '🌲🟢🍄', text: '말랑말랑한 거대 슬라임이 길을 막았다! 검으로 베면 둘로 나뉜다.', shows: ['slime'], spots: [{ label: '나무 구멍', x: 22, y: 50, reveal: 'firescroll' }, { label: '버섯 밑', x: 78, y: 76, reveal: 'smallkey' }] },
+      { key: 'slime', type: 'red', title: '거대 슬라임', art: '🟢', text: '“뿌잉!”' },
+      { key: 'firescroll', type: 'blue', title: '불꽃 마법 두루마리', art: '📜🔥', text: '' },
+      { key: 'slain', type: 'item', from: ['slime', 'firescroll'], discard: ['slime'], shows: ['lake'], title: '슬라임 처치!', art: '💥', text: '화르륵! 슬라임이 증발했다. EXP +50. 숲 너머 호수가 보인다.' },
+      { key: 'lake', type: 'place', title: '레벨 3: 끊어진 다리 호수', art: '🌊🪵📦', text: '다리가 끊어졌다. 물가에 통나무 뗏목과 잠긴 보물 상자.', shows: ['raft', 'chest'], spots: [{ label: '갈대숲', x: 70, y: 70, reveal: 'rope' }] },
+      { key: 'raft', type: 'red', title: '통나무 뗏목', art: '🪵', text: '통나무가 풀려 있다.' },
+      { key: 'rope', type: 'blue', title: '밧줄', art: '🪢', text: '' },
+      { key: 'crossing', type: 'item', from: ['raft', 'rope'], discard: ['raft', 'rope'], shows: ['castle'], title: '호수 건너기', art: '🛶', text: '뗏목을 묶어 호수를 건넜다. 저 앞에 마왕성!' },
+      { key: 'chest', type: 'red', title: '보물 상자', art: '📦', text: '작은 열쇠 구멍.' },
+      { key: 'smallkey', type: 'blue', title: '작은 열쇠', art: '🗝️', text: '' },
+      { key: 'starmap', type: 'item', from: ['chest', 'smallkey'], discard: ['chest', 'smallkey'], title: '별 기록판', art: '⭐📋', text: '“먹은 별: 레벨 2 — ⭐⭐ · 레벨 3 — ⭐⭐⭐⭐⭐ · 레벨 4 — ⭐”' },
+      { key: 'cage', type: 'code', title: '왕과 왕비의 새장', art: '🔒👑', text: '마왕이 쓰러지며 새장 자물쇠가 드러났다. 숫자 3자리 — 장로가 말한 별!', code: '251', result: 'out', hint: ['보물 상자 속 별 기록판, 레벨 순서대로.', '2 · 5 · 1 → 251'] },
+      { key: 'trap1', type: 'trap', from: ['raft', 'firescroll'], title: '뗏목이 활활!', text: '불꽃 두루마리를 뗏목에 펼쳤다가 통나무에 불이 붙었다! 물을 끼얹느라 시간이 흘렀다.', penalty: 1 },
+    ],
+  },
+  // ───── 할리우드 컨피덴셜 ─────
+  {
+    id: 'hollywood',
+    set: {
+      reel: { result: 'club' },
+      stage: { from: ['guard', 'pass'], discard: ['guard', 'pass'], shows: ['ropes'], text: '밧줄에 꽁꽁 묶인 잭 말로우! “이 매듭부터 풀어 줘! 그리고 저 영사기에 놈들이 숨긴 진짜 필름이 걸려 있어.”', spots: [{ label: '깨진 분장 거울', x: 24, y: 40, reveal: 'shard' }] },
+    },
+    add: [
+      { key: 'club', type: 'place', title: '엘 모로코 나이트클럽', art: '🎷🍸💃', text: '필름 통 속 쪽지대로 왔다. 무대 위 재즈 가수가 당신을 흘끗 본다. 외투 보관소 직원은 졸고 있다.', shows: ['singer'], spots: [{ label: '피아노 위 꽃병', x: 70, y: 40, reveal: 'rose' }, { label: '외투 보관소', x: 22, y: 70, reveal: 'pass' }] },
+      { key: 'singer', type: 'red', title: '재즈 가수 롤라', art: '🎤💃', text: '“정보? 숙녀에게 빈손으로 오다니.”' },
+      { key: 'rose', type: 'blue', title: '빨간 장미', art: '🌹', text: '' },
+      { key: 'tip', type: 'item', from: ['singer', 'rose'], discard: ['singer', 'rose'], shows: ['backlot'], title: '롤라의 귀띔', art: '💋', text: '“잭슨 패거리가 탐정을 B 스테이지로 끌고 갔어. 뒷문 경비원은 스튜디오 출입증만 보면 통과시켜 줘.”' },
+      { key: 'backlot', type: 'place', title: '스튜디오 뒷골목', art: '🏭🌙🚬', text: '촬영 세트 뒤편. B 스테이지 뒷문 앞에 덩치 큰 경비원이 담배를 피운다.', shows: ['guard'] },
+      { key: 'guard', type: 'red', title: '뒷문 경비원', art: '💂', text: '“출입증 없으면 꺼져.”' },
+      { key: 'pass', type: 'blue', title: '스튜디오 출입증', art: '🪪', text: '누군가 외투에 두고 간 출입증.' },
+      { key: 'ropes', type: 'red', title: '단단한 매듭', art: '🪢', text: '' },
+      { key: 'shard', type: 'blue', title: '거울 조각', art: '🔪', text: '' },
+      { key: 'freed', type: 'item', from: ['ropes', 'shard'], discard: ['ropes', 'shard'], shows: ['proj'], title: '풀려난 잭', art: '🕵️‍♂️', text: '“고마워, 파트너. 영사기는 감기 → 초점 → 재생 순서로!”' },
+      { key: 'trap2', type: 'trap', from: ['guard', 'rose'], title: '장미 뇌물?', text: '경비원에게 장미를 내밀자 얼굴이 시뻘개지며 쫓아왔다!', penalty: 1 },
+      { key: 'trap3', type: 'trap', from: ['singer', 'pass'], title: '출입증은 왜?', text: '롤라가 출입증을 보더니 “경찰이야?” 하고 노래를 멈춰 버렸다.', penalty: 1 },
+    ],
+  },
+  // ───── W.A.F.F. 오디세이 ─────
+  {
+    id: 'waff',
+    set: {
+      bridge: { shows: ['oxygen', 'signal', 'kennel'] },
+      air: { shows: ['airlock'], text: '숨쉬기 편해졌다! 이제 에어록으로 — 그런데 헬멧 없이는 열리지 않는다.' },
+      lander: { from: ['airlock', 'helmet'], discard: ['airlock', 'helmet'] },
+      friends: { shows: ['storm'] },
+      nav: { result: 'splash' },
+    },
+    add: [
+      { key: 'kennel', type: 'place', title: '승무원 개집 구역', art: '🐕‍🦺🛏️🧸', text: '강아지 승무원들의 침대와 장난감이 뒤죽박죽. 벽에 비상 수칙이 붙어 있다.', shows: ['manual'], spots: [{ label: '장난감 상자', x: 70, y: 70, reveal: 'helmet' }] },
+      { key: 'manual', type: 'item', title: '비상 수칙', art: '📕', text: '“귀환 시 낙하산은 감속 → 보조 → 주 낙하산 순서. 행성에서 길을 잃으면 신호기를 켤 것.”' },
+      { key: 'airlock', type: 'red', title: '에어록', art: '🚪🫧', text: '“헬멧 착용 확인 필요.”' },
+      { key: 'helmet', type: 'blue', title: '우주 헬멧', art: '🪖', text: '누가 씹어 놓은 자국이 있다.' },
+      { key: 'storm', type: 'place', title: '보랏빛 모래 폭풍', art: '🌪️🟣🛸', text: '친구들과 헤어지자마자 모래 폭풍! 착륙선이 보이지 않는다. 배낭 속 신호기는 배터리가 없다.', shows: ['beacon'], spots: [{ label: '모래에 묻힌 탐사 로봇', x: 26, y: 72, reveal: 'battery' }] },
+      { key: 'beacon', type: 'red', title: '꺼진 신호기', art: '📟', text: '' },
+      { key: 'battery', type: 'blue', title: '로봇 배터리', art: '🔋', text: '' },
+      { key: 'liftoff', type: 'item', from: ['beacon', 'battery'], discard: ['beacon', 'battery'], shows: ['engine'], title: '착륙선 복귀', art: '🛸🚀', text: '삐빅! 착륙선이 신호를 잡았다. 모선으로 귀환!' },
+      { key: 'splash', type: 'place', title: '대기권 진입', art: '🌍🔥🪂', text: '불덩이처럼 대기권을 뚫고 내려간다! 낙하산 레버 셋.', shows: ['chute'] },
+      { key: 'chute', type: 'machine', title: '낙하산 레버', art: '🪂', text: '레버를 순서대로.', buttons: ['주 낙하산', '보조 낙하산', '감속 낙하산'], solution: ['감속 낙하산', '보조 낙하산', '주 낙하산'], result: 'out', hint: ['개집 구역의 비상 수칙.', '감속 → 보조 → 주'] },
+      { key: 'trap2', type: 'trap', from: ['beacon', 'crystal'], title: '신호기 과부하', text: '수정을 신호기에 꽂자 보라색 불꽃이 튀었다! 털이 곤두섰다.', penalty: 1 },
+    ],
+  },
+  // ───── 위기의 노바 시티 ─────
+  {
+    id: 'novacity',
+    set: {
+      console: { result: 'city' },
+      tower: { shows: ['lift'], text: '타워 로비. 꼭대기에서 번쩍이는 번개. 엘리베이터는 볼트의 카드키로만 움직인다.', spots: [{ label: '쓰러진 경비 로봇', x: 70, y: 70, reveal: 'voltcard' }] },
+    },
+    add: [
+      { key: 'city', type: 'place', title: '정전된 노바 시티', art: '🏙️🌑🤖', text: '도시가 캄캄하다. 볼트의 로봇이 은행 앞을 지킨다. 시계탑은 정전된 순간에 멈췄다.', shows: ['robot'], spots: [{ label: '전자 상가 진열대', x: 24, y: 64, reveal: 'emp' }, { label: '시계탑', emoji: '🕒', x: 80, y: 20, text: '시계가 3시 15분에 멈춰 있다.' }] },
+      { key: 'robot', type: 'red', title: '볼트의 경비 로봇', art: '🤖⚡', text: '“접근 금지! 접근 금지!”' },
+      { key: 'emp', type: 'blue', title: 'EMP 수류탄', art: '💣', text: '' },
+      { key: 'robotdown', type: 'item', from: ['robot', 'emp'], discard: ['robot', 'emp'], shows: ['bank'], title: '로봇 정지', art: '🤖💤', text: '찌직! 로봇이 멈췄다. 은행 안에서 구해 달라는 소리가!' },
+      { key: 'bank', type: 'place', title: '노바 은행', art: '🏦🔐😨', text: '시민들이 금고에 갇혔다! 금고 시계식 자물쇠는 정전된 시각에 맞춰 잠겼다고 한다.', shows: ['vault'] },
+      { key: 'vault', type: 'code', title: '은행 금고', art: '🔐', text: '숫자 4자리 (시·분).', code: '0315', result: 'thanks', hint: ['도시의 시계탑이 멈춘 시각.', '3시 15분 → 0315'] },
+      { key: 'thanks', type: 'item', title: '구출된 시민들', art: '🙌', shows: ['tower'], text: '“고마워요, 영웅님! 닥터 볼트는 타워 꼭대기에 있어요!”' },
+      { key: 'lift', type: 'red', title: '타워 엘리베이터', art: '🛗', text: '카드 리더기.' },
+      { key: 'voltcard', type: 'blue', title: '볼트의 카드키', art: '💳⚡', text: '' },
+      { key: 'roof', type: 'place', from: ['lift', 'voltcard'], discard: ['lift', 'voltcard'], shows: ['volt', 'coil'], title: '타워 꼭대기', art: '🗼⚡🦹', text: '닥터 볼트가 도시 전력을 빨아들이는 코일을 돌린다! 바닥에 볼트의 노트가 떨어져 있다.' },
+    ],
+  },
+  // ───── 죽은 자들의 날 ─────
+  {
+    id: 'muertos',
+    set: {
+      bridge: { result: 'border' },
+      underworld: { from: ['clerk', 'facepaint'], discard: ['clerk', 'facepaint'], shows: ['band', 'xolo'], spots: [{ label: '꽃마차', x: 72, y: 60, reveal: 'score' }, { label: '광장의 노래비', emoji: '🪦', x: 26, y: 30, text: '“할머니의 자장가 — 미 · 레 · 도 · 레 · 미”' }] },
+      grandma: { result: 'mansion' },
+      out: { text: '자장가가 울리자 할머니의 눈이 반짝인다. “우리 아가!” 할머니가 부적을 건넨다. 날이 밝기 전 꽃잎 다리를 건너 돌아왔다.' },
+    },
+    add: [
+      { key: 'border', type: 'place', title: '망자의 국경 사무소', art: '🛂💀📋', text: '꽃잎 다리 끝. 해골 직원이 서류를 넘긴다. “산 자는 통과 불가! …해골 분장이라도 했으면 몰라도.” 옆에 분장 도구 가판대.', shows: ['clerk'], spots: [{ label: '분장 가판대', x: 76, y: 66, reveal: 'facepaint' }] },
+      { key: 'clerk', type: 'red', title: '해골 국경 직원', art: '💀🛂', text: '“다음 분!”' },
+      { key: 'facepaint', type: 'blue', title: '해골 분장 물감', art: '🎨💀', text: '' },
+      { key: 'xolo', type: 'item', title: '알레브리헤 강아지', art: '🐕🌈', text: '무지갯빛 영혼 강아지가 따라온다. 꼬리로 노래비를 가리킨다. “멍! 할머니는 기억을 잃어 가요. 좋아하던 노래를 들려줘요!”' },
+      { key: 'mansion', type: 'place', title: '할머니의 저택', art: '🏠🌼👵', text: '할머니가 흔들의자에 앉아 있다. 하지만 당신을 알아보지 못한다. 벽에 낡은 기타가 걸려 있다.', shows: ['abuela'], spots: [{ label: '벽에 걸린 기타', x: 74, y: 30, reveal: 'guitar' }] },
+      { key: 'abuela', type: 'red', title: '기억을 잃어 가는 할머니', art: '👵💭', text: '“누구시더라…?”' },
+      { key: 'guitar', type: 'blue', title: '할머니의 기타', art: '🎸', text: '' },
+      { key: 'memory', type: 'machine', from: ['abuela', 'guitar'], discard: ['guitar'], title: '자장가 연주', art: '🎶', text: '기타 줄을 짚는다. 음을 차례로.', buttons: ['도', '레', '미', '파', '솔'], solution: ['미', '레', '도', '레', '미'], result: 'out', hint: ['죽은 자들의 도시 광장 노래비.', '미 레 도 레 미'] },
+      { key: 'trap2', type: 'trap', from: ['clerk', 'petals'], title: '뇌물 금지!', text: '꽃잎을 내밀자 직원이 “뇌물이오?!” 하고 서류를 처음부터 다시 쓰게 했다.', penalty: 1 },
+    ],
+  },
+  // ───── 라그나로크 ─────
+  {
+    id: 'ragnarok',
+    set: {
+      serpent: { result: 'fjord' },
+      fenrir: { result: 'bifrost' },
+      out: { text: '발할라의 문이 열리고 신들이 전사 리프를 맞이한다. 펜리르는 묶이고 로키는 사로잡혔다 — 라그나로크는 먼 미래로! 리프의 이야기는 스칼드의 새 노래가 되었다.' },
+    },
+    add: [
+      { key: 'fjord', type: 'place', title: '거인의 피오르', art: '🏔️🌊🗿', text: '폭풍을 피해 피오르에 정박했다. 동굴 입구를 서리 거인이 막고 있다. “지나가려면 내 목을 축여라!”', shows: ['giant'], spots: [{ label: '난파선 화물', x: 74, y: 72, reveal: 'mead' }] },
+      { key: 'giant', type: 'red', title: '서리 거인', art: '🧌❄️', text: '“목마르다…”' },
+      { key: 'mead', type: 'blue', title: '벌꿀술 통', art: '🍯🍺', text: '' },
+      { key: 'giantsleep', type: 'item', from: ['giant', 'mead'], discard: ['giant', 'mead'], shows: ['newland'], title: '잠든 거인', art: '🧌💤', text: '벌꿀술을 통째로 마신 거인이 코를 골며 잠들었다. 동굴 너머 새 땅으로!' },
+      { key: 'bifrost', type: 'place', title: '무지개 다리 비프로스트', art: '🌈🔥🦊', text: '펜리르는 묶였지만, 장난의 신 로키가 탈출해 다리를 불태우려 한다! 오딘의 까마귀가 날아와 앉는다.', shows: ['loki', 'raven'], spots: [{ label: '다리 아래 신성한 나무', x: 26, y: 70, reveal: 'mistletoe' }] },
+      { key: 'raven', type: 'item', title: '까마귀 후긴', art: '🐦‍⬛', text: '“로키는 겨우살이 화살만은 두려워하지. 그를 붙잡으면 발할라 문으로 오라 — 문은 네가 태어난 세계의 번호, 그리고 지금 향하는 아스가르드의 번호로 열린다.”' },
+      { key: 'loki', type: 'red', title: '로키', art: '🦊🔥', text: '“하하! 신들의 황혼이 온다!”' },
+      { key: 'mistletoe', type: 'blue', title: '겨우살이 화살', art: '🌿🏹', text: '' },
+      { key: 'lokiBound', type: 'item', from: ['loki', 'mistletoe'], discard: ['loki', 'mistletoe'], shows: ['valhalla'], title: '붙잡힌 로키', art: '⛓️🦊', text: '겨우살이 화살에 로키가 움츠러들었다. 헤임달이 그를 사슬로 묶는다. “발할라로 가라, 전사여!”' },
+      { key: 'valhalla', type: 'code', title: '발할라의 문', art: '🏛️⚔️', text: '숫자 2자리.', code: '21', result: 'out', hint: ['리프는 미드가르드 출신. 아홉 세계 표지판을 보세요.', '미드가르드 2 · 아스가르드 1 → 21'] },
+    ],
+  },
+  // ───── 알티피아의 왕관 ─────
+  {
+    id: 'altipia',
+    set: {
+      entrance: { shows: ['door', 'statues', 'journal'] },
+      dial: { result: 'corridor' },
+      tiles: { result: 'altar' },
+      out: { from: ['snake', 'sandbag'], discard: ['snake', 'sandbag'] },
+    },
+    add: [
+      { key: 'journal', type: 'item', title: '탐험가의 수첩', art: '📓', text: '“왕관은 뱀 석상의 손에 놓여 있다. 무게가 같은 것과 바꿔치지 않으면 신전이 무너진다!”' },
+      { key: 'corridor', type: 'place', title: '함정 복도', art: '🕳️🏹🐍', text: '바닥 한가운데 깊은 구덩이. 천장에 튼튼한 고리가 박혀 있다.', shows: ['pit'], spots: [{ label: '벽의 덩굴', x: 80, y: 40, reveal: 'vine' }] },
+      { key: 'pit', type: 'red', title: '깊은 구덩이', art: '🕳️', text: '바닥에 뾰족한 말뚝이!' },
+      { key: 'vine', type: 'blue', title: '질긴 덩굴', art: '🌿', text: '' },
+      { key: 'swing', type: 'item', from: ['pit', 'vine'], discard: ['pit', 'vine'], shows: ['cave'], title: '덩굴 타고 휙!', art: '🐒', text: '타잔처럼 구덩이를 건넜다! 그 앞은 칠흑 같은 동굴.' },
+      { key: 'cave', type: 'place', title: '박쥐 동굴', art: '🦇🌑💀', text: '아무것도 보이지 않는다. 손끝에 횃대가 걸린다.', shows: ['torch'], spots: [{ label: '해골 옆 주머니', x: 30, y: 70, reveal: 'flint' }] },
+      { key: 'torch', type: 'red', title: '꺼진 횃불', art: '🔦', text: '' },
+      { key: 'flint', type: 'blue', title: '부싯돌', art: '🪨✨', text: '' },
+      { key: 'lit', type: 'item', from: ['torch', 'flint'], discard: ['torch', 'flint'], shows: ['hall'], title: '횃불', art: '🔥', text: '횃불이 타오르자 박쥐 떼가 날아갔다. 동굴 끝에 왕관의 방이!' },
+      { key: 'altar', type: 'place', title: '왕관 제단', art: '👑🐍🏛️', text: '타일을 무사히 건넜다! 뱀 석상이 두 손에 왕관을 받쳐 들고 있다. 들어 올리면 무게가 사라져 함정이 작동할 것 같다.', shows: ['snake'], spots: [{ label: '제단 옆 자루', x: 76, y: 74, reveal: 'sandbag' }] },
+      { key: 'snake', type: 'red', title: '뱀 석상', art: '🐍👑', text: '왕관을 단단히 쥐고 있다.' },
+      { key: 'sandbag', type: 'blue', title: '모래 자루', art: '👝', text: '왕관만큼 무겁다.' },
+      { key: 'trap1', type: 'trap', from: ['snake', 'flint'], title: '쿠르릉!', text: '부싯돌을 올려 봤지만 너무 가벼웠다! 천장에서 돌이 쏟아진다. 간신히 피했다.', penalty: 1 },
+    ],
+  },
+  // ───── 깜짝 랑데부 ─────
+  {
+    id: 'rendezvous',
+    set: {
+      lobby: { spots: [{ label: '안내 데스크 사탕 바구니', x: 74, y: 56, reveal: 'lollipop' }, { label: '벽시계', emoji: '🕰️', x: 26, y: 26, text: '도서관 폐관까지 1시간!' }] },
+      gift: { shows: ['stairs', 'kids'], text: '선물은 무사하다! 그런데 엘리베이터가 고장 났다. 3층 계단 문은 도서관 카드가 있어야 열리는데… 사서: “분실물 카드는 2층 어린이실 꼬마가 갖고 놀던데요?”' },
+      fuses: { result: 'stuck' },
+      out: { from: ['stack', 'handle'], discard: ['stack', 'handle'] },
+    },
+    add: [
+      { key: 'kids', type: 'place', title: '2층 어린이 열람실', art: '🧸📚🖍️', text: '알록달록한 책장 사이에서 꼬마가 반짝이는 카드를 흔들며 논다.', shows: ['kid'] },
+      { key: 'kid', type: 'red', title: '장난꾸러기 꼬마', art: '🧒💳', text: '“이거 내 거야! …사탕 주면 줄게.”' },
+      { key: 'lollipop', type: 'blue', title: '막대 사탕', art: '🍭', text: '' },
+      { key: 'swap', type: 'item', from: ['kid', 'lollipop'], discard: ['kid', 'lollipop'], title: '공정한 거래', art: '🍭🤝', text: '꼬마가 사탕을 받고 카드를 바닥에 던져 놓고 도망갔다.', spots: [{ label: '꼬마가 던진 곳', x: 50, y: 70, reveal: 'card' }] },
+      { key: 'stuck', type: 'place', title: '이동식 서가 사이', art: '📚📚🙋‍♀️', text: '불이 켜졌다! 그런데 그녀가 이동식 서가 사이에 끼어 있다. “손잡이가 빠져서 못 나가!” 근처에 공구 선반이 있다.', shows: ['stack'], spots: [{ label: '공구 선반', x: 78, y: 64, reveal: 'handle' }] },
+      { key: 'stack', type: 'red', title: '이동식 서가', art: '🗄️', text: '손잡이가 빠진 자리에 사각 구멍.' },
+      { key: 'handle', type: 'blue', title: '서가 손잡이', art: '🔧', text: '' },
+      { key: 'trap2', type: 'trap', from: ['librarian', 'lollipop'], title: '도서관에서 사탕을?', text: '사서에게 사탕을 내밀었다가 “음식물 반입 금지!” 잔소리를 5분이나 들었다.', penalty: 1 },
+    ],
+  },
+  // ───── 리틀 이탈리아의 잠입자 ─────
+  {
+    id: 'littleitaly',
+    set: {
+      restaurant: { shows: ['menu', 'waiter', 'barber'] },
+      den: { shows: ['bottle', 'gramophone', 'cigarbox'], spots: [{ label: '책상 서랍', emoji: '🎂', x: 72, y: 70, text: '딸 소피아의 생일 카드: “4월 12일, 사랑하는 아빠가.”' }] },
+      phone: { result: 'chase' },
+      out: { text: '부두 신호에 FBI 보트들이 일제히 불을 밝혔다. 금요일 자정, 패밀리의 큰 한탕은 수갑 소리로 끝났다. 잠입 작전 성공!' },
+    },
+    add: [
+      { key: 'barber', type: 'place', title: '토니의 이발소', art: '💈✂️🪒', text: '식당 옆 이발소. 이발사 토니는 FBI의 정보원이다. 면도칼 서랍이 반쯤 열려 있다.', shows: ['tony'], spots: [{ label: '면도칼 서랍', x: 70, y: 60, reveal: 'ring' }] },
+      { key: 'tony', type: 'item', title: '정보원 토니', art: '💈', text: '“패밀리 반지를 끼면 웨이터가 주방을 통과시켜 줄 거요. 보스는 비밀번호를 늘 가족 기념일로 하지. 탈출하면 부두에서 본부에 램프로 신호 — 짧게 둘, 길게 하나, 짧게 하나.”' },
+      { key: 'waiter', type: 'red', title: '웨이터 비니', art: '🤵', text: '“주방은 패밀리만 들어갑니다, 손님.”' },
+      { key: 'ring', type: 'blue', title: '패밀리 인장 반지', art: '💍', text: '' },
+      { key: 'kitchen', type: 'place', from: ['waiter', 'ring'], discard: ['waiter', 'ring'], shows: ['office'], title: '식당 주방', art: '🍳🔪🧄', text: '반지를 보자 비니가 고개를 숙인다. “실례했습니다, 형님.” 주방 끝에 보스의 사무실 문.' },
+      { key: 'cigarbox', type: 'code', title: '보스의 시가 상자', art: '🚬📦', text: '숫자 4자리 다이얼.', code: '0412', result: 'map', hint: ['토니: 보스는 가족 기념일을 비밀번호로. 책상 서랍을 보세요.', '4월 12일 → 0412'] },
+      { key: 'chase', type: 'place', title: '비상계단 추격전', art: '🏃‍♂️🚗🌃', text: '보스에게 들켰다! 비상계단으로 뛰어내려 골목의 차로! 그런데 키가 없다. 보스의 외투가 계단 난간에 걸려 있다.', shows: ['car'], spots: [{ label: '보스의 외투', x: 30, y: 40, reveal: 'carkey' }] },
+      { key: 'car', type: 'red', title: '보스의 세단', art: '🚗', text: '시동이 걸려 있지 않다.' },
+      { key: 'carkey', type: 'blue', title: '자동차 키', art: '🔑', text: '' },
+      { key: 'docks', type: 'place', from: ['car', 'carkey'], discard: ['car', 'carkey'], shows: ['lamp'], title: '자정의 부두', art: '⚓🌙🚤', text: '추격을 따돌리고 부두에 도착! 패밀리의 배가 출항하려 한다. 바다 건너 어둠 속에 FBI 보트가 숨어 있다. 손에 든 랜턴으로 신호를!' },
+      { key: 'lamp', type: 'machine', title: '랜턴 신호', art: '🏮', text: '짧게 또는 길게 비춘다.', buttons: ['· 짧게', '— 길게'], solution: ['· 짧게', '· 짧게', '— 길게', '· 짧게'], result: 'out', hint: ['이발소 토니가 알려 준 신호.', '· · — ·'] },
+      { key: 'trap2', type: 'trap', from: ['waiter', 'corkscrew'], title: '수상한 손님', text: '코르크 따개를 들이밀자 비니가 손님 수첩에 당신 얼굴을 적는다… 의심이 커졌다!', penalty: 1 },
+    ],
+  },
+];
