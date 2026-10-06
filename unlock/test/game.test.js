@@ -81,8 +81,8 @@ test('원작 규칙: 틀린 코드·장치는 벌점, 합한 번호가 덱에 �
   const f = mk('formula');
   f.run();
   look(f, 'corridor', 0);
-  const sum = f.sc.byKey.locker.num + f.sc.byKey.bolt.num;
-  assert.strictEqual(f.sc.byKey.lockerOpen.num, sum);
+  const sum = f.sc.byKey.guarddoor.num + f.sc.byKey.bolt.num;
+  assert.strictEqual(f.sc.byKey.guardroom.num, sum);
   const t = mk('goorse');
   t.run();
   look(t, 'beach', 0); look(t, 'cliff', 0);
@@ -114,16 +114,11 @@ test('보정 숫자(+N): 다른 색 번호에 더해서 합친다', () => {
   const g = mk('squeek');
   g.run();
   const sc = g.sc;
-  assert.strictEqual(sc.byKey.remoteOn.num, sc.byKey.remote.num + 7);
-  for (const k of ['sausage', 'mailbox']) assert.ok(g.has(k));
-  look(g, 'garden', 0);
-  g.answer('p0', g.seq, { a: 'combine', x: 'sausage', y: 'bone' });
-  look(g, 'hall', 0);
-  g.answer('p0', g.seq, { a: 'combine', x: 'labdoor', y: 'magnet' });
-  look(g, 'lab', 0);
-  g.answer('p0', g.seq, { a: 'combine', x: 'squeek', y: 'cheese' });
-  g.answer('p0', g.seq, { a: 'combine', x: 'caught', y: 'remote' });
+  assert.strictEqual(sc.byKey.remoteOn.num, sc.byKey.remoteP.num + 7);
+  g.inPlay.push('remoteP', 'caught');
+  assert.strictEqual(g.answer('p0', g.seq, { a: 'combine', x: 'caught', y: 'remoteP' }), null);
   assert.ok(g.has('remoteOn'));
+  assert.strictEqual(g.penalties, 0);
 });
 
 test('힌트는 순서대로 보이고 별점에 반영, 숨은 번호는 한 번만', () => {

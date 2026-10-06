@@ -48,26 +48,37 @@ function build(spec) {
   numbered.forEach(visit);
   const val = (k) => (byKey[k].plus != null ? byKey[k].plus : byKey[k].num);
   const rand = rng(hash(spec.id));
-  const maxFree = Math.max(40, Math.min(70, numbered.length * 2 + 10));
-  for (let tryNo = 0; tryNo < 6000; tryNo++) {
+  // 조합 재료는 작은 번호(합이 99를 넘지 않도록), 조합 결과는 합, 나머지는 남은 번호 중 아무거나
+  const sources = new Set(cards.flatMap((c) => c.from || []));
+  const combo = order.filter((c) => c.from || sources.has(c.key));
+  const rest = order.filter((c) => !c.from && !sources.has(c.key));
+  let srcMax = 40;
+  for (let tryNo = 0; tryNo < 8000; tryNo++) {
+    if (tryNo && tryNo % 1000 === 0) srcMax = Math.min(49, srcMax + 2);
     const used = new Set();
     let ok = true;
-    for (const c of order) {
+    for (const c of combo) {
       let n;
       if (c.from) n = val(c.from[0]) + val(c.from[1]);
-      else for (let k = 0; k < 80; k++) { n = 1 + Math.floor(rand() * maxFree); if (!used.has(n)) break; }
+      else for (let k = 0; k < 80; k++) { n = 1 + Math.floor(rand() * srcMax); if (!used.has(n)) break; }
       if (n > 99 || used.has(n)) { ok = false; break; }
       used.add(n); c.num = n;
     }
+    if (ok) {
+      const free = []; for (let n = 1; n <= 99; n++) if (!used.has(n)) free.push(n);
+      if (free.length < rest.length + 10) { ok = false; }
+      else for (const c of rest) { const i = Math.floor(rand() * free.length); c.num = free.splice(i, 1)[0]; }
+    }
     if (ok) break;
-    if (tryNo === 5999) err('카드 번호를 정할 수 없어요');
+    if (tryNo === 7999) err('카드 번호를 정할 수 없어요');
   }
   // 원작처럼 덱에 벌점 카드를 섞는다 (틀린 조합의 합이 이 번호면 벌점)
   const used = new Set(cards.map((c) => c.num));
   const nDecoy = spec.decoys ?? Math.max(2, Math.round(numbered.length * 0.15));
   for (let i = 0; i < nDecoy; i++) {
-    let n;
-    for (let k = 0; k < 200; k++) { n = 10 + Math.floor(rand() * 85); if (!used.has(n)) break; }
+    let n = null;
+    for (let k = 0; k < 400; k++) { const t = 10 + Math.floor(rand() * 90); if (!used.has(t)) { n = t; break; } }
+    if (n == null) break;
     used.add(n);
     cards.push({ key: `__decoy${i}`, type: 'trap', decoy: true, num: n, title: '벌점', text: DECOY_TEXT[i % DECOY_TEXT.length], penalty: 1 });
   }
