@@ -3,11 +3,12 @@
 // 사용법: node scripts/make-icons.js            (정령섬: public/icons)
 //         node scripts/make-icons.js arnak      (아르낙: arnak/public/icon.svg → icon.ico)
 //         node scripts/make-icons.js champions  (히어로 챔피언스)
+//         node scripts/make-icons.js keepout    (킵 더 히어로즈 아웃)
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const SUB = ['arnak', 'champions'].includes(process.argv[2]) ? process.argv[2] : null;
+const SUB = ['arnak', 'champions', 'keepout'].includes(process.argv[2]) ? process.argv[2] : null;
 const dir = SUB ? path.join(__dirname, '..', SUB, 'public') : path.join(__dirname, '..', 'public', 'icons');
 const svg = fs.readFileSync(path.join(dir, 'icon.svg'), 'utf8');
 

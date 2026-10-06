@@ -1,6 +1,6 @@
 'use strict';
 // E2E: 게임이 끝난 뒤 '바로 다시 하기' → 대기실을 거치지 않고 같은 구성으로 새 판 (세 게임 공용)
-// 사용법: TEST_HOOKS=1 로 서버 실행 후 `node test/e2e-rematch.js <URL> <si|arnak|champions>`
+// 사용법: TEST_HOOKS=1 로 서버 실행 후 `node test/e2e-rematch.js <URL> <si|arnak|champions|keepout>`
 const { chromium } = require('playwright');
 const BASE = process.argv[2];
 const KIND = process.argv[3] || 'si';
@@ -8,6 +8,7 @@ const C = {
   si: { guided: 'si-guided', game: '#screen-game', room: '#screen-room', rematch: '#btn-rematch', result: '#modal:not(.hidden) .result' },
   arnak: { guided: 'arnak-guided', game: '#game', room: '#room', rematch: '#res-rematch', result: '#result:not(.hidden)' },
   champions: { guided: 'champ-guided', game: '#game', room: '#room', rematch: '#res-rematch', result: '#result:not(.hidden)' },
+  keepout: { guided: 'keepout-guided', game: '#game', room: '#room', rematch: '#res-rematch', result: '#result:not(.hidden)' },
 }[KIND];
 
 (async () => {
