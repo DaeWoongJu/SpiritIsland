@@ -1,0 +1,66 @@
+'use strict';
+// 언락! — 레전더리 어드벤처 (원작 줄거리·분량을 따른 오리지널 수수께끼)
+
+const B = '레전더리 어드벤처';
+module.exports = [
+  {
+    id: 'actionstory', box: B, title: '액션 스토리', orig: 'Action Story', diff: 1, theme: '#e86a2a',
+    intro: '신출귀몰한 도둑 스텔라가 세계에서 가장 비싼 보석 “태양의 눈”을 훔쳤다! 액션 영화처럼 그녀를 쫓아 보석을 되찾아라.',
+    cards: [
+      { key: 'roof', type: 'place', start: true, title: '고층 빌딩 옥상', art: '🏙️🚁💼🌃', text: '스텔라의 헬기가 막 이륙했다! 남은 건 서류 가방 하나와 무전기. 헬기 꼬리에 S-84 라고 쓰여 있었다.',
+        shows: ['case'], spots: [{ label: '환풍구', x: 30, y: 72, reveal: 'note' }] },
+      { key: 'note', type: 'item', title: '환풍구 속 쪽지', art: '📄', text: '스텔라의 실수: “가방 비밀번호 = 헬기 번호 앞에 0 두 개.”' },
+      { key: 'case', type: 'code', title: '스텔라의 서류 가방', art: '💼', text: '숫자 4자리.', code: '0084', result: 'gps', hint: ['헬기 꼬리 번호와 환풍구 쪽지.', '0084'] },
+      { key: 'gps', type: 'item', title: '위치 추적기', art: '📡', shows: ['bike'], text: '가방 속 추적기: “헬기는 3번 구역 → 1번 구역 → 2번 구역으로 이동 중.” 옥상 아래에 오토바이가 있다!' },
+      { key: 'bike', type: 'red', title: '경찰 오토바이', art: '🏍️', text: '시동 키가 없다.' },
+      { key: 'garage', type: 'place', title: '지하 주차장', art: '🅿️🔑🚗', text: '경비실에 열쇠가 걸려 있다.', spots: [{ label: '경비실 열쇠함', x: 70, y: 40, reveal: 'bikekey' }] },
+      { key: 'bikekey', type: 'blue', title: '오토바이 열쇠', art: '🔑', text: '' },
+      { key: 'chase', type: 'machine', from: ['bike', 'bikekey'], discard: ['bike', 'bikekey'], title: '추격전', art: '🏍️💨', text: '부릉! 추적기의 경로대로 구역을 돌파하라.', buttons: ['1구역', '2구역', '3구역'], solution: ['3구역', '1구역', '2구역'], result: 'out', hint: ['추적기 화면의 이동 순서.', '3 → 1 → 2'] },
+      { key: 'out', type: 'item', end: true, title: '추격 성공!', art: '💎🏍️', text: '헬기 착륙장에서 스텔라를 붙잡았다. “태양의 눈”이 석양에 반짝인다. 컷! 오케이!' },
+    ].map((c) => (c.key === 'gps' ? { ...c, shows: ['bike', 'garage'] } : c)),
+  },
+  {
+    id: 'robinhood', box: B, title: '로빈 후드: 생사불문', orig: 'Robin Hood: Dead or Alive', diff: 2, theme: '#3a7a2a',
+    intro: '로빈 후드가 노팅엄 영주에게 붙잡혔다! 내일 아침 교수형이다. 셔우드 숲의 동료들을 불러 모아 지하 감옥에서 로빈을 구하자.',
+    cards: [
+      { key: 'forest', type: 'place', start: true, title: '셔우드 숲', art: '🌳🏹🦌🔥', text: '모닥불 앞에 리틀 존. 수도사 턱과 마리안은 어디로 갔을까? 숲 너머 노팅엄 성이 보인다.',
+        shows: ['john', 'castle'], spots: [{ label: '속 빈 나무', x: 18, y: 40, reveal: 'robe' }, { label: '과녁', emoji: '🎯', x: 80, y: 44, text: '과녁에 화살 3개: 정중앙 2개, 바깥 1개.' }] },
+      { key: 'john', type: 'item', title: '리틀 존', art: '🧔', text: '“성문 파수꾼은 수도사에게는 문을 열어 줘. 마리안이 성 안에서 기다린다고 했어. 영주 방 자물쇠는 셋째 탑의 종 번호래.”' },
+      { key: 'castle', type: 'red', title: '노팅엄 성문', art: '🏰', text: '파수꾼: “수상한 자는 못 들어간다!”' },
+      { key: 'robe', type: 'blue', title: '수도사 옷', art: '🥻', text: '턱 수도사가 남겨 둔 여벌 옷.' },
+      { key: 'yard', type: 'place', from: ['castle', 'robe'], discard: ['castle', 'robe'], shows: ['marian', 'lorddoor'], title: '노팅엄 성 안뜰', art: '🏰🔔🔔🔔', text: '변장하고 들어왔다! 탑 세 개에 종이 걸려 있다: 첫째 탑 종에 “7”, 둘째 “3”, 셋째 “9”. 우물가에서 마리안이 손짓한다.' },
+      { key: 'marian', type: 'item', title: '마리안', art: '👸', text: '“감옥 열쇠는 영주 방의 사냥개 옆에 있어요. 로빈이 신호를 정해 뒀대요 — 과녁의 화살처럼 휘파람을 불라고.”' },
+      { key: 'lorddoor', type: 'code', title: '영주의 방 문', art: '🚪', text: '숫자 1자리.', code: '9', result: 'room', hint: ['리틀 존: 셋째 탑의 종 번호.', '9'] },
+      { key: 'room', type: 'place', title: '영주의 방', art: '🍗🗝️🐕', text: '영주는 연회장에. 큰 사냥개가 감옥 열쇠 고리 옆에서 잠들어 있다.', shows: ['dog'], spots: [{ label: '연회 식탁', x: 28, y: 62, reveal: 'meat' }] },
+      { key: 'dog', type: 'red', title: '잠든 사냥개', art: '🐕', text: '깨면 짖어 댈 것이다.' },
+      { key: 'meat', type: 'blue', title: '닭다리', art: '🍗', text: '' },
+      { key: 'keys', type: 'item', from: ['dog', 'meat'], discard: ['dog', 'meat'], shows: ['dungeon'], title: '감옥 열쇠', art: '🗝️', text: '개가 닭다리에 정신 팔린 사이 열쇠를 챙겼다.' },
+      { key: 'dungeon', type: 'place', title: '지하 감옥', art: '⛓️🕯️🏹', text: '쇠창살 너머 로빈이 웃는다. “왔구나! 신호를 주면 창살을 같이 들어 올리자.”', shows: ['cell'] },
+      { key: 'cell', type: 'machine', title: '휘파람 신호', art: '🎵', text: '휘파람: 짧게, 또는 길게.', buttons: ['짧게 🎵', '길게 🎶'], solution: ['짧게 🎵', '짧게 🎵', '길게 🎶'], result: 'out', hint: ['과녁: 정중앙 2개(짧게), 바깥 1개(길게).', '짧게 → 짧게 → 길게'] },
+      { key: 'trap1', type: 'trap', from: ['dog', 'robe'], title: '깨어난 사냥개', text: '옷자락으로 개를 덮으려다 깨우고 말았다! 숨죽이며 기다렸다.', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '셔우드로!', art: '🏹🌳', text: '로빈과 함께 성벽을 넘어 숲으로. 영주의 고함이 메아리친다. “다음엔 반드시 잡고 말겠다!”' },
+    ],
+  },
+  {
+    id: 'burntangels', box: B, title: '셜록 홈즈: 불탄 천사들 사건', orig: 'Sherlock Holmes: The Case of the Burnt Angels', diff: 3, theme: '#6a3a2a',
+    intro: '런던 세인트 미카엘 성당에서 천사상 세 개가 불탄 채 발견되고, 한 신부가 사라졌다. 세계 최고의 탐정에게 당신의 도움이 필요하다.',
+    cards: [
+      { key: 'church', type: 'place', start: true, title: '세인트 미카엘 성당', art: '⛪👼🔥🕯️', text: '불탄 천사상 셋: 날개, 나팔, 책을 들고 있었다. 제단 위 신부의 기도서. 스테인드글라스에 네 성인.',
+        shows: ['angels', 'prayer'], spots: [{ label: '고해실', x: 18, y: 56, reveal: 'ash' }, { label: '스테인드글라스', emoji: '🪟', x: 72, y: 24, text: '네 성인: 마태(I), 마가(II), 누가(III), 요한(IV).' }] },
+      { key: 'angels', type: 'item', title: '불탄 천사상', art: '👼👼👼', text: '받침대 번호: 날개 천사 III, 나팔 천사 I, 책 천사 IV. 홈즈: “셋 다 오른쪽부터 그을렸군. 불은 오른쪽 천사부터 붙었네.” 천사들은 왼쪽부터 나팔(I), 날개(III), 책(IV) 순으로 서 있다.' },
+      { key: 'prayer', type: 'red', title: '신부의 기도서', art: '📖', text: '한 페이지가 재로 얼룩져 읽을 수 없다.' },
+      { key: 'ash', type: 'blue', title: '고해실의 재', art: '🧪', text: '홈즈: “담배가 아니라 인화성 약품이야.” 왓슨이 붓을 꺼낸다.' },
+      { key: 'page', type: 'item', from: ['prayer', 'ash'], discard: ['prayer', 'ash'], shows: ['crypt', 'warden'], title: '드러난 페이지', art: '📖🔍', text: '재를 털어 내자 신부의 필체: “천사들이 불탄 순서대로 성인의 이름을 부르면 지하 묘지가 열린다.”' },
+      { key: 'warden', type: 'item', title: '성당지기의 증언', art: '👴', text: '“첫 화재는 3월 1일, 둘째는 4월 3일이었습니다. 오르간 연주자 그레이브스 씨가 그날마다 늦게까지 남아 있었지요.”' },
+      { key: 'crypt', type: 'machine', title: '지하 묘지 석판', art: '⚰️', text: '성인 이름이 새겨진 석판 버튼.', buttons: ['마태', '마가', '누가', '요한'], solution: ['요한', '누가', '마태'], result: 'tomb', hint: ['오른쪽 천사부터 불탔다: 책(IV) → 날개(III) → 나팔(I). 번호에 맞는 성인을.', '요한 → 누가 → 마태'] },
+      { key: 'tomb', type: 'place', title: '지하 묘지', art: '💀🕯️⛓️', text: '사라진 신부가 묶여 있다! 쇠사슬엔 숫자 자물쇠. 벽에 범인의 낙서: “나는 천사들이 불탄 날을 기억한다.”',
+        shows: ['chains'], spots: [{ label: '관 뚜껑', x: 72, y: 62, reveal: 'organkey' }] },
+      { key: 'chains', type: 'code', title: '쇠사슬 자물쇠', art: '🔗', text: '숫자 4자리. “두 날짜를 월일 순서로, 한 자리씩.”', code: '3143', result: 'priest', hint: ['성당지기의 증언: 3월 1일, 4월 3일.', '3·1·4·3 → 3143'] },
+      { key: 'priest', type: 'item', title: '구출된 신부', art: '🙏', shows: ['organ'], text: '“그레이브스… 오르간 연주자가 범인입니다. 성당 지하에 숨긴 밀수품을 들킬까 봐 천사상에 불을 지르고 저를 가뒀어요. 증거는 오르간 안에!”' },
+      { key: 'organ', type: 'red', title: '잠긴 파이프오르간', art: '🎹', text: '건반 뚜껑에 열쇠 구멍.' },
+      { key: 'organkey', type: 'blue', title: '오르간 열쇠', art: '🗝️', text: '관 속에 숨겨져 있었다.' },
+      { key: 'out', type: 'item', from: ['organ', 'organkey'], end: true, title: '사건 해결', art: '🎩🔍', text: '오르간 속에서 밀수품 장부가 나왔다. 레스트레이드가 그레이브스에게 수갑을 채운다. 홈즈: “간단하지, 왓슨.”' },
+      { key: 'trap1', type: 'trap', from: ['organ', 'ash'], title: '불붙을 뻔!', text: '인화성 재를 오르간에 뿌렸다가 촛불이 옮겨붙을 뻔했다! 홈즈가 질색한다.', penalty: 1 },
+    ],
+  },
+];

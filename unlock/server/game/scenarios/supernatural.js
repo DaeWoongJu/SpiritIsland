@@ -1,0 +1,68 @@
+'use strict';
+// 언락! — 슈퍼내추럴 어드벤처 (원작 줄거리·분량을 따른 오리지널 수수께끼)
+
+const B = '슈퍼내추럴 어드벤처';
+module.exports = [
+  {
+    id: 'novacity', box: B, title: '위기의 노바 시티', orig: 'Nova City under Threat', diff: 1, theme: '#2a8ad8',
+    intro: '초능력으로 범죄와 불의에 맞서라! 악당 닥터 볼트가 노바 시티의 전력망을 장악했다. 영웅 본부를 되살리고 도시를 위협하는 계획을 막자.',
+    cards: [
+      { key: 'hq', type: 'place', start: true, title: '영웅 본부', art: '🦸🏙️⚡🖥️', text: '정전된 본부. 비상 발전기, 꺼진 출동 콘솔, 벽의 영웅 명단.',
+        shows: ['generator', 'roster'], spots: [{ label: '망토 걸이', x: 24, y: 44, reveal: 'fuse' }] },
+      { key: 'roster', type: 'item', title: '영웅 명단', art: '📋', text: '번개맨(번호 2) · 강철소녀(번호 9) · 그림자(번호 4). “출동 코드 = 영웅 번호를 이름 글자 수가 적은 순서로 (같으면 명단 순서).”' },
+      { key: 'generator', type: 'red', title: '비상 발전기', art: '🔋', text: '퓨즈가 끊어졌다.' },
+      { key: 'fuse', type: 'blue', title: '예비 퓨즈', art: '🔌', text: '' },
+      { key: 'console', type: 'code', from: ['generator', 'fuse'], discard: ['generator', 'fuse'], title: '출동 콘솔', art: '🖥️', text: '불이 들어왔다! 숫자 3자리 출동 코드.', code: '249', result: 'tower', hint: ['이름 글자 수: 번개맨 3, 그림자 3, 강철소녀 4.', '번개맨 2 · 그림자 4 · 강철소녀 9 → 249'] },
+      { key: 'tower', type: 'place', title: '닥터 볼트의 타워', art: '🗼⚡🦹', text: '영웅들이 출동했다! 타워 꼭대기에서 닥터 볼트가 도시 전력을 빨아들이는 코일을 돌린다. 코일 제어판에 색 버튼. 볼트의 노트가 떨어져 있다.', shows: ['volt', 'coil'] },
+      { key: 'volt', type: 'item', title: '닥터 볼트의 노트', art: '📓', text: '“코일 정지 순서는 무지개의 반대 — 보라, 파랑, 초록, 노랑, 빨강. 아무도 모르겠지!”' },
+      { key: 'coil', type: 'machine', title: '코일 제어판', art: '🌀', text: '색 버튼 다섯 개.', buttons: ['🔴', '🟡', '🟢', '🔵', '🟣'], solution: ['🟣', '🔵', '🟢', '🟡', '🔴'], result: 'out', hint: ['볼트의 노트에 다 적혀 있어요.', '🟣 🔵 🟢 🟡 🔴'] },
+      { key: 'out', type: 'item', end: true, title: '노바 시티의 영웅', art: '🦸‍♀️⚡', text: '코일이 멈추고 도시에 불이 들어온다! 닥터 볼트는 강철소녀의 손에 붙들렸다.' },
+    ],
+  },
+  {
+    id: 'muertos', box: B, title: '죽은 자들의 날', orig: 'Día de los Muertos', diff: 2, theme: '#e85aa8',
+    intro: '일 년에 한 번, 죽은 자의 세계와 산 자의 세계가 맞닿는 날. 이 기회에 잃어버린 가문의 부적을 되찾아 오자!',
+    cards: [
+      { key: 'altar', type: 'place', start: true, title: '가족 제단 (오프렌다)', art: '💀🌼🕯️🖼️', text: '할머니 사진, 설탕 해골, 메리골드 꽃잎. 촛불 네 개 중 하나만 켜져 있다. 제단은 세 칸. 사진 속 할머니 목에 금빛 부적이 걸려 있다.',
+        shows: ['photo', 'candles'], spots: [{ label: '부엌', x: 20, y: 66, reveal: 'pan' }, { label: '꽃바구니', x: 76, y: 72, reveal: 'petals' }] },
+      { key: 'photo', type: 'item', title: '할머니 사진', art: '👵', text: '사진 뒤: “부적은 내가 저승까지 가져갔단다. 날 보고 싶으면 제단을 내가 좋아하던 것으로 — 노래(맨 아래 칸), 빵(가운데 칸), 꽃(맨 윗칸). 제단은 아래 칸부터 채우렴.”' },
+      { key: 'candles', type: 'red', title: '꺼진 초 세 자루', art: '🕯️', text: '' },
+      { key: 'pan', type: 'item', title: '죽은 자의 빵', art: '🍞', text: '갓 구운 빵. 제단에 올릴 수 있다.' },
+      { key: 'petals', type: 'blue', title: '메리골드와 성냥', art: '🌼🔥', text: '꽃잎 사이에 성냥갑이 있다.' },
+      { key: 'lit', type: 'machine', from: ['candles', 'petals'], discard: ['candles'], title: '제단 꾸미기', art: '🪔', text: '촛불이 모두 켜졌다! 이제 제단 칸을 아래부터 채우자.', buttons: ['🌼 꽃', '🍞 빵', '🎸 노래'], solution: ['🎸 노래', '🍞 빵', '🌼 꽃'], result: 'bridge', hint: ['사진 뒷면: 아래 칸 → 위 칸.', '🎸 → 🍞 → 🌼'] },
+      { key: 'bridge', type: 'code', title: '꽃잎 다리', art: '🌉🌼', text: '저승과 이승을 잇는 꽃잎 다리가 나타났다. 다리 문 자물쇠: “켜진 촛불 수와 제단 칸 수.”', code: '43', result: 'underworld', hint: ['촛불은 모두 몇 개? 제단은 몇 칸?', '촛불 4, 제단 3 → 43'] },
+      { key: 'underworld', type: 'place', title: '죽은 자들의 도시', art: '💀🎺🏙️🌈', text: '해골들이 축제를 벌이는 화려한 도시! 마리아치 밴드 해골이 악보를 잃어버려 울상이다. 할머니는 광장 끝 저택에.',
+        shows: ['band'], spots: [{ label: '꽃마차', x: 72, y: 60, reveal: 'score' }] },
+      { key: 'band', type: 'red', title: '울상인 마리아치 해골', art: '💀🎺', text: '“악보가 없으면 행렬을 시작 못 해!”' },
+      { key: 'score', type: 'blue', title: '마리아치 악보', art: '🎼', text: '' },
+      { key: 'parade', type: 'item', from: ['band', 'score'], discard: ['band', 'score'], shows: ['grandma'], title: '축제 행렬', art: '🎺🎉', text: '음악이 울리자 행렬이 시작되고 길이 열렸다! 해골 악사: “할머니 저택 문은 할머니가 태어난 해야. 1월 1일에, 첫눈 내린 해… 1931년이래.”' },
+      { key: 'grandma', type: 'code', title: '할머니의 저택 문', art: '🏠', text: '숫자 4자리.', code: '1931', result: 'out', hint: ['축제 행렬의 해골 악사가 알려 줘요.', '1931'] },
+      { key: 'trap1', type: 'trap', from: ['band', 'petals'], title: '해골이 재채기를!', text: '메리골드 꽃가루에 해골이 재채기를 하다 턱뼈가 빠졌다! 끼워 주느라 시간이 흘렀다.', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '가문의 부적', art: '👵🪬', text: '할머니가 환하게 웃으며 부적을 건넨다. “잘 지켜 주렴.” 날이 밝기 전 꽃잎 다리를 건너 돌아왔다.' },
+    ],
+  },
+  {
+    id: 'ragnarok', box: B, title: '라그나로크', orig: 'Ragnarök', diff: 3, theme: '#6a8ab8',
+    intro: '당신은 명예를 꿈꾸는 바이킹 전사 리프. 새로운 땅을 향해 항해해, 동족들 앞에서 이름을 떨치자! 그런데 그 땅에서 신들의 황혼이 시작되려 하는데…',
+    cards: [
+      { key: 'longhouse', type: 'place', start: true, title: '바이킹 마을 긴 집', art: '🛖⚔️🍖🔥', text: '족장: “서쪽 새 땅을 다녀오는 자에게 명예를!” 항구의 롱십은 돛이 찢어졌다. 화로 옆 늙은 스칼드(시인)가 노래한다.',
+        shows: ['skald', 'ship'], spots: [{ label: '베 짜는 틀', x: 78, y: 40, reveal: 'sail' }] },
+      { key: 'skald', type: 'item', title: '스칼드의 노래', art: '🎶', text: '“펜리르를 묶는 사슬 글레이프니르는 여섯 가지로 만들었네 — 고양이 발소리, 여자의 수염, 산의 뿌리, 곰의 힘줄, 물고기의 숨, 새의 침. 그 순서를 잊지 마라.”' },
+      { key: 'ship', type: 'red', title: '롱십', art: '⛵', text: '돛이 찢어져 출항할 수 없다.' },
+      { key: 'sail', type: 'blue', title: '새 돛', art: '🧵', text: '' },
+      { key: 'sea', type: 'place', from: ['ship', 'sail'], discard: ['ship', 'sail'], shows: ['serpent'], title: '서쪽 바다', art: '🌊🐍⛵', text: '항해 사흘째, 바다뱀 요르문간드의 등지느러미가 솟아오른다! 뱃머리 용 조각에 룬 문자가 비친다.',
+        spots: [{ label: '뱃머리 조각', x: 22, y: 34, reveal: 'rune1' }] },
+      { key: 'serpent', type: 'machine', title: '바다뱀 피하기', art: '🐍', text: '조타수: “바다뱀은 해를 등지고 달린다! 해는 아침에 동쪽, 낮에 남쪽, 저녁엔 서쪽에 있지. 해가 있는 쪽으로 차례로 키를 돌려!”', buttons: ['북', '동', '남', '서'], solution: ['동', '남', '서'], result: 'newland', hint: ['아침 → 낮 → 저녁의 해 방향.', '동 → 남 → 서'] },
+      { key: 'newland', type: 'place', title: '새로운 땅', art: '🏔️🌈❄️⚒️', text: '안개 낀 해안에 무지개 다리 비프로스트가 걸려 있고, 산기슭에 드워프의 대장간. 늑대 울음소리가 땅을 흔든다 — 펜리르가 사슬을 끊으려 한다!',
+        shows: ['heimdall', 'worlds'], spots: [{ label: '모루 아래', x: 72, y: 70, reveal: 'rune2' }, { label: '얼음 바위', emoji: '🧊', x: 30, y: 72, text: '얼음 속에 룬 문자 ᚠ (F) 가 비친다.' }] },
+      { key: 'heimdall', type: 'item', title: '파수꾼 헤임달', art: '🛡️📯', text: '“펜리르가 풀려나면 라그나로크다! 드워프에게 룬석을 가져가 새 글레이프니르를 만들어라. 늑대를 묶을 바위의 룬도 잊지 말고.”' },
+      { key: 'worlds', type: 'item', title: '아홉 세계 표지판', art: '🪧', text: '아스가르드 1 · 미드가르드 2 · 요툰헤임 3 · … · 헬헤임 9. 펜리르는 요툰헤임에서 아스가르드로 가고 있다.' },
+      { key: 'rune1', type: 'red', title: '룬석 반쪽', art: '🪨', text: '' },
+      { key: 'rune2', type: 'blue', title: '룬석 나머지 반쪽', art: '🪨', text: '' },
+      { key: 'chain', type: 'machine', from: ['rune1', 'rune2'], discard: ['rune1', 'rune2'], title: '드워프의 글레이프니르 제작', art: '⛓️✨', text: '드워프: “재료를 순서대로 넣어라!”', buttons: ['🐟 물고기의 숨', '🐻 곰의 힘줄', '🐈 고양이 발소리', '🐦 새의 침', '⛰️ 산의 뿌리', '🧔‍♀️ 여자의 수염'], solution: ['🐈 고양이 발소리', '🧔‍♀️ 여자의 수염', '⛰️ 산의 뿌리', '🐻 곰의 힘줄', '🐟 물고기의 숨', '🐦 새의 침'], result: 'fenrir', hint: ['마을 스칼드의 노래.', '고양이 → 수염 → 산 → 곰 → 물고기 → 새'] },
+      { key: 'fenrir', type: 'code', title: '펜리르를 묶을 바위', art: '🐺⛓️', text: '사슬 완성! 바위의 룬 자물쇠: “늑대가 지나온 세계의 번호, 가려는 세계의 번호, 그리고 얼음 속 룬 글자의 알파벳 순번.”', code: '316', result: 'out', hint: ['요툰헤임 3 → 아스가르드 1. 얼음 속 룬 ᚠ = F (6번째 글자).', '3 · 1 · 6 → 316'] },
+      { key: 'trap1', type: 'trap', from: ['ship', 'rune2'], title: '배가 기울었다', text: '무거운 룬석을 뱃전에 올리자 배가 기울어 물이 들어왔다! 퍼내느라 시간이 흘렀다.', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '리프의 사가', art: '🌅🛡️', text: '펜리르가 다시 묶였다! 라그나로크는 먼 미래로 미뤄졌다. 고향으로 돌아온 리프의 이야기는 스칼드의 새 노래가 되었다.' },
+    ],
+  },
+];
