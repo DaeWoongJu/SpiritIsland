@@ -48,7 +48,7 @@ module.exports = [
       { key: 'library', type: 'place', from: ['libdoor', 'libkey'], discard: ['libdoor', 'libkey'], shows: ['chart', 'plaque'], title: '도서실', art: '📚🗺️🕯️', text: '천장까지 닿는 책장. 펼쳐진 해도, 벽에 걸린 동판.',
         spots: [{ label: '책장 맨 아래 칸', x: 24, y: 80, reveal: 'crank' }] },
       { key: 'chart', type: 'item', title: '해도', art: '🗺️', text: '빨간 선으로 그린 비상 부상 항로: 동 → 북 → 북 → 서' },
-      { key: 'plaque', type: 'item', title: '동판', art: '🏷️', text: '“노틸러스호 — 18□□년 진수. 빈칸: 복도 창밖 물고기 떼의 마릿수를 두 번.”' },
+      { key: 'plaque', type: 'item', title: '동판', art: '🏷️', text: '“노틸러스호 — 18□□년 진수. 빈칸: 격납고 창밖 물고기 떼의 마릿수를 두 번.”' },
       { key: 'crank', type: 'blue', title: '시동 크랭크', art: '🔧', text: '' },
       { key: 'hangar', type: 'place', title: '격납고', art: '🚤🫧⚙️', text: '작은 탈출정! 그런데 시동 크랭크 구멍이 비어 있다. 창밖으로 거대한 눈이 번뜩인다 — 괴물이 배를 감싸고 있다!',
         shows: ['pod'], spots: [{ label: '격납고 창', emoji: '🪟', x: 70, y: 30, text: '물고기 떼가 7마리씩 무리 지어 도망친다.' }] },

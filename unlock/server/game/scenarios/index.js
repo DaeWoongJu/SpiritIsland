@@ -2,14 +2,16 @@
 // 언락! 시나리오 모음 — 박스별 파일을 모아 카드 번호를 붙인다
 const { build } = require('../build');
 
-// 앞의 파일이 우선 (같은 id 는 한 번만)
-const FILES = ['escape', 'mystery', 'secret', 'exotic', 'heroic', 'epic', 'mythic', 'timeless', 'legendary', 'games', 'extraordinary', 'supernatural', 'risky', 'enchanted', 'starwars', 'short2', 'kids2', 'box1', 'box2', 'box3', 'box4', 'short', 'kids'];
+const FILES = ['escape', 'mystery', 'secret', 'exotic', 'heroic', 'epic', 'mythic', 'timeless', 'legendary', 'games', 'extraordinary', 'supernatural', 'risky', 'enchanted', 'starwars', 'short2', 'kids'];
 const SPECS = [];
 const ids = new Set();
 for (const f of FILES) {
-  let list;
-  try { list = require('./' + f); } catch (e) { if (e.code === 'MODULE_NOT_FOUND' && String(e.message).includes(`'./${f}'`)) continue; throw e; }
-  for (const s of list) if (!ids.has(s.id)) { ids.add(s.id); SPECS.push(s); }
+  for (const s of require('./' + f)) {
+    if (ids.has(s.id)) throw new Error(`시나리오 id 중복: ${s.id}`);
+    ids.add(s.id);
+    // 키즈(6세~)는 숨은 번호를 눌러서 찾는다
+    SPECS.push(s.box.startsWith('키즈') ? { ...s, cards: s.cards.map((c) => (c.spots ? { ...c, spots: c.spots.map((sp) => ({ ...sp, click: true })) } : c)) } : s);
+  }
 }
 // 박스 순서는 원작 출시 순서대로
 const BOX_ORDER = ['입문', '이스케이프 어드벤처', '미스터리 어드벤처', '시크릿 어드벤처', '엑조틱 어드벤처', '히로익 어드벤처', '타임리스 어드벤처', '에픽 어드벤처', '미식 어드벤처', '스타워즈', '레전더리 어드벤처', '게임 어드벤처', '엑스트라오디너리 어드벤처', '슈퍼내추럴 어드벤처', '리스키 어드벤처', '인챈티드 어드벤처', '쇼트 어드벤처'];

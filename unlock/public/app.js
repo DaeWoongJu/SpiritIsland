@@ -318,7 +318,7 @@ function renderAction() {
     rows.push('<button class="small" id="btn-unsel">선택 해제</button>');
     body += `<div class="act-row">${rows.join('')}</div>`;
   }
-  const take = `<form class="take-row" id="take-form"><input id="take-num" maxlength="3" placeholder="숨은 번호" autocomplete="off"><button class="small primary">🂠 번호로 카드 가져오기</button></form>`;
+  const take = `<form class="take-row" id="take-form"><input id="take-num" maxlength="3" placeholder="번호" autocomplete="off"><button class="small primary">🂠 번호로 카드 가져오기</button></form>`;
   const keep = document.activeElement && document.activeElement.id === 'take-num' ? document.activeElement.value : null;
   if (setHTML(el, take + body + who)) {
     bindAction();

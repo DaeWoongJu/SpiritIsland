@@ -1,0 +1,66 @@
+'use strict';
+// 언락! — 리스키 어드벤처 (원작 줄거리·분량을 따른 오리지널 수수께끼)
+
+const B = '리스키 어드벤처';
+module.exports = [
+  {
+    id: 'altipia', box: B, title: '알티피아의 왕관', orig: "La couronne d'Altipia", diff: 1, theme: '#d8a83a',
+    intro: '정글 깊은 곳, 잊힌 신전에 전설의 “알티피아의 왕관”이 잠들어 있다. 함정을 피해 왕관을 찾아내자!',
+    cards: [
+      { key: 'entrance', type: 'place', start: true, title: '잊힌 신전 입구', art: '🛕🌿🐍🗿', text: '덩굴에 덮인 석문. 문 양옆에 해와 달 석상, 문에는 홈이 파인 돌 원반.',
+        shows: ['door', 'statues'], spots: [{ label: '뱀 조각 입', x: 76, y: 62, reveal: 'disc' }] },
+      { key: 'statues', type: 'item', title: '해와 달 석상', art: '☀️🌙', text: '석상 받침: “해가 뜨고, 해가 지고, 달이 뜬다. 그 순서를 아는 자만 들어오라.”' },
+      { key: 'door', type: 'red', title: '석문', art: '🚪', text: '가운데 원반 모양 홈.' },
+      { key: 'disc', type: 'blue', title: '돌 원반', art: '🪨', text: '해와 달이 새겨져 있다.' },
+      { key: 'dial', type: 'machine', from: ['door', 'disc'], discard: ['door', 'disc'], title: '석문 원반', art: '☀️🌙', text: '원반을 끼우자 해와 달 그림을 누를 수 있게 됐다.', buttons: ['☀️', '🌙'], solution: ['☀️', '☀️', '🌙'], result: 'hall', hint: ['해가 뜨고(☀️), 해가 지고(☀️), 달이 뜬다(🌙).', '☀️ ☀️ 🌙'] },
+      { key: 'hall', type: 'place', title: '왕관의 방', art: '👑🕳️🗡️', text: '바닥 타일에 숫자가 새겨져 있다. 잘못 밟으면 창이 튀어나온다! 벽화: 왕 셋이 왕관을 이어받았다 — 첫째 왕 7년, 둘째 왕 2년, 셋째 왕 9년 통치.', shows: ['tiles'] },
+      { key: 'tiles', type: 'code', title: '숫자 타일 바닥', art: '🔢', text: '왕관까지 밟을 타일 번호 3개를 순서대로.', code: '729', result: 'out', hint: ['벽화의 왕들의 통치 기간을 차례로.', '7 · 2 · 9 → 729'] },
+      { key: 'trap1', type: 'trap', from: ['door', 'statues'], title: '???', text: '', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '알티피아의 왕관', art: '👑✨', text: '왕관을 드는 순간 신전에 햇빛이 쏟아진다. 전설은 사실이었다!' },
+    ].filter((c) => c.key !== 'trap1'),
+  },
+  {
+    id: 'rendezvous', box: B, title: '깜짝 랑데부', orig: 'Rendez-vous surprise', diff: 2, theme: '#e85a7a',
+    intro: '도서관에서 여자친구와 만나기로 했다. 깜짝 선물까지 준비했는데… 아무것도 계획대로 되지 않는다! 문 닫기 전에 그녀를 찾아 선물을 건네자.',
+    cards: [
+      { key: 'lobby', type: 'place', start: true, title: '시립 도서관 로비', art: '🏛️📚🕰️🎁', text: '약속 시간인데 그녀가 없다. 휴대폰엔 메시지 알림. 선물 상자는 서랍식 사물함에 잠가 뒀는데 비밀번호가 가물가물하다.',
+        shows: ['phone', 'locker'], spots: [{ label: '안내 데스크', x: 74, y: 56, reveal: 'card' }, { label: '벽시계', emoji: '🕰️', x: 26, y: 26, text: '도서관 폐관까지 1시간!' }] },
+      { key: 'phone', type: 'item', title: '휴대폰 메시지', art: '📱', text: '그녀: “나 먼저 와서 3층 열람실에 있어! 사물함 비번은 우리 처음 만난 날이잖아 ㅎㅎ 5월 20일.”' },
+      { key: 'locker', type: 'code', title: '사물함', art: '🗃️', text: '숫자 4자리.', code: '0520', result: 'gift', hint: ['그녀의 메시지.', '5월 20일 → 0520'] },
+      { key: 'gift', type: 'item', title: '선물 상자', art: '🎁', text: '선물은 무사하다! 그런데 엘리베이터가 고장 났다. 3층 계단 문은 도서관 카드가 있어야 열린다.' },
+      { key: 'stairs', type: 'red', title: '계단 출입문', art: '🚪', text: '카드 리더기.' },
+      { key: 'card', type: 'blue', title: '도서관 카드', art: '💳', text: '분실물 바구니에 내 카드가 있었다!' },
+      { key: 'floor3', type: 'place', from: ['stairs', 'card'], discard: ['stairs', 'card'], shows: ['librarian', 'shelves'], title: '3층 열람실', art: '📖🪑🔕', text: '그녀는 없고, 자리에 쪽지만: “급한 일이 생겨서 지하 서고에 있어. 서고 열쇠는 사서님께 부탁해!” 사서가 엄한 얼굴로 앉아 있다.',
+        spots: [{ label: '반납 카트', x: 76, y: 70, reveal: 'book' }] },
+      { key: 'shelves', type: 'item', title: '책장 분류표', art: '🏷️', text: '청구기호: 문학 800번대, 역사 900번대, 과학 500번대.' },
+      { key: 'librarian', type: 'red', title: '엄격한 사서', art: '👓', text: '“연체된 책부터 반납하세요. 「작은 아씨들」이요.”' },
+      { key: 'book', type: 'blue', title: '「작은 아씨들」', art: '📕', text: '반납 카트에 있었다.' },
+      { key: 'archivekey', type: 'item', from: ['librarian', 'book'], discard: ['librarian', 'book'], shows: ['archive'], title: '서고 열쇠', art: '🗝️', text: '“좋아요. 지하 서고 문은 열쇠 + 청구기호 자물쇠예요. 그녀가 찾던 책은 문학 코너 813번이랬어요.”' },
+      { key: 'archive', type: 'code', title: '지하 서고 문', art: '🔐', text: '숫자 3자리 청구기호 자물쇠.', code: '813', result: 'basement', hint: ['사서가 알려 준 청구기호.', '813'] },
+      { key: 'basement', type: 'place', title: '지하 서고', art: '🕯️📚💡', text: '정전! 어둠 속에서 그녀의 목소리. “여기야!” 퓨즈 박스의 스위치 셋. 퓨즈 박스 안내: “1번 비상등, 2번 서고 조명, 3번 엘리베이터. 비상등부터 켤 것, 엘리베이터는 마지막.”', shows: ['fuses'] },
+      { key: 'fuses', type: 'machine', title: '퓨즈 박스', art: '🔌', text: '스위치를 순서대로.', buttons: ['3번', '1번', '2번'], solution: ['1번', '2번', '3번'], result: 'out', hint: ['안내문: 비상등 → 서고 조명 → 엘리베이터.', '1 → 2 → 3'] },
+      { key: 'trap1', type: 'trap', from: ['librarian', 'card'], title: '쉿!', text: '카드를 흔들며 큰 소리로 말하자 사서가 노려봤다. 5분간 사과했다.', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '서프라이즈!', art: '💝📚', text: '불이 켜지자 그녀가 서 있다. 선물을 내밀자 그녀도 등 뒤에서 선물을 꺼낸다 — 똑같은 책! 둘은 웃음을 터뜨린다.' },
+    ].map((c) => (c.key === 'gift' ? { ...c, shows: ['stairs'] } : c)),
+  },
+  {
+    id: 'littleitaly', box: B, title: '리틀 이탈리아의 잠입자', orig: "L'infiltré de Little Italy", diff: 3, theme: '#3a2a2a',
+    intro: '1930년대 뉴욕. 큰 한탕을 준비 중인 마피아 패밀리에 FBI 요원으로 잠입했다. 정체가 들통나기 전에 범행 계획과 장부를 빼내라.',
+    cards: [
+      { key: 'restaurant', type: 'place', start: true, title: '루이지의 식당', art: '🍝🍷🎻🕴️', text: '패밀리의 아지트. 주방 뒤 사무실은 잠겨 있다. 바이올린 연주자가 같은 곡만 연주한다. 오늘의 메뉴판.',
+        shows: ['menu', 'office'], spots: [{ label: '와인 저장고', x: 24, y: 66, reveal: 'corkscrew' }, { label: '바이올린 케이스', emoji: '🎻', x: 76, y: 54, text: '악보 표지: “대부의 왈츠 — 솔 · 도 · 미 · 레”' }] },
+      { key: 'menu', type: 'item', title: '오늘의 메뉴', art: '📜', text: '“카르보나라 7달러 · 라자냐 3달러 · 리조또 9달러 · 티라미수 1달러.” 귀퉁이에 연필로: “사무실 = 디저트 → 파스타(크림) → 밥 가격”' },
+      { key: 'office', type: 'code', title: '사무실 문', art: '🚪', text: '숫자 3자리.', code: '179', result: 'den', hint: ['메뉴판 귀퉁이: 티라미수, 카르보나라, 리조또.', '1 · 7 · 9 → 179'] },
+      { key: 'den', type: 'place', title: '보스의 사무실', art: '💼🗄️📞', text: '책상 위 와인 병, 벽에 대부의 초상. 장부는 축음기 금고 속. 책상 서랍에 지도 한 장.', shows: ['bottle', 'gramophone'], spots: [{ label: '책상 서랍', x: 72, y: 70, reveal: 'map' }] },
+      { key: 'map', type: 'item', title: '항구 지도', art: '🗺️', text: '부두 번호 위에 빨간 동그라미: 부두 4, 부두 7. 메모: “금요일 자정 — 큰 한탕.”' },
+      { key: 'bottle', type: 'red', title: '코르크로 막힌 와인 병', art: '🍾', text: '병 안에 돌돌 말린 쪽지.' },
+      { key: 'corkscrew', type: 'blue', title: '코르크 따개', art: '🌀', text: '' },
+      { key: 'note', type: 'item', from: ['bottle', 'corkscrew'], discard: ['bottle', 'corkscrew'], title: '병 속 쪽지', art: '📃', text: '“축음기 금고는 대부의 왈츠를 연주하면 열린다. 단, 거꾸로.”' },
+      { key: 'gramophone', type: 'machine', title: '축음기 금고', art: '📻', text: '음 버튼.', buttons: ['도', '레', '미', '파', '솔'], solution: ['레', '미', '도', '솔'], result: 'ledger', hint: ['악보: 솔 도 미 레 — 쪽지대로 거꾸로.', '레 → 미 → 도 → 솔'] },
+      { key: 'ledger', type: 'item', title: '패밀리 장부', art: '📒', shows: ['phone'], text: '장부를 손에 넣었다! 그 순간 계단에서 발소리 — 보스가 올라온다! 책상 위 전화로 본부에 한탕 장소를 알려야 한다.' },
+      { key: 'phone', type: 'code', title: '사무실 전화', art: '📞', text: '본부 교환원: “부두 번호 두 개를 작은 것부터 불러 주게!”', code: '47', result: 'out', hint: ['항구 지도의 빨간 동그라미.', '부두 4, 7 → 47'] },
+      { key: 'trap1', type: 'trap', from: ['bottle', 'map'], title: '쨍그랑!', text: '지도로 병을 감싸 깨려다 와인이 쏟아져 지도가 젖을 뻔했다.', penalty: 1 },
+      { key: 'out', type: 'item', end: true, title: '작전 성공', art: '📒🚓', text: '금요일 자정, 부두 4번과 7번에 FBI가 들이닥쳤다. 패밀리의 큰 한탕은 수갑 소리로 끝났다.' },
+    ].filter((c) => c.key !== 'trap1'),
+  },
+];
