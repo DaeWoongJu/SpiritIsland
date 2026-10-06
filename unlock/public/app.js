@@ -186,6 +186,7 @@ function renderChat() {
 }
 
 // ───────────── 게임 화면 ─────────────
+function partColor(c) { if (['red', 'blue'].includes(c.type)) return c.type; return c.plus ? c.plus.color : null; }
 function cardOf(k) { return app.state.cards.find((c) => c.key === k); }
 function elapsedNow() { const st = app.state; if (st.result) return st.result.ms; return st.elapsed + (st.running ? Date.now() - app.stateAt : 0); }
 
@@ -239,14 +240,15 @@ function bindQuitButton() {
 
 function cardHTML(c, theme) {
   const sel = app.sel.includes(c.key);
-  const spots = c.spots.map((s, i) => `<span class="spot ${s.found ? 'found' : ''}" data-spot="${i}" data-card="${c.key}" style="left:${s.x}%;top:${s.y}%" title="${esc(s.label)} 살펴보기">${s.emoji || '🔍'}</span>`).join('');
+  const spots = c.spots.map((s, i) => (s.hidden ? `<span class="hnum ${s.found ? 'found' : ''}" style="left:${s.x}%;top:${s.y}%">${esc(s.num)}</span>`
+    : `<span class="spot ${s.found ? 'found' : ''}" data-spot="${i}" data-card="${c.key}" style="left:${s.x}%;top:${s.y}%" title="${esc(s.label)} 살펴보기">${s.emoji || '🔍'}</span>`)).join('');
   return `<div class="ucard t-${c.type} ${sel ? 'sel' : ''} ${app.seen.has(c.key) ? '' : 'new'}" data-key="${c.key}" style="--theme:${theme}">
-    <div class="c-head"><span class="c-num">${esc(c.num)}</span><span class="c-title">${esc(c.title)}</span></div>
+    <div class="c-head"><span class="c-num">${esc(c.num)}</span><span class="c-title">${esc(c.title)}</span>${c.plus ? `<span class="plus plus-${c.plus.color}" title="보정 숫자: 다른 색 번호에 더해요">+${c.plus.n}</span>` : ''}</div>
     <div class="c-art">${c.type === 'place' ? `<span class="bg">${esc(c.art)}</span>` : esc(c.art)}${spots}</div>
     ${c.solved ? '<span class="solved">✅</span>' : ''}
     <div class="c-text">${esc(c.text)}</div>
     ${c.hintsSeen.length ? c.hintsSeen.map((h) => `<div class="hint-seen">💡 ${esc(h)}</div>`).join('') : ''}
-    <div class="c-foot"><span class="hint" style="color:#666">${TYPE_NAME[c.type]}</span>${c.shows.length ? ` · 보이는 번호 ${c.shows.map((n) => `<span class="chipn">${n}</span>`).join('')}` : ''}${c.spots.length ? ` · 🔍 ${c.spots.filter((s) => s.found).length}/${c.spots.length}` : ''}</div>
+    <div class="c-foot"><span class="hint" style="color:#666">${TYPE_NAME[c.type]}</span>${c.shows.length ? ` · 보이는 번호 ${c.shows.map((n) => `<span class="chipn">${n}</span>`).join('')}` : ''}${c.spots.some((s) => !s.hidden) ? ` · 🔍 ${c.spots.filter((s) => !s.hidden && s.found).length}/${c.spots.filter((s) => !s.hidden).length}` : ''}</div>
   </div>`;
 }
 
@@ -255,7 +257,9 @@ function renderTable() {
   const places = st.cards.filter((c) => c.type === 'place');
   const others = st.cards.filter((c) => c.type !== 'place');
   const theme = st.scenario.theme || '#2e5478';
-  const html = `${places.map((c) => cardHTML(c, theme)).join('')}<div class="table-sec">${others.length ? '🃏 손에 든 카드 · 장치 · 단서 <span class="hint" style="font-family:var(--sans)">(카드를 눌러 고르세요 — 빨강+파랑을 고르면 합칠 수 있어요)</span>' : ''}</div>${others.map((c) => cardHTML(c, theme)).join('')}`;
+  const html = `${places.map((c) => cardHTML(c, theme)).join('')}<div class="table-sec">${others.length ? '🃏 손에 든 카드 · 장치 · 단서 <span class="hint" style="font-family:var(--sans)">(카드를 눌러 고르세요 — 빨강+파랑을 고르면 합칠 수 있어요)</span>' : ''}</div>${others.map((c) => cardHTML(c, theme)).join('')}
+    <div class="table-sec">🂠 덱 — 아직 뒤집지 않은 카드 ${st.deck.length}장 <span class="hint" style="font-family:var(--sans)">(합친 번호가 여기 없으면 그 조합은 아니에요. 있는데 틀린 조합이면 벌점!)</span></div>
+    <div class="deck">${st.deck.map((n) => `<span class="back">${esc(n)}</span>`).join('')}</div>`;
   const el = $('#table');
   if (setHTML(el, html)) {
     for (const d of el.querySelectorAll('.ucard')) d.onclick = (e) => {
@@ -271,9 +275,9 @@ function toggleSel(k) {
   const c = cardOf(k);
   if (!c) return;
   if (app.sel.includes(k)) app.sel = app.sel.filter((x) => x !== k);
-  else if (['red', 'blue'].includes(c.type)) {
-    // 빨강·파랑은 색깔별로 하나씩 (같은 색이면 바꿈), 다른 종류 선택은 지움
-    app.sel = app.sel.filter((x) => { const o = cardOf(x); return o && ['red', 'blue'].includes(o.type) && o.type !== c.type; });
+  else if (partColor(c)) {
+    // 빨강·파랑(보정 숫자 포함)은 색깔별로 하나씩 (같은 색이면 바꿈), 다른 종류 선택은 지움
+    app.sel = app.sel.filter((x) => { const o = cardOf(x); return o && partColor(o) && partColor(o) !== partColor(c); });
     app.sel.push(k);
   } else app.sel = [k];
   app.code = ''; app.seq = [];
@@ -290,13 +294,13 @@ function renderAction() {
   const sel = app.sel.map(cardOf).filter(Boolean);
   let body = '';
   if (!sel.length) {
-    body = `<h3>🔍 무엇을 할까요?</h3><p class="hint">· 장소 그림의 <b>점선 동그라미</b>를 눌러 살펴보세요 (숨은 번호!)<br>· <b class="red">빨간</b> 카드 + <b class="blue">파란</b> 카드를 골라 합치기<br>· <b class="yellow">노란</b> 카드를 골라 코드 입력<br>· <b class="green">초록</b> 카드를 골라 장치 작동<br>· 막히면 카드를 골라 💡 힌트!</p>`;
+    body = `<h3>🔍 무엇을 할까요?</h3><p class="hint">· 그림 속에 <b>작게 숨은 번호</b>를 찾으면 위 칸에 입력해 카드를 가져와요<br>· 🔍 동그라미는 눌러서 살펴봐요<br>· <b class="red">빨간</b> 번호 + <b class="blue">파란</b> 번호(또는 <b>+보정 숫자</b>)를 골라 합치기<br>· <b class="yellow">노란</b> 카드는 코드, <b class="green">초록</b> 카드는 장치<br>· 막히면 카드를 골라 💡 힌트!</p>`;
   } else {
     const chips = sel.map((c) => `<span class="sel-chip" style="--cc:${TYPE_COLOR[c.type]}">${esc(c.num)} ${esc(c.title)}</span>`).join('');
     const one = sel.length === 1 ? sel[0] : null;
     body = `<h3>선택한 카드</h3><div class="sel-list">${chips}</div>`;
-    const red = sel.find((c) => c.type === 'red'); const blue = sel.find((c) => c.type === 'blue');
-    if (red && blue) body += `<div class="sum">${red.num} + ${blue.num} = ${red.num + blue.num}</div><button class="primary" id="btn-combine">🧩 합치기</button> <span class="hint">틀리면 벌점 ${st.penaltyMin}분</span>`;
+    const red = sel.find((c) => partColor(c) === 'red'); const blue = sel.find((c) => partColor(c) === 'blue');
+    if (red && blue) { const sv = (c) => (c.plus && !['red', 'blue'].includes(c.type) ? c.plus.n : c.num); body += `<div class="sum">${red.plus && !['red', 'blue'].includes(red.type) ? '+' : ''}${sv(red)} + ${blue.plus && !['red', 'blue'].includes(blue.type) ? '+' : ''}${sv(blue)} = ${sv(red) + sv(blue)}</div><button class="primary" id="btn-combine">🧩 합치기</button> <span class="hint">그 번호의 카드가 덱에 있는데 틀리면 벌점 ${st.penaltyMin}분</span>`; }
     else if (red || blue) body += `<p class="hint">${red ? '파란' : '빨간'} 카드를 하나 더 고르면 합칠 수 있어요.</p>`;
     if (one && one.type === 'code' && !one.solved) {
       body += `<div class="code-show">${esc(app.code.padEnd(one.len, '·'))}</div>
@@ -314,13 +318,20 @@ function renderAction() {
     rows.push('<button class="small" id="btn-unsel">선택 해제</button>');
     body += `<div class="act-row">${rows.join('')}</div>`;
   }
-  if (setHTML(el, body + who)) bindAction();
+  const take = `<form class="take-row" id="take-form"><input id="take-num" maxlength="3" placeholder="숨은 번호" autocomplete="off"><button class="small primary">🂠 번호로 카드 가져오기</button></form>`;
+  const keep = document.activeElement && document.activeElement.id === 'take-num' ? document.activeElement.value : null;
+  if (setHTML(el, take + body + who)) {
+    bindAction();
+    const tf = document.getElementById('take-form');
+    tf.onsubmit = (e) => { e.preventDefault(); const i = document.getElementById('take-num'); if (i.value.trim()) act({ a: 'take', num: i.value.trim() }); i.value = ''; };
+    if (keep != null) { const i = document.getElementById('take-num'); i.value = keep; i.focus(); }
+  }
 }
 function bindAction() {
   const sel = app.sel.map(cardOf).filter(Boolean);
   const one = sel.length === 1 ? sel[0] : null;
   const on = (id, f) => { const b = document.getElementById(id); if (b) b.onclick = f; };
-  on('btn-combine', () => { const r = sel.find((c) => c.type === 'red'); const b = sel.find((c) => c.type === 'blue'); act({ a: 'combine', x: r.key, y: b.key }); app.sel = []; });
+  on('btn-combine', () => { const r = sel.find((c) => partColor(c) === 'red'); const b = sel.find((c) => partColor(c) === 'blue'); act({ a: 'combine', x: r.key, y: b.key }); app.sel = []; });
   on('btn-hint', () => { if (confirm('힌트를 볼까요? (별점에 영향이 있어요)')) act({ a: 'hint', card: one.key }); });
   on('btn-discard', () => { act({ a: 'discard', card: one.key }); app.sel = []; });
   on('btn-unsel', () => { app.sel = []; $('#table')._html = null; renderTable(); renderAction(); });
