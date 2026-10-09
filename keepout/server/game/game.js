@@ -337,13 +337,21 @@ class Game extends EventEmitter {
     const dest = await this.choose(pid, `${this.monsterName(m)}: 어느 방으로 갈까요?`, this.moveTargets(m).map((id) => ({ value: id, label: `${D.ROOM_MAP[id].name}${this.heroesIn(id).length ? ` (용사 ${this.heroesIn(id).length})` : ''}`, room: id })), { kind: 'dest', always: true });
     if (!dest) return;
     const from = m.room;
-    let carry = false;
-    if (this.rooms[from].items > 0) {
-      carry = (await this.choose(pid, `${D.ROOM_MAP[from].name}의 아이템을 들고 갈까요? (제단에서 전리품 카드로 바꿀 수 있어요)`, [{ value: 'yes', label: '🎒 들고 가기' }, { value: 'no', label: '두고 가기' }], { kind: 'carry', always: true })) === 'yes';
+    // 원작처럼 몬스터는 이동할 때 아이템이나 뼈 토큰 하나를 들고 갈 수 있어요
+    const opts = [];
+    if (this.rooms[from].items > 0) opts.push({ value: 'yes', label: '🎒 아이템 들고 가기 (제단에서 전리품으로)' });
+    if (this.rooms[from].bones > 0 && this.rooms[dest].bones < 5) opts.push({ value: 'bone', label: '🦴 뼈 들고 가기 (납골당에서 몬스터 되살리기)' });
+    let carry = null;
+    if (opts.length) {
+      this.pendingDest = { from, to: dest };
+      const ans = await this.choose(pid, `${D.ROOM_MAP[from].name}에서 무엇을 들고 갈까요?`, [...opts, { value: 'no', label: '빈손으로 가기' }], { kind: 'carry', always: true });
+      this.pendingDest = null;
+      if (ans === 'yes' || ans === 'bone') carry = ans;
     }
     m.room = dest;
-    if (carry) { this.rooms[from].items--; this.rooms[dest].items++; }
-    this.log(`👢 ${this.monsterName(m)}: ${D.ROOM_MAP[from].name} → ${D.ROOM_MAP[dest].name}${carry ? ' (아이템을 들고)' : ''}`, pid);
+    if (carry === 'yes') { this.rooms[from].items--; this.rooms[dest].items++; }
+    if (carry === 'bone') { this.rooms[from].bones--; this.rooms[dest].bones++; }
+    this.log(`👢 ${this.monsterName(m)}: ${D.ROOM_MAP[from].name} → ${D.ROOM_MAP[dest].name}${carry === 'yes' ? ' (아이템을 들고)' : carry === 'bone' ? ' (뼈를 들고)' : ''}`, pid);
     this.ev('move', { room: dest });
   }
 
@@ -484,6 +492,7 @@ class Game extends EventEmitter {
   }
 
   // ───────────── 용사 단계 ─────────────
+  distTo(roomId, type) { return this.dist(roomId, (id) => D.ROOM_MAP[id].type === type); }
   distToVault(roomId) { return this.dist(roomId, (id) => id === 'vault'); }
   /** BFS 거리 (조건을 만족하는 가장 가까운 방까지) */
   dist(from, pred) {
@@ -708,7 +717,13 @@ function botAnswer(g, pid, pr) {
       const sorted = ok.slice().sort((a, b) => (nearHero(a.value) - nearHero(b.value)) || (g.distToVault(a.value) - g.distToVault(b.value)));
       return val(sorted[0]);
     }
-    case 'carry': return ok.find((o) => o.value === 'yes') ? 'yes' : val(ok[0]);
+    case 'carry': {
+      // 아이템은 늘 챙기고, 뼈는 납골당 쪽으로 갈 때만
+      if (ok.find((o) => o.value === 'yes')) return 'yes';
+      const pending = g.pendingDest;
+      if (ok.find((o) => o.value === 'bone') && (pending == null || g.distTo(pending.to, 'crypt') < g.distTo(pending.from, 'crypt'))) return 'bone';
+      return 'no';
+    }
     case 'activator': {
       const ms = ok.map((o) => g.monsters.find((m) => m.uid === o.value));
       const pref = (m) => ({ altar: 0, lair: 1, crypt: 2, trapshop: 3, forge: 4, lab: 4 }[require('./data').ROOM_MAP[m.room].type] ?? 5);

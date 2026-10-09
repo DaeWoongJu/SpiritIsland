@@ -303,7 +303,7 @@ function renderBoard() {
     const toks = [];
     if (r.chests) toks.push(`<span class="tok" title="보물 상자: 용사가 훔쳐 가요">${Art.chest(20)}×${r.chests}</span>`);
     if (r.items) toks.push(`<span class="tok" title="아이템: 몬스터가 들고 제단으로 옮기면 전리품 카드로 바꿀 수 있어요">${rd.type === 'lab' ? Art.potion(18) : Art.item(18)}×${r.items}</span>`);
-    if (r.bones) toks.push(`<span class="tok" title="뼈: 납골당에서 몬스터를 되살리는 데 써요">${Art.bone(18)}×${r.bones}</span>`);
+    if (r.bones) toks.push(`<span class="tok" title="뼈: 몬스터가 이동할 때 들고 가서 납골당에서 몬스터를 되살리는 데 써요">${Art.bone(18)}×${r.bones}</span>`);
     if (r.traps) toks.push(`<span class="tok" title="함정: 용사가 들어오면 피해 1">${Art.trap(20)}×${r.traps}</span>`);
     if (r.fire) toks.push(`<span class="tok fire" title="불: 용사 단계 전에 용사에게 피해 1 (없으면 아이템·몬스터를 태워요)">🔥×${r.fire}</span>`);
     return `<div class="room t-${rd.type} ${r.fire ? 'burning' : ''} ${t.room[rd.id] != null ? 'can' : ''}" data-room="${rd.id}" style="grid-column:${rd.x + 1};grid-row:${rd.y + 1}">

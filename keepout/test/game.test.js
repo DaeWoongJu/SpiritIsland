@@ -73,6 +73,29 @@ test('쥐인간 떼 공격 피해 = 같은 방 쥐 수, 슬라임은 쓰러지�
   assert.ok(g.myMonsters('p1').some((m) => m.small && m.hp === 1));
 });
 
+test('뼈: 몬스터가 들고 옮겨서 납골당에서 몬스터 되살리기', async () => {
+  const g = mk(['skeletons']);
+  g.setup();
+  const m = g.myMonsters('p0')[0];
+  const from = D.ROOM_MAP.crypt.adj[0];
+  m.room = from;
+  g.rooms[from].bones = 1;
+  const answerAll = async (pick) => { for (let i = 0; i < 6; i++) { await tick(); const pr = g.currentPrompt('p0'); if (pr) g.answer('p0', pr.id, pick(pr)); } };
+  let p = g.iconMove('p0');
+  await answerAll((pr) => (pr.kind === 'mover' ? m.uid : pr.kind === 'dest' ? 'crypt' : pr.kind === 'carry' ? 'bone' : pr.options[0].value));
+  await p;
+  assert.strictEqual(m.room, 'crypt');
+  assert.strictEqual(g.rooms[from].bones, 0);
+  assert.strictEqual(g.rooms.crypt.bones, 1);
+  const before = g.myMonsters('p0').length;
+  assert.ok(g.canActivate('p0', m));
+  p = g.iconActivate('p0');
+  await answerAll((pr) => (pr.kind === 'activator' ? m.uid : pr.options[0].value));
+  await p;
+  assert.strictEqual(g.rooms.crypt.bones, 0);
+  assert.strictEqual(g.myMonsters('p0').length, before + 1, '뼈 1개 → 몬스터 1마리 소환');
+});
+
 test('금고 상자를 모두 빼앗기면 패배', async () => {
   const g = mk(['skeletons'], { difficulty: 'normal' });
   g.setup();
