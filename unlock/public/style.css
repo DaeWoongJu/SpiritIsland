@@ -114,7 +114,8 @@ b.red { color: #ff7a6a; } b.blue { color: #6aaaff; } b.yellow { color: var(--yel
 .ucard .c-title { font-weight: 900; font-size: .98em; line-height: 1.2; text-shadow: 0 1px 2px #0005; }
 .ucard.t-code .c-title, .ucard.t-item .c-title { text-shadow: none; }
 .ucard .c-art { position: relative; height: 96px; display: grid; place-items: center; font-size: 46px; background: radial-gradient(circle at 50% 40%, #fff, #e8e0cc); border-bottom: 1px solid #0002; letter-spacing: 4px; }
-.ucard.t-place .c-art { height: 190px; font-size: 54px; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--theme) 25%, #fff), color-mix(in srgb, var(--theme) 55%, #333)); }
+.ucard:not(.t-place) .c-art { white-space: nowrap; overflow: hidden; font-size: calc(46px * min(1, 2.4 / var(--artn, 1))); }
+.ucard.t-place .c-art { height: 190px; overflow: hidden; font-size: 54px; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--theme) 25%, #fff), color-mix(in srgb, var(--theme) 55%, #333)); }
 .spot { position: absolute; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: #fff3; border: 2px dashed #fff8; cursor: zoom-in; transition: transform .15s; animation: spotpulse 2.4s ease-in-out infinite; }
 .spot:hover { transform: translate(-50%, -50%) scale(1.15); background: #fff6; }
 .spot.found { animation: none; border-style: solid; border-color: #6ae890; background: #30b86044; }
@@ -185,13 +186,13 @@ b.red { color: #ff7a6a; } b.blue { color: #6aaaff; } b.yellow { color: var(--yel
 .g-dots i.on { background: var(--gold); }
 .g-cards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0; }
 .g-cards .ucard { width: 120px; cursor: default; }
-.g-cards .ucard .c-art { height: 60px; font-size: 30px; }
+.g-cards .ucard .c-art { height: 60px; font-size: calc(30px * min(1, 2.4 / var(--artn, 1))); }
 @media (max-width: 980px) {
   .game-main { grid-template-columns: 1fr; overflow-y: auto; }
   #game { height: auto; min-height: 100vh; overflow: visible; }
   .ucard.t-place { width: 100%; max-width: 380px; }
 }
-.ucard.t-place .c-art .bg { font-size: 74px; opacity: .38; letter-spacing: 14px; filter: saturate(.7); pointer-events: none; }
+.ucard.t-place .c-art .bg { font-size: calc(74px * min(1, 3.2 / var(--artn, 1))); white-space: nowrap; opacity: .38; letter-spacing: 14px; filter: saturate(.7); pointer-events: none; }
 .spot { background: #ffffffd0; border: 3px dashed #1a3350; box-shadow: 0 3px 8px #0006; }
 .spot:hover { background: #fff; }
 .spot.found { background: #c8f0d4; border-color: #30b860; }

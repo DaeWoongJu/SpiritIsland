@@ -238,11 +238,15 @@ function bindQuitButton() {
   if (b) b.onclick = () => { if (confirm('게임을 저장하고 대기실로 돌아갈까요?\n\n나중에 첫 화면의 "💾 저장된 게임 이어하기"에서 지금 상태 그대로 계속할 수 있어요.')) send({ t: 'quitGame' }); };
 }
 
+/** 그림(이모지) 개수 — 많으면 글자를 줄여 한 줄에 맞춘다 */
+const artSeg = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter() : null;
+function artCount(art) { return Math.max(1, artSeg ? [...artSeg.segment(art || '')].length : [...(art || '')].length); }
+
 function cardHTML(c, theme) {
   const sel = app.sel.includes(c.key);
   const spots = c.spots.map((s, i) => (s.hidden ? `<span class="hnum ${s.found ? 'found' : ''}" style="left:${s.x}%;top:${s.y}%">${esc(s.num)}</span>`
     : `<span class="spot ${s.found ? 'found' : ''}" data-spot="${i}" data-card="${c.key}" style="left:${s.x}%;top:${s.y}%" title="${esc(s.label)} 살펴보기">${s.emoji || '🔍'}</span>`)).join('');
-  return `<div class="ucard t-${c.type} ${sel ? 'sel' : ''} ${app.seen.has(c.key) ? '' : 'new'}" data-key="${c.key}" style="--theme:${theme}">
+  return `<div class="ucard t-${c.type} ${sel ? 'sel' : ''} ${app.seen.has(c.key) ? '' : 'new'}" data-key="${c.key}" style="--theme:${theme};--artn:${artCount(c.art)}">
     <div class="c-head"><span class="c-num">${esc(c.num)}</span><span class="c-title">${esc(c.title)}</span>${c.plus ? `<span class="plus plus-${c.plus.color}" title="보정 숫자: 다른 색 번호에 더해요">+${c.plus.n}</span>` : ''}</div>
     <div class="c-art">${c.type === 'place' ? `<span class="bg">${esc(c.art)}</span>` : esc(c.art)}${spots}</div>
     ${c.solved ? '<span class="solved">✅</span>' : ''}
