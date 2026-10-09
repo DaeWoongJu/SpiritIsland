@@ -197,9 +197,10 @@ b.red { color: #ff7a6a; } b.blue { color: #6aaaff; } b.yellow { color: var(--yel
 .spot:hover { background: #fff; }
 .spot.found { background: #c8f0d4; border-color: #30b860; }
 /* 원작식 숨은 번호 · 보정 숫자 · 덱 */
-.hnum { position: absolute; transform: translate(-50%, -50%) rotate(-8deg); font-family: var(--title); font-size: 14px; font-weight: bold; color: #3a3020; pointer-events: none; letter-spacing: 0; opacity: .75; text-shadow: 0 0 3px #fff; }
-.ucard.t-place .hnum { font-size: 14px; color: #f4ecd8; opacity: .75; text-shadow: 0 0 2px #0006; }
-.hnum.found { color: #30b860; -webkit-text-stroke: 0; opacity: 1; text-shadow: 0 0 6px #fff; }
+.hnum { position: absolute; transform: translate(-50%, -50%) rotate(-8deg); font-family: var(--title); font-size: 14px; font-weight: bold; color: #2a2010; pointer-events: none; letter-spacing: 0; opacity: .85; text-shadow: 0 0 2px #fff, 0 0 3px #fff, 0 0 5px #fffa; }
+/* 장소 그림은 밝은 곳·어두운 곳이 섞여 있어서, 밝은 글씨에 어두운 테두리를 둘러 어디서나 읽히게 */
+.ucard.t-place .hnum { font-size: 15px; color: #fff6dc; opacity: .9; text-shadow: 0 0 2px #000, 0 0 3px #000c, 0 1px 4px #0008; }
+.hnum.found { color: #30b860; -webkit-text-stroke: 0; opacity: 1; text-shadow: 0 0 2px #fff, 0 0 6px #fff; }
 .plus { margin-left: auto; flex: none; font-family: var(--title); font-size: 1.1em; padding: 0 7px; border-radius: 12px; color: #fff; border: 2px solid #fff; }
 .plus-blue { background: var(--blue); } .plus-red { background: var(--red); }
 .deck { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; }

@@ -85,6 +85,8 @@ function build(spec) {
   for (const c of cards) byKey[c.key] = c;
   // 숨은 번호: reveal 이 있는 살펴보기 지점은 원작처럼 그림 속 작은 번호 (click:true 면 눌러서 찾기)
   for (const c of cards) for (const s of c.spots || []) if (s.reveal) { s.num = byKey[s.reveal].num; if (!s.click) s.hidden = true; }
+  // 물건 카드는 그림이 가운데에 크게 있어서, 숨은 번호가 그림에 가려지지 않게 아래 가장자리로
+  for (const c of cards) if (c.type !== 'place') for (const s of c.spots || []) if (s.hidden && s.x > 18 && s.x < 82 && s.y > 15 && s.y < 84) { s.x = s.x < 50 ? 12 : 88; s.y = 84; }
   // 힌트가 없는 카드에 자동 힌트
   for (const c of cards) {
     if (c.decoy || (c.hint && c.hint.length)) continue;
