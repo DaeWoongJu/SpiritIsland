@@ -87,16 +87,40 @@ function build(spec) {
   for (const c of cards) for (const s of c.spots || []) if (s.reveal) { s.num = byKey[s.reveal].num; if (!s.click) s.hidden = true; }
   // 물건 카드는 그림이 가운데에 크게 있어서, 숨은 번호가 그림에 가려지지 않게 아래 가장자리로
   for (const c of cards) if (c.type !== 'place') for (const s of c.spots || []) if (s.hidden && s.x > 18 && s.x < 82 && s.y > 15 && s.y < 84) { s.x = s.x < 50 ? 12 : 88; s.y = 84; }
-  // 힌트가 없는 카드에 자동 힌트
+  // 힌트가 없는 카드에 자동 힌트 — 1단계: 짝이 될 카드를 어디서 찾는지, 2단계: 무엇과 합쳐 몇 번이 되는지
+  const origin = {};
+  const note = (k, o) => { if (!origin[k]) origin[k] = o; };
+  for (const c of cards) {
+    if (c.decoy) continue;
+    (c.spots || []).forEach((sp) => { if (sp.reveal) note(sp.reveal, { via: 'spot', card: c, label: sp.label }); });
+    for (const k of c.shows || []) note(k, { via: 'shows', card: c });
+    if (c.result) note(c.result, { via: 'result', card: c });
+    if (c.from && c.type !== 'trap') note(c.key, { via: 'combo', card: c });
+  }
+  // 받침에 맞춘 조사: j(word, '이', '가') → 받침 있으면 '이', 없으면 '가'
+  const j = (w, yes, no) => { const ch = String(w).replace(/[^가-힣0-9A-Za-z]+$/u, '').slice(-1); const code = ch.charCodeAt(0) - 0xac00; if (code >= 0 && code < 11172) return w + (code % 28 ? yes : no); return `${w}${yes}(${no})`; };
+  const q = (t) => `「${t}」`;
+  const qj = (t, yes, no) => j(q(t), yes, no);
+  const whereIs = (o) => {
+    const src = origin[o.key];
+    const need = `${qj(o.title, '이', '가')} 필요해요.`;
+    if (!src) return `${qj(o.title, '은', '는')} 처음부터 펼쳐져 있는 카드예요.`;
+    if (src.via === 'spot') return `${need} ${q(src.card.title)} 카드의 ${j(`'${src.label}'`, '을', '를')} 자세히 살펴보세요.`;
+    if (src.via === 'shows') return `${need} ${q(src.card.title)} 카드를 펼치면 함께 나와요.`;
+    if (src.via === 'result') return `${need} ${qj(src.card.title, '을', '를')} 풀면 나와요.`;
+    return `${need} ${qj(byKey[src.card.from[0]].title, '과', '와')} ${qj(byKey[src.card.from[1]].title, '을', '를')} 먼저 합치면 나와요.`;
+  };
+  const valText = (k) => (byKey[k].plus != null ? `+${byKey[k].plus}` : `${byKey[k].num}`);
   for (const c of cards) {
     if (c.decoy || (c.hint && c.hint.length)) continue;
     const combo = cards.find((r) => r.from && r.type !== 'trap' && r.from.includes(c.key));
     if (combo) {
       const other = byKey[combo.from.find((k) => k !== c.key)];
-      const p = partOf(c);
-      c.hint = [`이 카드는 ${p.color === 'red' ? '파란' : '빨간'} 번호 하나와 합칠 수 있어요.`, `「${other.title}」와(과) 합쳐 보세요.`];
+      c.hint = [whereIs(other), `「${c.title}」(${valText(c.key)}) + 「${other.title}」(${valText(other.key)}) = ${combo.num}번 카드!`];
     } else if (c.spots && c.spots.some((sp) => sp.reveal)) {
-      c.hint = ['그림을 아주 자세히 보세요. 작은 숫자가 숨어 있어요. 찾으면 “번호로 카드 가져오기”에 입력!', `숨은 번호가 있는 곳: ${c.spots.filter((sp) => sp.reveal).map((sp) => sp.label).join(', ')}`];
+      const sps = c.spots.filter((sp) => sp.reveal);
+      c.hint = [`${sps.map((sp) => `'${sp.label}'`).join(', ')} 쪽을 자세히 보세요. ${sps.some((sp) => sp.hidden) ? '그림 속에 작은 숫자가 섞여 있어요.' : '🔍 표시를 눌러 살펴보세요.'}`,
+        sps.map((sp) => (sp.hidden ? `'${sp.label}'의 숨은 번호는 ${sp.num} → “번호로 카드 가져오기”에 입력!` : `'${sp.label}'의 🔍를 눌러 보세요.`)).join(' / ')];
     }
   }
   const out = { ...spec, cards, byKey, byNum: Object.fromEntries(cards.map((c) => [String(c.num), c])) };
