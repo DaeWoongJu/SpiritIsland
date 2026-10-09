@@ -116,7 +116,7 @@ function build(spec) {
     const combo = cards.find((r) => r.from && r.type !== 'trap' && r.from.includes(c.key));
     if (combo) {
       const other = byKey[combo.from.find((k) => k !== c.key)];
-      const plusNote = other.plus != null ? ` 이미 있다면: 그 카드의 +${other.plus}는 이 카드 번호에 더하는 보정 숫자예요.` : '';
+      const plusNote = other.plus != null ? ` 이미 있다면: 그 카드의 보정 숫자 +${other.plus}을(를) 이 카드 번호에 더해요.` : '';
       c.hint = [whereIs(other) + plusNote, `「${c.title}」(${valText(c.key)}) + 「${other.title}」(${valText(other.key)}) = ${combo.num}번 카드!`];
     } else if (c.spots && c.spots.some((sp) => sp.reveal)) {
       const sps = c.spots.filter((sp) => sp.reveal);
