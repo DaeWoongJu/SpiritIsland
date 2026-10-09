@@ -121,6 +121,19 @@ test('보정 숫자(+N): 다른 색 번호에 더해서 합친다', () => {
   assert.strictEqual(g.penalties, 0);
 });
 
+test('두 번호를 더한 카드 번호를 바로 입력하면 합치기로 처리 (재료가 다 나와 있을 때만)', () => {
+  const g = mk('squeek');
+  g.run();
+  const n = String(g.sc.byKey.remoteOn.num);
+  g.answer('p0', g.seq, { a: 'take', num: n }); // 재료가 아직 없음 → 벌점
+  assert.strictEqual(g.penalties, 1);
+  assert.ok(!g.has('remoteOn'));
+  g.inPlay.push('remoteP', 'caught');
+  assert.strictEqual(g.answer('p0', g.seq, { a: 'take', num: n }), null);
+  assert.ok(g.has('remoteOn'));
+  assert.strictEqual(g.penalties, 1);
+});
+
 test('힌트는 순서대로 보이고 별점에 반영, 숨은 번호는 한 번만', () => {
   const g = mk('tutorial');
   g.run();

@@ -145,6 +145,12 @@ class Game extends EventEmitter {
         if (!t) return `${num}번 카드는 덱에 없어요.`;
         if (this.has(t.key)) return '이미 나와 있는 카드예요.';
         if (this.gone.has(t.key)) return '이미 버린 카드예요.';
+        // 원작처럼 머릿속으로 두 번호를 더해 바로 그 카드를 뒤집은 경우 — 재료 두 장이 다 나와 있으면 합치기로 처리
+        if (t.from && t.type !== 'trap' && t.from.every((k) => this.has(k))) {
+          const [x, y] = t.from;
+          this.log(`🔎 ${this.pname(pid)}: ${num}번 = 「${this.card(x).title}」 + 「${this.card(y).title}」`, pid);
+          return this.act(pid, { a: 'combine', x, y });
+        }
         this.log(`🔎 ${this.pname(pid)}: ${num}번 카드를 뒤집으려 했지만, 그 번호는 아직 어디에서도 찾지 못했다.`, pid, 'bad');
         this.addPenalty(1, pid);
         return null;
