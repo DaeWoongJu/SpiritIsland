@@ -244,6 +244,15 @@ function start() {
   connect(name, look);
 }
 
+/** 하트골드 그림 목록 (서버가 처음 켤 때 준비하므로 늦게 생길 수 있음) */
+async function loadHg() {
+  try {
+    const r = await fetch('/hgss/manifest.json');
+    if (r.ok) { G.hg = await r.json(); for (const id of [G.hg.player.hero, G.hg.player.heroine]) G.hgImg(`ow/${id}.png`); return; }
+  } catch { /* 아직 */ }
+  setTimeout(loadHg, 15000);
+}
+
 async function boot() {
   fit();
   try { document.getElementById('name').value = localStorage.getItem('pkgold-name') || ''; } catch { /* 없음 */ }
@@ -251,6 +260,7 @@ async function boot() {
   const res = await fetch('/world.json');
   G.W = await res.json();
   G.LANDMARKS = G.W.ko.landmarks;
+  loadHg();
   await G.preload([G.W.sprites[1].file, G.W.sprites[2] && G.W.sprites[2].file, G.W.ui.playerBack, G.W.tilesets[1].png]);
   // 저장 목록 받기
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';

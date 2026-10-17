@@ -136,6 +136,7 @@ G.enterMap = function enterMap(mapId, x, y, dir) {
   const prevLandmark = ow.map ? ow.map.landmark : null;
   const prevEnv = ow.map ? ow.map.env : null;
   ow.mapId = mapId; ow.map = G.W.maps[mapId]; ow.x = x; ow.y = y; if (dir) ow.dir = dir;
+  ow.fol = { x, y, fx: x, fy: y, dir: ow.dir, hidden: true };
   if (ow.map.env === 'TOWN' || ow.map.env === 'ROUTE') ow.lastOutside = { map: mapId, x, y };
   if (ow.map.env !== 'CAVE' && ow.map.env !== 'DUNGEON') ow.flash = false;
   G.loadMapObjects();
@@ -179,7 +180,8 @@ G.drawOverworld = function drawOverworld(ctx) {
           else block = m.border;
         }
         if (block == null) continue;
-        ctx.drawImage(sheet, (block % 16) * 32, Math.floor(block / 16) * 32, 32, 32, bx * 32 - left, by * 32 - top, 32, 32);
+        const k = sheet.k || 1;
+        ctx.drawImage(sheet, (block % 16) * 32 * k, Math.floor(block / 16) * 32 * k, 32 * k, 32 * k, bx * 32 - left, by * 32 - top, 32, 32);
       }
     }
   }
@@ -190,9 +192,23 @@ G.drawOverworld = function drawOverworld(ctx) {
   for (const [, o] of ow.others) if (o.map === ow.mapId) list.push({ kind: 'other', o, y: o.py });
   const me = screenOrigin();
   list.push({ kind: 'me', y: me.py });
+  // 데리고 다니는 포켓몬 (하트골드처럼)
+  if (G.useHG() && G.settings.follow !== false) {
+    const lead = myLead();
+    const f = ow.fol;
+    if (lead && f && !f.hidden && !ow.surf && !ow.bike) {
+      const k = ow.anim && !ow.anim.slide ? ow.anim.t / ow.anim.frames : 1;
+      list.push({ kind: 'fol', sp: lead.species, shiny: lead.shiny, x: (f.fx + (f.x - f.fx) * k) * 16, y: (f.fy + (f.y - f.fy) * k) * 16, dir: f.dir, walking: !!ow.anim });
+    }
+    for (const [, o] of ow.others) {
+      if (o.map !== ow.mapId || !o.lead || o.surf || o.bike || o.fpx === undefined) continue;
+      list.push({ kind: 'fol', sp: o.lead.species, shiny: o.lead.shiny, x: o.fpx, y: o.fpy, dir: o.fdir || o.dir, walking: !!o.walk });
+    }
+  }
   list.sort((a, b) => a.y - b.y);
   for (const it of list) {
-    if (it.kind === 'obj') drawObj(ctx, it.r, left, top, t);
+    if (it.kind === 'fol') drawFollower(ctx, it, left, top);
+    else if (it.kind === 'obj') drawObj(ctx, it.r, left, top, t);
     else if (it.kind === 'other') drawPerson(ctx, it.o.look, it.o.px - left, it.o.py - top, it.o.dir, it.o.walk, it.o.surf, it.o.bike, t, it.o);
     else drawPerson(ctx, G.me ? G.me.look : 0, me.px - left, me.py - top, ow.dir, ow.anim ? ow.anim.t / ow.anim.frames : 0, ow.surf, ow.bike, t, null, ow.anim && ow.anim.jump);
   }
@@ -240,6 +256,17 @@ function drawObj(ctx, r, left, top, t) {
   const p = objPixel(r);
   const x = p.x - left, y = p.y - top - 4;
   if (x < -16 || y < -20 || x > 160 || y > 144) return;
+  if (G.useHG()) {
+    const mon = spr.kind === 'ICON' ? spr.mon : null;
+    const id = mon ? G.hg.follow[mon] : G.hg.npc[o.sprite];
+    const info = id && G.hg.frames[id];
+    if (info) {
+      const walking = !!r.anim && r.anim.t / r.anim.frames < 0.5;
+      const fr = mon ? G.followFrame(r.dir, Math.floor(performance.now() / 300) % 2) : info.n >= 16 ? G.modelFrame(r.dir, walking, r.parity) : 0;
+      if (info.n >= 8) G.drawShadow(ctx, p.x - left, p.y - top);
+      if (G.drawModel(ctx, id, fr, 0, p.x - left, p.y - top)) { grassOver(ctx, r.x, r.y, left, top, r.anim); return; }
+    }
+  }
   if (spr.kind === 'ICON') {
     const c = G.icon(spr.mon, Math.floor(performance.now() / 400) % 2);
     if (c) ctx.drawImage(c, x, y);
@@ -269,9 +296,20 @@ function drawPerson(ctx, look, sx, sy, dir, walkK, surf, bike, t, other, jump) {
     }
     return;
   }
-  const fr = frameFor(dir, walkK, other ? other.parity : ow.step & 1);
-  const c = G.spriteFrame(file, G.LOOK_PAL[look & 3] ?? 0, t, fr.f, fr.flip);
-  if (c) ctx.drawImage(c, Math.round(sx), Math.round(y));
+  let drawn = false;
+  if (G.useHG()) {
+    const pl = G.hg.player;
+    const girl = look & 1;
+    const id = bike ? (girl ? pl.bikeHeroine : pl.bikeHero) : (girl ? pl.heroine : pl.hero);
+    const walking = walkK > 0 && walkK < 0.5;
+    G.drawShadow(ctx, sx, sy);
+    drawn = G.drawModel(ctx, id, G.modelFrame(dir, walking, other ? other.parity : ow.step & 1), 0, sx, sy - (jump ? Math.round(Math.sin(walkK * Math.PI) * 8) : 0));
+  }
+  if (!drawn) {
+    const fr = frameFor(dir, walkK, other ? other.parity : ow.step & 1);
+    const c = G.spriteFrame(file, G.LOOK_PAL[look & 3] ?? 0, t, fr.f, fr.flip);
+    if (c) ctx.drawImage(c, Math.round(sx), Math.round(y));
+  }
   if (other) {
     ctx.font = '8px Galmuri9'; // 이름표
     const w = Math.ceil(G.measure(ctx, other.name)) + 4;
@@ -280,6 +318,18 @@ function drawPerson(ctx, look, sx, sy, dir, walkK, surf, bike, t, other, jump) {
     if (other.battle) { ctx.fillStyle = '#e83020'; ctx.fillRect(Math.round(sx + 12), Math.round(y - 2), 4, 4); }
   }
   if (!jump && !other) grassOver(ctx, ow.x, ow.y, Math.round(screenOrigin().left), Math.round(screenOrigin().top), ow.anim, true);
+}
+
+function myLead() {
+  const p = G.me && G.me.party;
+  return p ? p.find((m) => !m.egg && m.hp > 0) : null;
+}
+function drawFollower(ctx, it, left, top) {
+  const id = G.hg.follow[it.sp];
+  if (!id) return;
+  const hop = it.walking ? Math.floor(performance.now() / 120) % 2 : Math.floor(performance.now() / 400) % 2;
+  G.drawShadow(ctx, it.x - left, it.y - top, 10);
+  G.drawModel(ctx, id, G.followFrame(it.dir, hop), it.shiny ? 1 : 0, it.x - left, it.y - top);
 }
 
 /** 풀숲 위에 서 있으면 아랫부분을 풀이 가림 */
@@ -293,7 +343,8 @@ function grassOver(ctx, x, y, left, top, anim, isMe) {
   if (!r) return;
   const b = G.blockAt(r.mapId, r.x >> 1, r.y >> 1);
   const qx = (x & 1) * 16, qy = (y & 1) * 16;
-  ctx.drawImage(meta, (b % 16) * 32 + qx, Math.floor(b / 16) * 32 + qy + 8, 16, 8, x * 16 - left, y * 16 - top + 8, 16, 8);
+  const k = meta.k || 1;
+  ctx.drawImage(meta, ((b % 16) * 32 + qx) * k, (Math.floor(b / 16) * 32 + qy + 8) * k, 16 * k, 8 * k, x * 16 - left, y * 16 - top + 8, 16, 8);
   void isMe;
 }
 
@@ -412,6 +463,17 @@ function tryStep(dir) {
 }
 
 function startAnim(dx, dy, len, jump, extra) {
+  // 데리고 다니는 포켓몬은 내가 있던 칸으로 따라온다
+  const f = ow.fol;
+  if (f) {
+    const wasHidden = f.hidden;
+    f.fx = wasHidden ? ow.x : f.x; f.fy = wasHidden ? ow.y : f.y;
+    f.x = ow.x; f.y = ow.y;
+    const ddx = f.x - f.fx, ddy = f.y - f.fy;
+    f.dir = ddx > 0 ? 'right' : ddx < 0 ? 'left' : ddy > 0 ? 'down' : ddy < 0 ? 'up' : ow.dir;
+    if (Math.abs(ddx) + Math.abs(ddy) > 2) { f.fx = f.x; f.fy = f.y; }
+    f.hidden = false;
+  }
   const frames = jump ? 24 : 16 / speed();
   ow.anim = { dx, dy, len, t: 0, frames: Math.max(4, frames), jump, extra };
   if (jump) G.sfx('bump');
@@ -555,6 +617,12 @@ function updateOthers() {
     const tx = o.x * 16, ty = o.y * 16;
     if (o.px === undefined || Math.abs(tx - o.px) > 48 || Math.abs(ty - o.py) > 48) { o.px = tx; o.py = ty; o.walk = 0; continue; }
     const sp = o.bike ? 2 : 1.5;
+    if (o.ftx !== undefined) {
+      const fx = o.ftx * 16, fy = o.fty * 16;
+      if (o.fpx === undefined || Math.abs(fx - o.fpx) > 48 || Math.abs(fy - o.fpy) > 48) { o.fpx = fx; o.fpy = fy; }
+      o.fpx += Math.sign(fx - o.fpx) * Math.min(Math.abs(fx - o.fpx), sp);
+      o.fpy += Math.sign(fy - o.fpy) * Math.min(Math.abs(fy - o.fpy), sp);
+    }
     const ddx = tx - o.px, ddy = ty - o.py;
     if (ddx || ddy) {
       o.px += Math.sign(ddx) * Math.min(Math.abs(ddx), sp);
@@ -902,6 +970,10 @@ G.setOthers = function setOthers(list, myId) {
 G.moveOther = function moveOther(p, step) {
   const o = ow.others.get(p.id) || {};
   if (step) o.parity = !o.parity;
+  if (step && o.map === p.map && o.x !== undefined && (o.x !== p.x || o.y !== p.y)) {
+    o.ftx = o.x; o.fty = o.y;
+    o.fdir = p.x > o.x ? 'right' : p.x < o.x ? 'left' : p.y > o.y ? 'down' : 'up';
+  } else if (o.map !== p.map) { o.ftx = p.x; o.fty = p.y; o.fpx = undefined; }
   Object.assign(o, p);
   ow.others.set(p.id, o);
 };

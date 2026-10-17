@@ -8,7 +8,8 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { exec } = require('child_process');
 const { WebSocketServer } = require('ws');
-const { ensureWorld, SRC_DIR } = require('./build');
+const { ensureWorld, SRC_DIR, CACHE_DIR } = require('./build');
+const { ensureHgss } = require('./hgss');
 const dex = require('./dex');
 const ko = require('./ko');
 const { Battle } = require('./battle');
@@ -53,6 +54,18 @@ const server = http.createServer((req, res) => {
     fs.readFile(real, (err, data) => {
       if (err) { res.writeHead(404); res.end(); return; }
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=86400' });
+      res.end(data);
+    });
+    return;
+  }
+  if (p.startsWith('/hgss/')) {
+    // 하트골드 그림 (처음 켤 때 만들어 둔 것)
+    const root = path.join(CACHE_DIR, 'hgss');
+    const file = path.normalize(path.join(root, p.slice(6)));
+    if (!file.startsWith(root) || !['.png', '.json'].includes(path.extname(file))) { res.writeHead(404); res.end(); return; }
+    fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); res.end(); return; }
+      res.writeHead(200, { 'Content-Type': path.extname(file) === '.png' ? 'image/png' : MIME['.json'], 'Cache-Control': path.extname(file) === '.png' ? 'max-age=86400' : 'no-cache' });
       res.end(data);
     });
     return;
@@ -113,7 +126,7 @@ function say(p, text, extra = {}) { sendTo(p, { t: 'say', text: Array.isArray(te
 
 function publicPlayer(p) {
   const d = p.data;
-  return { id: p.id, name: d.name, look: d.look, map: d.map, x: d.x, y: d.y, dir: d.dir, surf: !!d.surf, bike: !!p.bike, battle: !!p.battle, team: p.team || null, lead: d.party[0] ? { species: d.party[0].species, shiny: !!d.party[0].shiny } : null };
+  return { id: p.id, name: d.name, look: d.look, map: d.map, x: d.x, y: d.y, dir: d.dir, surf: !!d.surf, bike: !!p.bike, battle: !!p.battle, team: p.team || null, lead: (() => { const m = d.party.find((x) => !x.egg && x.hp > 0); return m ? { species: m.species, shiny: !!m.shiny } : null; })() };
 }
 function broadcastPlayers() {
   const list = online().filter((p) => p.data).map(publicPlayer);
@@ -1131,6 +1144,8 @@ async function main() {
     timeOfDay: () => dex.timeOfDay(), STARTERS, speciesOf: (c) => { const sp = Object.values(W.species).find((x) => x.const === c); return sp ? sp.id : 0; },
   });
   worldGz = zlib.gzipSync(JSON.stringify(W, (k, v) => (k === 'script' ? undefined : v)));
+  // 하트골드 그림은 뒤에서 준비 (없으면 골드 그림으로 함)
+  ensureHgss({ cacheDir: CACHE_DIR, srcDir: SRC_DIR, log: (t) => console.log('  ' + t) }).catch((e) => console.log('  하트골드 그림을 준비하지 못했습니다:', e.message));
   server.listen(PORT, '0.0.0.0', () => {
     const lan = lanAddresses();
     console.log('');

@@ -6,6 +6,29 @@ const G = window.G;
 const TYPE_COLOR = { FIRE: '#f08030', WATER: '#6890f0', GRASS: '#78c850', ELECTRIC: '#f8d030', ICE: '#98d8d8', PSYCHIC_TYPE: '#f85888', DRAGON: '#7038f8', DARK: '#705848', GHOST: '#705898', POISON: '#a040a0', GROUND: '#e0c068', ROCK: '#b8a038', BUG: '#a8b820', FLYING: '#a890f0', FIGHTING: '#c03028', STEEL: '#b8b8d0', NORMAL: '#a8a878' };
 G.TYPE_COLOR = TYPE_COLOR;
 
+/** 하트골드풍 배틀 배경: 하늘·땅과 포켓몬이 서는 둥근 발판 */
+function drawHgBackground(ctx) {
+  const env = (G.ow && G.ow.map && G.ow.map.env) || 'ROUTE';
+  const night = G.timeOfDay() === 2;
+  const cave = env === 'CAVE' || env === 'DUNGEON';
+  const indoor = env === 'INDOOR' || env === 'GATE';
+  const sky = cave ? ['#4a3c34', '#6c5848'] : indoor ? ['#c8c0d8', '#e8e4f0'] : night ? ['#28305c', '#58609c'] : ['#78c0f8', '#d8f0f8'];
+  const ground = cave ? ['#7c6450', '#5c4838'] : indoor ? ['#d8d0c0', '#b8b0a0'] : night ? ['#3c6c48', '#2c5038'] : ['#a8e070', '#78c050'];
+  const pad = cave ? ['#a08068', '#806450'] : indoor ? ['#f0e8d8', '#c8c0b0'] : night ? ['#5c8c60', '#3c6444'] : ['#d0f0a0', '#90c860'];
+  let g = ctx.createLinearGradient(0, 0, 0, 56);
+  g.addColorStop(0, sky[0]); g.addColorStop(1, sky[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 160, 56);
+  g = ctx.createLinearGradient(0, 56, 0, 96);
+  g.addColorStop(0, ground[0]); g.addColorStop(1, ground[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, 56, 160, 40);
+  const plate = (cx, cy, rx, ry) => {
+    ctx.fillStyle = pad[1]; ctx.beginPath(); ctx.ellipse(cx, cy + 2, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pad[0]; ctx.beginPath(); ctx.ellipse(cx, cy, rx - 2, ry - 1.5, 0, 0, Math.PI * 2); ctx.fill();
+  };
+  plate(124, 52, 34, 8);
+  plate(38, 92, 42, 9);
+}
+
 class BattleScene {
   constructor(view) {
     this.view = view;
@@ -66,7 +89,7 @@ class BattleScene {
       case 'trainertext': await G.say(e.s); break;
       case 'switch': {
         const dd = this.disp[this.key(e.side, e.slot)];
-        dd.mon = e.mon; dd.hp = e.mon.hp; dd.max = e.mon.maxhp; dd.status = e.mon.status; dd.show = true; dd.alpha = 1; dd.dy = 0; dd.sub = false;
+        dd.mon = e.mon; dd.hp = e.mon.hp; dd.max = e.mon.maxhp; dd.status = e.mon.status; dd.show = true; dd.alpha = 1; dd.dy = 0; dd.sub = false; dd.enterT = performance.now();
         if (this.isMine(e.side)) this.meShow = 0; else this.trainerShow = 0;
         dd.dx = this.isMine(e.side) ? -60 : 60;
         G.sfx('ball');
@@ -238,6 +261,7 @@ class BattleScene {
   draw(ctx) {
     ctx.fillStyle = '#f8f8f8';
     ctx.fillRect(0, 0, 160, 144);
+    if (G.useHG()) drawHgBackground(ctx);
     if (this.flashAll) { ctx.fillStyle = '#101010'; ctx.fillRect(0, 0, 160, 144); return; }
     const v = this.view;
     const mine = v.mySide, foe = 1 - v.mySide;
@@ -298,9 +322,23 @@ class BattleScene {
     const s = G.W.species[d.mon.species];
     if (!s) return;
     if (d.sub) { ctx.fillStyle = '#c8a048'; ctx.fillRect(x + 14, y + 20, 22, 24); ctx.fillStyle = '#101010'; ctx.fillRect(x + 18, y + 26, 3, 3); ctx.fillRect(x + 28, y + 26, 3, 3); return; }
+    if (d.flash) return;
+    // 하트골드 그림 (80×80, 화면 크기에 맞춰 선명하게 줄임)
+    const hg = G.useHG() && G.hgImg(`mon/${d.mon.species}.png`);
+    if (hg) {
+      const k = Math.max(1, Math.round(0.75 * G.R)) / G.R;
+      const sz = 80 * k;
+      const anim = !back && d.enterT !== undefined && performance.now() - d.enterT < 900 && Math.floor((performance.now() - d.enterT) / 220) % 2;
+      ctx.globalAlpha = d.alpha ?? 1;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(back ? x - 12 : x - 14, back ? y - 8 : 0, back ? 84 : 86, back ? 56 : 62); ctx.clip();
+      ctx.drawImage(hg, back ? 160 : anim ? 80 : 0, d.mon.shiny ? 80 : 0, 80, 80, Math.round(x + (back ? 22 : 28) - sz / 2), Math.round(back ? y + 48 - sz * 0.88 : 60 - sz), sz, sz);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      return;
+    }
     const c = G.picCanvas(back ? s.back : s.front);
     if (!c) return;
-    if (d.flash) return;
     ctx.globalAlpha = d.alpha ?? 1;
     const ox = back ? 0 : Math.floor((56 - c.width) / 2), oy = back ? 0 : 56 - c.height;
     ctx.save();
@@ -343,15 +381,26 @@ class BattleScene {
   }
   genderMark(m) { return m.gender === 'M' ? '♂' : m.gender === 'F' ? '♀' : ''; }
 
+  /** 하트골드풍 체력 상자 판 */
+  hgPanel(ctx, x, y, w, h) {
+    if (!G.useHG() || !ctx.roundRect) return false;
+    ctx.fillStyle = '#404850'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 5); ctx.fill();
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, '#fcfcf4'); g.addColorStop(1, '#e0e4d8');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x + 1, y + 1, w - 2, h - 2, 4); ctx.fill();
+    return true;
+  }
   foeBox(ctx, d) {
     const m = d.mon;
+    const hg = this.hgPanel(ctx, 3, 1, 84, 31);
     G.text(ctx, m.name + this.genderMark(m), 8, 2);
     if (!this.statusTag(ctx, d.status, 48, 11)) G.text(ctx, `:L${m.level}`, 48, 11);
     this.hpBar(ctx, 30, 24, 48, d.hp, d.max);
-    ctx.fillStyle = G.BLACK; ctx.fillRect(8, 29, 1, 3); ctx.fillRect(8, 31, 76, 1);
+    if (!hg) { ctx.fillStyle = G.BLACK; ctx.fillRect(8, 29, 1, 3); ctx.fillRect(8, 31, 76, 1); }
   }
   myBox(ctx, d) {
     const m = d.mon;
+    const hg = this.hgPanel(ctx, 76, 48, 82, 47);
     G.text(ctx, m.name + this.genderMark(m), 80, 50);
     if (!this.statusTag(ctx, d.status, 120, 59)) G.text(ctx, `:L${m.level}`, 120, 59);
     this.hpBar(ctx, 104, 72, 48, d.hp, d.max);
@@ -363,7 +412,7 @@ class BattleScene {
       ctx.fillStyle = G.BLACK; ctx.fillRect(87, 90, 66, 1);
       ctx.fillStyle = '#4890f8'; ctx.fillRect(153 - Math.round(64 * k), 91, Math.round(64 * k), 2);
     }
-    ctx.fillStyle = G.BLACK; ctx.fillRect(152, 82, 1, 8);
+    if (!hg) { ctx.fillStyle = G.BLACK; ctx.fillRect(152, 82, 1, 8); }
   }
   foeBoxSmall(ctx, d, x, y) {
     const m = d.mon;

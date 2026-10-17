@@ -71,7 +71,18 @@ G.wrap = function wrap(ctx, s, maxW) {
 };
 
 // ───────── 창 테두리 (게임보이 글상자 모양) ─────────
+/** 하트골드풍 상자: 둥근 모서리, 은은한 파란 테두리 */
+function hgBox(ctx, x, y, w, h) {
+  const rr = (px, py, pw, ph, r) => { ctx.beginPath(); ctx.roundRect(px, py, pw, ph, r); ctx.fill(); };
+  ctx.fillStyle = '#485870'; rr(x, y, w, h, 4);
+  ctx.fillStyle = '#a8c8e8'; rr(x + 1, y + 1, w - 2, h - 2, 3.5);
+  ctx.fillStyle = '#f8f8f8'; rr(x + 2.5, y + 2.5, w - 5, h - 5, 2.5);
+  const g = ctx.createLinearGradient(0, y + 3, 0, y + h - 3);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(200,216,232,0.35)');
+  ctx.fillStyle = g; rr(x + 2.5, y + 2.5, w - 5, h - 5, 2.5);
+}
 G.box = function box(ctx, x, y, w, h) {
+  if (G.useHG && G.useHG() && ctx.roundRect) { hgBox(ctx, x, y, w, h); return; }
   ctx.fillStyle = G.WHITE; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = G.BLACK;
   ctx.fillRect(x + 1, y + 1, w - 2, 2); ctx.fillRect(x + 1, y + h - 3, w - 2, 2);

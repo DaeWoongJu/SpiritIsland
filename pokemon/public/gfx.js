@@ -121,7 +121,8 @@ G.metatiles = function metatiles(map, flash) {
   const ts = W.tilesets[map.tileset];
   const t = G.mapTod(map, flash);
   const roof = (map.env === 'TOWN' || map.env === 'ROUTE') && map.tileset <= 3 ? W.roofs[map.group] : -1;
-  const key = `${map.tileset}:${map.env}:${t}:${map.group}:${roof}`;
+  const hg = G.useHG();
+  const key = `${map.tileset}:${map.env}:${t}:${map.group}:${roof}:${hg ? 'hg' : ''}`;
   if (tsCache.has(key)) return tsCache.get(key);
   const im = ts && ts.png ? G.img(ts.png) : null;
   const roofIm = roof >= 0 && W.roofFiles[roof] ? G.img(W.roofFiles[roof]) : null;
@@ -130,7 +131,8 @@ G.metatiles = function metatiles(map, flash) {
     if (roof >= 0 && W.roofFiles[roof]) G.loadImg(W.roofFiles[roof]);
     return null;
   }
-  const pals = G.mapPalettes(map, flash);
+  let pals = G.mapPalettes(map, flash);
+  if (hg) pals = pals.map((p) => p.map(hgColor));
   const n = ts.meta.length / 16;
   const c = document.createElement('canvas');
   c.width = 16 * 32; c.height = Math.ceil(n / 16) * 32;
@@ -159,9 +161,50 @@ G.metatiles = function metatiles(map, flash) {
     }
   }
   x.putImageData(out, 0, 0);
-  tsCache.set(key, c);
-  return c;
+  const res = hg ? scale2x(out) : c;
+  tsCache.set(key, res);
+  return res;
 };
+/** 하트골드풍 색: 채도와 밝기를 살짝 올려 DS처럼 맑게 */
+function hgColor(c) {
+  let [r, g, b] = c.map((v) => v / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let l = (mx + mn) / 2, sat = 0, h = 0;
+  if (mx !== mn) {
+    const d = mx - mn;
+    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  sat = Math.min(1, sat * 1.18 + 0.04);
+  l = l < 0.12 ? l * 1.6 + 0.02 : Math.min(0.97, 0.06 + l * 0.96);
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+  const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return sat === 0 ? [l, l, l].map((v) => Math.round(v * 255)) : [f(h + 1 / 3), f(h), f(h - 1 / 3)].map((v) => Math.round(v * 255));
+}
+/** 도트 그림을 2배로 부드럽게 (Scale2x) — 계단 모양 가장자리가 매끈해진다 */
+function scale2x(img) {
+  const w = img.width, h = img.height, s = new Uint32Array(img.data.buffer);
+  const c = document.createElement('canvas');
+  c.width = w * 2; c.height = h * 2;
+  const x = c.getContext('2d');
+  const out = x.createImageData(w * 2, h * 2);
+  const d = new Uint32Array(out.data.buffer);
+  const at = (xx, yy) => s[Math.min(h - 1, Math.max(0, yy)) * w + Math.min(w - 1, Math.max(0, xx))];
+  for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) {
+    const P = s[y * w + xx], A = at(xx, y - 1), B = at(xx + 1, y), C = at(xx - 1, y), D = at(xx, y + 1);
+    let e0 = P, e1 = P, e2 = P, e3 = P;
+    if (C === A && C !== D && A !== B) e0 = A;
+    if (A === B && A !== C && B !== D) e1 = B;
+    if (D === C && D !== B && C !== A) e2 = C;
+    if (B === D && B !== A && D !== C) e3 = D;
+    const o = y * 2 * w * 2 + xx * 2;
+    d[o] = e0; d[o + 1] = e1; d[o + w * 2] = e2; d[o + w * 2 + 1] = e3;
+  }
+  x.putImageData(out, 0, 0);
+  c.k = 2;
+  return c;
+}
 G.clearTileCache = () => tsCache.clear();
 
 // ───────── 필드 스프라이트 (16×16 프레임) ─────────
@@ -214,6 +257,41 @@ G.drawBall = function drawBall(ctx, x, y, open = false) {
   ctx.fillStyle = '#f8f8f8'; ctx.fillRect(x + 1, y + 4, 6, 3);
   ctx.fillStyle = '#101010'; ctx.fillRect(x, y + 3, 8, 1); ctx.fillRect(x + 3, y + 2, 2, 3);
   if (open) { ctx.fillStyle = '#f8f8f8'; ctx.fillRect(x + 2, y - 2, 4, 2); }
+};
+
+// ───────── 하트골드 그림 ─────────
+G.hg = null; // /hgss/manifest.json (준비되면)
+G.useHG = () => !!(G.hg && G.settings && G.settings.gfx !== 'gold');
+const hgCache = new Map();
+/** 하트골드 그림 (Image, 아직이면 null) */
+G.hgImg = function hgImg(rel) {
+  let e = hgCache.get(rel);
+  if (!e) {
+    e = { im: new Image(), ok: false };
+    e.im.onload = () => { e.ok = true; };
+    e.im.onerror = () => { e.bad = true; };
+    e.im.src = '/hgss/' + rel;
+    hgCache.set(rel, e);
+  }
+  return e.ok ? e.im : null;
+};
+/** 필드 모델 한 장 그리기. frame: 그림 번호, row: 0 보통 1 이로치 — (x, y)는 발밑 칸의 왼쪽 위 */
+G.drawModel = function drawModel(ctx, id, frame, row, x, y) {
+  const info = G.hg && G.hg.frames[id];
+  const im = info && G.hgImg(`ow/${id}.png`);
+  if (!im) return false;
+  const f = Math.min(frame, info.n - 1);
+  ctx.drawImage(im, f * info.w, Math.min(row, info.rows - 1) * info.h, info.w, info.h, Math.round(x + 8 - info.w / 2), Math.round(y + 16 - info.h), info.w, info.h);
+  return true;
+};
+/** 사람 모델 그림 번호: 위 0 · 아래 4 · 왼쪽 8 · 오른쪽 12, 걸을 때 +1/+3 */
+G.modelFrame = (dir, walking, parity) => ({ up: 0, down: 4, left: 8, right: 12 }[dir] ?? 4) + (walking ? (parity ? 3 : 1) : 0);
+/** 데리고 다니는 포켓몬 그림 번호: 위 0 · 아래 2 · 왼쪽 4 · 오른쪽 6 (+1 깡충) */
+G.followFrame = (dir, hop) => ({ up: 0, down: 2, left: 4, right: 6 }[dir] ?? 2) + (hop ? 1 : 0);
+/** 발밑 그림자 */
+G.drawShadow = function drawShadow(ctx, x, y, w = 12) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(x + 8, y + 15, w / 2, 2.5, 0, 0, Math.PI * 2); ctx.fill();
 };
 
 // 모든 원본 그림 미리 불러오기 (필요한 것만)
