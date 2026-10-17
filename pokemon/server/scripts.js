@@ -164,6 +164,8 @@ function compile(ls, env) {
       case 'special': if (/DSTFlag$/.test(a[0])) skipYesno = true; else ops.push(['special', a[0]]); break;
       case 'warp': case 'warpfacing': { const b = c === 'warpfacing' ? a.slice(1) : a; ops.push(['warp', b[0], +b[1], +b[2]]); break; }
       case 'trade': ops.push(['trade', a[0]]); break;
+      case 'changeblock': ops.push(['block', env.num(a[0]), env.num(a[1]), env.num(a[2])]); break;
+      case 'warpcheck': ops.push(['warpcheck']); break;
       default: break; // opentext, closetext, waitbutton, playmusic, cry … 는 화면 연출이라 건너뜀
     }
   }

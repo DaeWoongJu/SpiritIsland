@@ -861,6 +861,7 @@ function scriptPending() {
 }
 function endScript() {
   sc.active = false; sc.started = false; sc.follow = null;
+  if (sc.warpAfter) { sc.warpAfter = false; const wi = warpAt(ow.mapId, ow.x, ow.y); if (wi >= 0) setTimeout(() => doWarp(wi), 0); }
   G.showMonPreview = null;
   ow.emote = null;
   G.refreshObjects();
@@ -928,7 +929,10 @@ async function playScript(msg) {
   const out = msg.out || [];
   // 예/아니오 질문은 마지막 대사를 띄운 채로 묻는다
   let ask = null;
-  if (msg.wait === 'yn') { const last = out[out.length - 1]; if (last && last.text) { ask = last.text; out.pop(); } }
+  if (msg.wait === 'puzzle') {
+    const ok = await G.unownPuzzle(msg.puzzle || 0);
+    G.net.send({ t: 'scriptAnswer', id: msg.id, v: ok ? 1 : 0 });
+  } else if (msg.wait === 'yn') { const last = out[out.length - 1]; if (last && last.text) { ask = last.text; out.pop(); } }
   for (const x of out) {
     if (x.text) await G.say(x.text);
     else if (x.face !== undefined) { const r = objR(x.face); if (r) r.dir = OPP[ow.dir]; }
@@ -958,6 +962,11 @@ async function playScript(msg) {
     else if (x.sfx) G.sfx(x.sfx === 'item' ? 'level' : x.sfx);
     else if (x.shake) { G.sfx('hit'); await G.wait(20); }
     else if (x.warp) await G.teleport(x.warp.map, x.warp.x, x.warp.y, ow.dir, true);
+    else if (x.block) {
+      // 스크립트가 바꾼 블록 (석판 퍼즐을 풀면 바닥에 구멍 등)
+      if (!ow.blockOver.has(ow.mapId)) ow.blockOver.set(ow.mapId, new Map());
+      ow.blockOver.get(ow.mapId).set((x.block.y >> 1) * ow.map.w + (x.block.x >> 1), x.block.b);
+    } else if (x.warpcheck) { sc.warpAfter = true; }
   }
   if (msg.wait === 'yn') {
     const v = await G.yesno(ask);

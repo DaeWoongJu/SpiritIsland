@@ -248,7 +248,11 @@ function createVM(api) {
         }
         case 'mart': run.out.push({ mart: op[1] }); break;
         case 'std': std(p, run, op[1]); break;
-        case 'special': special(p, run, op[1]); break;
+        case 'special':
+          if (op[1] === 'UnownPuzzle') { run.puzzle = run.v; return wait(p, run, 'puzzle'); }
+          special(p, run, op[1]); break;
+        case 'block': run.out.push({ block: { x: op[1], y: op[2], b: op[3] } }); break;
+        case 'warpcheck': run.out.push({ warpcheck: true }); break;
         case 'warp': {
           if (!W.maps[op[1]]) break;
           d.map = op[1]; d.x = op[2]; d.y = op[3];
@@ -264,7 +268,7 @@ function createVM(api) {
 
   function wait(p, run, what) {
     run.waiting = what;
-    api.sendTo(p, { t: 'script', id: run.id, out: run.out, wait: what });
+    api.sendTo(p, { t: 'script', id: run.id, out: run.out, wait: what, puzzle: run.puzzle });
     run.out = [];
     api.save(p);
     api.sendState(p);
@@ -307,7 +311,7 @@ function createVM(api) {
       if (!run || run.id !== id || !run.waiting) return;
       const what = run.waiting;
       run.waiting = null;
-      if (what === 'yn') { run.v = value ? 1 : 0; step(p, run); }
+      if (what === 'yn' || what === 'puzzle') { run.v = value ? 1 : 0; step(p, run); }
       else if (what === 'battle') startBattleFor(p, run);
     },
     /** 배틀이 끝나면 이어서 */

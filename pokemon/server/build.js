@@ -14,7 +14,7 @@ const SRC_DIR = process.env.POKEGOLD_DIR || path.join(CACHE_DIR, 'pokegold');
 const WORLD_FILE = path.join(CACHE_DIR, 'world.json');
 const COMMIT = 'ef0201d8daf47e8b3ea1518eacf890f37d4cd5e8';
 const TARBALL = `https://codeload.github.com/pret/pokegold/tar.gz/${COMMIT}`;
-const BUILD_VERSION = 13; // 변환 방식이 바뀌면 올려서 다시 변환
+const BUILD_VERSION = 14; // 변환 방식이 바뀌면 올려서 다시 변환
 
 // ───────────── 내려받기 + 압축 풀기 ─────────────
 function download(url, redirects = 5) {

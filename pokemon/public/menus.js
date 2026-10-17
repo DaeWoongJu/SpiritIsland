@@ -633,3 +633,69 @@ G.optionsMenu = async function optionsMenu() {
   }
 };
 })();
+
+// ───────── 알프의유적 석판 퍼즐 ─────────
+(() => {
+const G = window.G;
+const PUZZLES = ['kabuto', 'omanyte', 'aerodactyl', 'hooh'];
+const PAL = [[248, 232, 184], [216, 168, 96], [144, 96, 48], [56, 32, 16]];
+const CELL = 24, OX = 8, OY = 0;
+const blocked = (r, c) => r === 5 && c >= 1 && c <= 4; // 아래 가운데는 글자 자리
+class UnownPuzzle {
+  constructor(id, done) {
+    this.file = `gfx/unown_puzzle/${PUZZLES[id & 3] || 'hooh'}.png`;
+    G.loadImg(this.file);
+    this.done = done;
+    this.board = new Array(36).fill(0);
+    // 원작처럼 테두리 16칸에 조각을 아무렇게나 놓는다
+    const spots = [];
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) if ((r === 0 || r === 5 || c === 0 || c === 5) && !blocked(r, c)) spots.push(r * 6 + c);
+    for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [spots[i], spots[j]] = [spots[j], spots[i]]; }
+    spots.slice(0, 16).forEach((s, k) => { this.board[s] = k + 1; });
+    this.cx = 0; this.cy = 0; this.held = 0; this.solvedT = 0;
+  }
+  piece(n) {
+    const im = G.img(this.file);
+    if (!im || !n) return null;
+    const key = `${this.file}:${n}`;
+    this.cache = this.cache || {};
+    if (!this.cache[key]) { const k = n - 1; this.cache[key] = G.colorize(im, PAL, false, (k % 4) * 12, Math.floor(k / 4) * 12, 12, 12); }
+    return this.cache[key];
+  }
+  solved() { for (let r = 1; r <= 4; r++) for (let c = 1; c <= 4; c++) if (this.board[r * 6 + c] !== (r - 1) * 4 + c) return false; return true; }
+  update() {
+    if (this.solvedT) { if (--this.solvedT === 0) this.done(true); return; }
+    if (G.tap('up') && this.cy > 0) { this.cy--; G.sfx('move'); }
+    if (G.tap('down') && this.cy < 5) { this.cy++; G.sfx('move'); }
+    if (G.tap('left') && this.cx > 0) { this.cx--; G.sfx('move'); }
+    if (G.tap('right') && this.cx < 5) { this.cx++; G.sfx('move'); }
+    if (G.input.pressed.a && !blocked(this.cy, this.cx)) {
+      const i = this.cy * 6 + this.cx;
+      if (this.held) { const t = this.board[i]; this.board[i] = this.held; this.held = t; G.sfx('select'); }
+      else if (this.board[i]) { this.held = this.board[i]; this.board[i] = 0; G.sfx('select'); }
+      if (!this.held && this.solved()) { this.solvedT = 60; G.sfx('level'); }
+    } else if (G.input.pressed.b) {
+      if (this.held) { const i = this.board.indexOf(0, 0); const back = this.board.findIndex((v, k) => !v && !blocked(Math.floor(k / 6), k % 6)); this.board[back >= 0 ? back : i] = this.held; this.held = 0; }
+      else this.done(false);
+    }
+  }
+  draw(ctx) {
+    ctx.fillStyle = '#382010'; ctx.fillRect(0, 0, 160, 144);
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
+      const x = OX + c * CELL, y = OY + r * CELL;
+      if (blocked(r, c)) continue;
+      const inner = r >= 1 && r <= 4 && c >= 1 && c <= 4;
+      ctx.fillStyle = inner ? '#58402c' : '#6c5038'; ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+      const p = this.piece(this.board[r * 6 + c]);
+      if (p) ctx.drawImage(p, x, y, CELL, CELL);
+    }
+    G.text(ctx, this.solvedT ? '맞췄다!' : 'A 집기·놓기  B 그만', OX + CELL + 4, OY + 5 * CELL + 7, '#f8e8b8');
+    const x = OX + this.cx * CELL, y = OY + this.cy * CELL;
+    const hp = this.piece(this.held);
+    if (hp) ctx.drawImage(hp, x + 3, y - 3, CELL, CELL);
+    ctx.strokeStyle = Math.floor(performance.now() / 250) % 2 ? '#f8f8f8' : '#f8c040'; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+  }
+}
+G.unownPuzzle = (id) => new Promise((resolve) => { const scr = new UnownPuzzle(id, (ok) => { G.pop(scr); resolve(ok); }); G.push(scr); });
+})();
