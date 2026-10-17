@@ -153,7 +153,7 @@ class BattleScene {
 
   async chooseAction(pr) {
     const name = pr.mon.name;
-    this.menuText = [G.josa(name, '은/는'), '무엇을 할까?'];
+    this.menuText = [G.josa(name, '은/는'), '무엇을', '할까?'];
     const pick = await G.choose(['싸운다', '포켓몬', '가방', this.view.kind === 'pvp' ? '항복' : '도망'], { x: 64, y: 96, w: 96, h: 48, cols: 2, lh: 16, noCancel: true, start: this.lastMain || 0 });
     this.lastMain = pick;
     this.menuText = null;
@@ -290,7 +290,7 @@ class BattleScene {
     }
     // 아래 글상자 자리
     G.box(ctx, 0, 96, 160, 48);
-    if (this.menuText) { G.box(ctx, 0, 96, 160, 48); this.menuText.forEach((l, k) => G.text(ctx, l, 8, 103 + k * 16)); }
+    if (this.menuText) { G.box(ctx, 0, 96, 160, 48); this.menuText.forEach((l, k) => G.text(ctx, l, 8, 101 + k * 13)); }
     else if (this.waiting && !this.queue.length && !G.uiBusy()) G.text(ctx, this.view.kind === 'pvp' || (this.view.sides[mine].slots.some((s) => s.ctrl !== G.me.id)) ? '상대를 기다리는 중…' : '…', 8, 103);
   }
 
@@ -345,10 +345,10 @@ class BattleScene {
 
   foeBox(ctx, d) {
     const m = d.mon;
-    G.text(ctx, m.name + this.genderMark(m), 8, 0);
-    if (!this.statusTag(ctx, d.status, 48, 9)) G.text(ctx, `:L${m.level}`, 48, 9);
-    this.hpBar(ctx, 30, 22, 48, d.hp, d.max);
-    ctx.fillStyle = G.BLACK; ctx.fillRect(8, 27, 1, 3); ctx.fillRect(8, 29, 76, 1);
+    G.text(ctx, m.name + this.genderMark(m), 8, 2);
+    if (!this.statusTag(ctx, d.status, 48, 11)) G.text(ctx, `:L${m.level}`, 48, 11);
+    this.hpBar(ctx, 30, 24, 48, d.hp, d.max);
+    ctx.fillStyle = G.BLACK; ctx.fillRect(8, 29, 1, 3); ctx.fillRect(8, 31, 76, 1);
   }
   myBox(ctx, d) {
     const m = d.mon;
@@ -368,7 +368,7 @@ class BattleScene {
   foeBoxSmall(ctx, d, x, y) {
     const m = d.mon;
     ctx.fillStyle = 'rgba(248,248,248,0.85)'; ctx.fillRect(x, y, 56, 22);
-    G.text(ctx, m.name, x + 2, y);
+    G.text(ctx, m.name, x + 2, y + 1);
     G.text(ctx, d.status ? { PSN: '독', TOX: '독', BRN: '화상', PAR: '마비', SLP: '잠듦', FRZ: '얼음' }[d.status] : `L${m.level}`, x + 54, y + 9, G.BLACK, 'right');
     this.miniBar(ctx, x + 2, y + 19, 40, d.hp, d.max);
   }

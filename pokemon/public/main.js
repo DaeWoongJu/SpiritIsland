@@ -102,7 +102,7 @@ function onMessage(msg) {
 }
 
 async function intro() {
-  G.ow.locked = 9999;
+  G.ow.locked = 600;
   await G.say([['포켓몬스터 골드에 어서 오세요!'], ['이 세계에는 포켓몬이라고 불리는', '신기한 생물이 살고 있단다.'], [`${G.josa(G.me.name, '이/가')} 사는 곳은 조토 지방의`, '연두마을!'], ['먼저 공박사님 연구소에 가서', '포켓몬을 받아 보렴.'], ['조작: 방향키 이동, Z 결정, X 취소', 'Enter 메뉴, X 누르고 달리기'], ['옆 컴퓨터의 친구도 같은 주소로', '들어오면 같은 세계에서 만나요!']]);
   G.ow.locked = 0;
 }
@@ -121,6 +121,10 @@ function fit() {
   canvas.style.width = `${160 * scale}px`;
   canvas.style.height = `${144 * scale}px`;
   wrap.style.height = `${144 * scale}px`;
+  // 화면에 보이는 크기 그대로 그려서 글자가 번지지 않게 (도트는 그대로 크게)
+  G.R = Math.max(1, Math.round(scale * (window.devicePixelRatio || 1)));
+  canvas.width = 160 * G.R;
+  canvas.height = 144 * G.R;
 }
 window.addEventListener('resize', fit);
 
@@ -139,6 +143,7 @@ function tick() {
   const waiters = G.frameWaiters; G.frameWaiters = [];
   for (const w of waiters) w();
   if (G.waitingBattle > 0) G.waitingBattle--;
+  if (G.battle && G.battle.closed) G.battle = null;
   G.updateFade();
   const top = G.top();
   if (top && top.update) top.update();
@@ -149,6 +154,8 @@ function tick() {
 }
 function draw() {
   if (!G.W) return;
+  ctx.setTransform(G.R || 1, 0, 0, G.R || 1, 0, 0);
+  ctx.imageSmoothingEnabled = false;
   if (G.battle && !G.battle.closed) G.battle.draw(ctx);
   else G.drawOverworld(ctx);
   if (G.showMonPreview) { const c = G.picCanvas(G.W.species[G.showMonPreview].front); if (c) { G.box(ctx, 44, 8, 72, 72); ctx.drawImage(c, 52 + (56 - c.width) / 2, 16 + 56 - c.height); } }
@@ -174,6 +181,9 @@ chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') chatInput.blur();
 });
 window.addEventListener('keydown', (e) => { if (e.code === 'KeyT' && !G.typing() && G.me) { e.preventDefault(); chatInput.focus(); } });
+// 채팅 칸에 커서가 남아 있어서 방향키가 안 먹는 일이 없도록
+chatInput.addEventListener('keydown', (e) => { if (/^Arrow/.test(e.key) && !chatInput.value) chatInput.blur(); });
+canvas.addEventListener('mousedown', () => { if (G.typing()) document.activeElement.blur(); });
 
 // ───────── 터치 버튼 ─────────
 for (const b of document.querySelectorAll('#pad [data-k]')) {

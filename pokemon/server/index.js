@@ -804,6 +804,13 @@ const handlers = {
     for (const q of online()) send(q.ws, { t: 'chat', name: p.data.name, text });
   },
   look(p, msg) { if (p.data) { p.data.look = Math.max(0, Math.min(3, msg.look | 0)); savePlayer(p); sendState(p); broadcastPlayers(); } },
+  unstuck(p) {
+    const d = p.data;
+    if (p.battle) return;
+    d.map = d.lastHeal.map; d.x = d.lastHeal.x; d.y = d.lastHeal.y; d.surf = false;
+    sendTo(p, { t: 'warp', map: d.map, x: d.x, y: d.y, dir: 'down', fade: true });
+    savePlayer(p);
+  },
   // 시험용 (POKEMON_DEBUG=1 로 켰을 때만)
   debug(p, msg) {
     if (!process.env.POKEMON_DEBUG) return;

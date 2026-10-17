@@ -371,14 +371,12 @@ function tryStep(dir) {
   if (ws && ws.includes(dir)) { bump(); return; }
   const wt = wallSides(coll);
   if (wt && wt.includes(OPP[dir])) { bump(); return; }
-  // 턱 뛰어넘기
-  const hop = hopDir(coll);
-  if (hop) {
-    if (hop.includes(dir) && !ow.surf) {
-      const lx = nx + dx, ly = ny + dy;
-      const lc = G.collAt(ow.mapId, lx, ly);
-      if (perm(lc) === 0 && !occupied(ow.mapId, lx, ly)) { startAnim(dx, dy, 2, true); return; }
-    }
+  // 턱 뛰어넘기: 원작처럼 턱 칸 위에 서서 그 방향으로 누르면 두 칸 뛴다
+  const hop = hopDir(curColl);
+  if (hop && hop.includes(dir) && !ow.surf) {
+    const lx = ow.x + dx * 2, ly = ow.y + dy * 2;
+    const lc = G.collAt(ow.mapId, lx, ly);
+    if (perm(lc) === 0 && !occupied(ow.mapId, lx, ly)) { startAnim(dx, dy, 2, true); return; }
     bump(); return;
   }
   const p = perm(coll);
@@ -489,8 +487,10 @@ async function doWarp(wi) {
 }
 G.doWarp = doWarp;
 
-G.fadeOut = function fadeOut() { return new Promise((r) => { ow.fadeDir = 1; ow.fadeDone = r; }); };
-G.fadeIn = function fadeIn() { return new Promise((r) => { ow.fadeDir = -1; ow.fadeDone = r; }); };
+// 앞의 화면 전환이 아직 끝나지 않았으면 먼저 끝난 것으로 처리 (기다리던 쪽이 멈춰 버리지 않게)
+function settleFade() { const r = ow.fadeDone; ow.fadeDone = null; if (r) r(); }
+G.fadeOut = function fadeOut() { settleFade(); return new Promise((r) => { ow.fadeDir = 1; ow.fadeDone = r; }); };
+G.fadeIn = function fadeIn() { settleFade(); return new Promise((r) => { ow.fadeDir = -1; ow.fadeDone = r; }); };
 G.updateFade = function updateFade() {
   if (!ow.fadeDir) return;
   ow.fade = Math.max(0, Math.min(1, ow.fade + ow.fadeDir * 0.125));
@@ -574,7 +574,7 @@ function checkTrainers() {
 }
 
 async function spotted(r, dist) {
-  ow.locked = 9999;
+  ow.locked = 600;
   r.busy = true;
   ow.emote = { x: r.x, y: r.y };
   G.sfx('select');

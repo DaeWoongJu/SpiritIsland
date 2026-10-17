@@ -573,10 +573,12 @@ G.optionsMenu = async function optionsMenu() {
       `효과음: ${s.mute ? '끔' : '켬'}`,
       `B 누르고 달리기: ${s.run === false ? '끔' : '켬'}`,
       `옷 색깔: ${['빨강', '파랑', '초록', '갈색'][G.me.look & 3]}`,
+      '갇혔어요 (포켓몬센터로)',
       '닫기',
     ];
     const k = await G.choose(items, { x: 0, y: 0, w: 160, rows: items.length });
-    if (k < 0 || k === 5) break;
+    if (k < 0 || k === 6) break;
+    if (k === 5) { if (await G.yesno('마지막으로 들른 포켓몬센터로 돌아가겠습니까?')) { G.net.send({ t: 'unstuck' }); return 'close'; } continue; }
     if (k === 0) s.fastText = !s.fastText;
     if (k === 1) s.manualText = !s.manualText;
     if (k === 2) s.mute = !s.mute;
