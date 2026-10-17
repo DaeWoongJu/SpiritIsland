@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>포켓몬스터 골드 온라인</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap"><canvas id="screen" width="160" height="144"></canvas></div>
+
+<div id="login">
+  <div class="card">
+    <h1><span class="gold">포켓몬스터</span> 골드</h1>
+    <p class="sub">둘이 함께하는 조토 지방 모험</p>
+    <div id="loading">원본 자료를 불러오는 중…</div>
+    <div id="login-form" class="hidden">
+      <label>트레이너 이름 <input id="name" maxlength="10" autocomplete="off" placeholder="예: 골드"></label>
+      <div class="looks">
+        <span>옷 색깔</span>
+        <button class="look sel" data-look="0" style="--c:#e83820">빨강</button>
+        <button class="look" data-look="1" style="--c:#3058e0">파랑</button>
+        <button class="look" data-look="2" style="--c:#28a038">초록</button>
+        <button class="look" data-look="3" style="--c:#905828">갈색</button>
+      </div>
+      <button id="start">모험 시작!</button>
+      <p id="saves-title" class="hidden">이어하기</p>
+      <div id="saves"></div>
+      <p class="help">같은 이름으로 들어오면 저장된 곳에서 이어서 해요.<br>옆 컴퓨터는 서버 창에 나온 <b>http://192.168.x.x:3600</b> 주소로 들어오세요.</p>
+    </div>
+  </div>
+</div>
+
+<div id="side">
+  <div class="keys">
+    <b>조작</b><br>
+    방향키/WASD 이동<br>
+    Z·스페이스 = A (결정·말 걸기)<br>
+    X = B (취소, 누르고 걸으면 달리기)<br>
+    Enter = 메뉴 · Shift = 자전거<br>
+    T = 채팅
+  </div>
+  <div id="chat">
+    <div id="chat-log"></div>
+    <input id="chat-input" maxlength="80" placeholder="T 를 눌러 채팅 (Enter 보내기)">
+  </div>
+</div>
+
+<div id="pad">
+  <div class="dpad">
+    <button data-k="up" class="u">▲</button><button data-k="left" class="l">◀</button><button data-k="right" class="r">▶</button><button data-k="down" class="d">▼</button>
+  </div>
+  <div class="mid"><button data-k="select">SELECT</button><button data-k="start">START</button></div>
+  <div class="ab"><button data-k="b" class="b">B</button><button data-k="a" class="a">A</button></div>
+</div>
+
+<script src="gfx.js"></script>
+<script src="ui.js"></script>
+<script src="overworld.js"></script>
+<script src="battle-ui.js"></script>
+<script src="menus.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

@@ -31,7 +31,7 @@ try {
     if (Test-Path $old) { Remove-Item $old -Force -ErrorAction SilentlyContinue }
     if (Test-Path $exe) { Rename-Item $exe "$name.old" -ErrorAction SilentlyContinue }
   }
-  robocopy $src.FullName $root /E /R:1 /W:1 /XD node_modules .git /XF .shortcut-created .shortcut-created-arnak .shortcut-created-champions .shortcut-created-keepout .shortcut-created-lotr .shortcut-created-unlock .version /NFL /NDL /NJH /NJS /NP | Out-Null
+  robocopy $src.FullName $root /E /R:1 /W:1 /XD node_modules .git /XF .shortcut-created .shortcut-created-arnak .shortcut-created-champions .shortcut-created-keepout .shortcut-created-lotr .shortcut-created-unlock .shortcut-created-pokemon .version /NFL /NDL /NJH /NJS /NP | Out-Null
   foreach ($name in $exes) {
     $exe = Join-Path $root $name
     $old = Join-Path $root "$name.old"

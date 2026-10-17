@@ -6,11 +6,12 @@
 //         node scripts/make-icons.js keepout    (킵 더 히어로즈 아웃)
 //         node scripts/make-icons.js lotr       (반지의 제왕: 원정대의 운명)
 //         node scripts/make-icons.js unlock     (언락!)
+//         node scripts/make-icons.js pokemon    (포켓몬스터 골드)
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const SUB = ['arnak', 'champions', 'keepout', 'lotr', 'unlock'].includes(process.argv[2]) ? process.argv[2] : null;
+const SUB = ['arnak', 'champions', 'keepout', 'lotr', 'unlock', 'pokemon'].includes(process.argv[2]) ? process.argv[2] : null;
 const dir = SUB ? path.join(__dirname, '..', SUB, 'public') : path.join(__dirname, '..', 'public', 'icons');
 const svg = fs.readFileSync(path.join(dir, 'icon.svg'), 'utf8');
 

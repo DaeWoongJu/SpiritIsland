@@ -1,0 +1,43 @@
+@font-face { font-family: 'Galmuri9'; src: url('fonts/Galmuri9.woff2') format('woff2'); font-display: block; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #1c1a24; color: #eee; font-family: 'Galmuri9', system-ui, sans-serif; overflow: hidden; }
+#wrap { display: flex; justify-content: center; align-items: center; padding-top: 4px; }
+#screen { image-rendering: pixelated; image-rendering: crisp-edges; background: #f8f8f8; box-shadow: 0 0 0 4px #2c2838, 0 8px 30px rgba(0,0,0,.6); border-radius: 2px; }
+.hidden { display: none !important; }
+#login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 30%, #3a3050, #141218); z-index: 10; }
+#login .card { width: min(420px, 92vw); background: #f8f0d8; color: #201810; padding: 24px 26px; border-radius: 10px; box-shadow: 0 0 0 4px #201810, 0 0 0 8px #e8c040, 0 20px 50px rgba(0,0,0,.6); }
+#login h1 { margin: 0 0 4px; font-size: 30px; text-align: center; letter-spacing: 2px; }
+#login h1 .gold { color: #c08800; }
+#login .sub { text-align: center; margin: 0 0 18px; color: #806040; }
+#login label { display: block; margin: 10px 0; }
+#login input { width: 100%; margin-top: 6px; font: inherit; font-size: 18px; padding: 8px 10px; border: 3px solid #201810; border-radius: 6px; background: #fff; }
+.looks { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 10px 0 14px; }
+.look { font: inherit; padding: 6px 10px; border: 3px solid #201810; border-radius: 6px; background: #fff; cursor: pointer; border-left: 10px solid var(--c); }
+.look.sel { background: #ffe890; }
+#start { width: 100%; font: inherit; font-size: 20px; padding: 10px; border: 3px solid #201810; border-radius: 8px; background: #e83820; color: #fff; cursor: pointer; }
+#start:hover { background: #ff5030; }
+#saves-title { margin: 16px 0 6px; font-weight: bold; }
+#saves { display: flex; flex-direction: column; gap: 6px; }
+.save { font: inherit; text-align: left; padding: 8px 10px; border: 2px solid #201810; border-radius: 6px; background: #fff; cursor: pointer; }
+.save:hover { background: #ffe890; }
+.help { font-size: 12px; color: #705838; line-height: 1.6; margin-top: 14px; }
+#loading { text-align: center; padding: 20px 0; }
+#side { position: fixed; left: 8px; bottom: 8px; width: 230px; font-size: 12px; color: #bbb; }
+#side .keys { background: rgba(0,0,0,.35); padding: 8px 10px; border-radius: 6px; line-height: 1.6; margin-bottom: 6px; }
+#chat-log { max-height: 140px; overflow-y: auto; background: rgba(0,0,0,.35); padding: 4px 8px; border-radius: 6px 6px 0 0; line-height: 1.5; }
+#chat-log:empty { display: none; }
+#chat-input { width: 100%; font: inherit; padding: 6px 8px; border: none; border-radius: 0 0 6px 6px; background: #2a2636; color: #fff; }
+#pad { display: none; }
+@media (max-width: 900px) { #side { display: none; } }
+@media (pointer: coarse) {
+  #pad { display: flex; position: fixed; left: 0; right: 0; bottom: 0; height: 190px; justify-content: space-between; align-items: center; padding: 10px 18px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  #pad button { font: inherit; color: #eee; background: #3a3648; border: none; border-radius: 10px; }
+  #pad button.on { background: #6a6488; }
+  .dpad { position: relative; width: 150px; height: 150px; }
+  .dpad button { position: absolute; width: 50px; height: 50px; font-size: 20px; }
+  .dpad .u { left: 50px; top: 0; } .dpad .d { left: 50px; bottom: 0; } .dpad .l { left: 0; top: 50px; } .dpad .r { right: 0; top: 50px; }
+  .mid { display: flex; gap: 10px; align-self: flex-end; margin-bottom: 10px; } .mid button { padding: 6px 10px; font-size: 11px; border-radius: 12px; }
+  .ab { position: relative; width: 140px; height: 120px; }
+  .ab button { position: absolute; width: 60px; height: 60px; border-radius: 50%; font-size: 22px; background: #9a2040; }
+  .ab .a { right: 0; top: 0; } .ab .b { left: 0; bottom: 0; }
+}

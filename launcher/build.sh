@@ -1,5 +1,5 @@
 #!/bin/bash
-# Windows 실행 아이콘(정령섬.exe, 아르낙.exe, 챔피언스.exe, 킵더히어로즈.exe, 반지의제왕.exe, 언락.exe)을 빌드한다. 필요: mingw-w64 (apt install gcc-mingw-w64-x86-64)
+# Windows 실행 아이콘(정령섬.exe, 아르낙.exe, 챔피언스.exe, 킵더히어로즈.exe, 반지의제왕.exe, 언락.exe, 포켓몬골드.exe)을 빌드한다. 필요: mingw-w64 (apt install gcc-mingw-w64-x86-64)
 set -e
 cd "$(dirname "$0")"
 LIBS="-lws2_32 -lshell32 -lole32 -luuid -ladvapi32"
@@ -15,5 +15,7 @@ x86_64-w64-mingw32-windres -c 65001 launcher-lotr.rc -O coff -o launcher-lotr.re
 x86_64-w64-mingw32-gcc -O2 -s -municode -mwindows -include config-lotr.h -o "../반지의제왕.exe" launcher.c launcher-lotr.res $LIBS
 x86_64-w64-mingw32-windres -c 65001 launcher-unlock.rc -O coff -o launcher-unlock.res
 x86_64-w64-mingw32-gcc -O2 -s -municode -mwindows -include config-unlock.h -o "../언락.exe" launcher.c launcher-unlock.res $LIBS
-rm -f launcher.res launcher-arnak.res launcher-champions.res launcher-keepout.res launcher-lotr.res launcher-unlock.res
-echo "빌드 완료: ../정령섬.exe, ../아르낙.exe, ../챔피언스.exe, ../킵더히어로즈.exe, ../반지의제왕.exe, ../언락.exe"
+x86_64-w64-mingw32-windres -c 65001 launcher-pokemon.rc -O coff -o launcher-pokemon.res
+x86_64-w64-mingw32-gcc -O2 -s -municode -mwindows -include config-pokemon.h -o "../포켓몬골드.exe" launcher.c launcher-pokemon.res $LIBS
+rm -f launcher.res launcher-arnak.res launcher-champions.res launcher-keepout.res launcher-lotr.res launcher-unlock.res launcher-pokemon.res
+echo "빌드 완료: ../정령섬.exe, ../아르낙.exe, ../챔피언스.exe, ../킵더히어로즈.exe, ../반지의제왕.exe, ../언락.exe, ../포켓몬골드.exe"
