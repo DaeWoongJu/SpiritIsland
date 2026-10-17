@@ -860,7 +860,7 @@ function scriptPending() {
   return new Promise((r) => { const prev = sc.done; sc.done = () => { if (prev) prev(); r(); }; });
 }
 function endScript() {
-  sc.active = false; sc.started = false;
+  sc.active = false; sc.started = false; sc.follow = null;
   G.showMonPreview = null;
   ow.emote = null;
   G.refreshObjects();
@@ -907,9 +907,20 @@ async function moveAlong(target, steps) {
     if (st.k === 'turn') { await G.wait(4); continue; }
     const len = st.k === 'jump' ? 2 : 1;
     for (let k = 0; k < len; k++) {
+      const px = r.x, py = r.y;
       r.x += dx; r.y += dy; r.parity = !r.parity;
-      r.anim = { dx, dy, t: 0, frames: Math.round(16 / (st.sp || 1)) };
-      while (r.anim) await G.frame();
+      const frames = Math.round(16 / (st.sp || 1));
+      r.anim = { dx, dy, t: 0, frames };
+      // 따라가기 중이면 내가 앞사람이 있던 칸으로 한 걸음
+      if (sc.follow === target && !ow.anim) {
+        const fx = Math.sign(px - ow.x), fy = Math.sign(py - ow.y);
+        if ((fx || fy) && Math.abs(px - ow.x) + Math.abs(py - ow.y) === 1) {
+          ow.dir = fx > 0 ? 'right' : fx < 0 ? 'left' : fy > 0 ? 'down' : 'up';
+          startAnim(fx, fy, 1, false);
+          ow.anim.frames = frames; ow.anim.script = true;
+        }
+      }
+      while (r.anim || ow.anim) await G.frame();
     }
   }
 }
@@ -926,6 +937,8 @@ async function playScript(msg) {
     else if (x.hide !== undefined) { const r = objR(x.hide); if (r) r.visible = false; }
     else if (x.show !== undefined) { const r = objR(x.show); if (r) { r.visible = true; r.o && (r.dir = r.dir || 'down'); } }
     else if (x.mvobj !== undefined) { const r = objR(x.mvobj); if (r) { r.x = x.x; r.y = x.y; r.home = { x: x.x, y: x.y }; } }
+    else if (x.follow !== undefined) { if (x.who === -1) sc.follow = x.follow; }
+    else if (x.stopfollow) sc.follow = null;
     else if (x.emote !== undefined) {
       const r = objR(x.emote);
       ow.emote = r ? { x: r.x, y: r.y } : { x: ow.x, y: ow.y };

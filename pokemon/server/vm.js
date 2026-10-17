@@ -214,6 +214,11 @@ function createVM(api) {
         case 'move': {
           const i = tgt(op[1]);
           const steps = S.moves[op[2]] || [];
+          if (run.follow && run.follow.who === -1 && i === run.follow.leader) {
+            // 따라가기: 앞사람이 걸은 길을 한 칸 뒤에서 그대로 (첫 걸음은 앞사람이 있던 칸으로)
+            const walk = steps.filter((x) => x.k === 'step' || x.k === 'jump');
+            if (walk.length) { d.dir = walk[walk.length - 1].d; }
+          }
           if (i === -1) for (const s of steps) {
             if (s.k === 'step' || s.k === 'jump') { const [dx, dy] = STEP[s.d] || [0, 0]; const k = s.k === 'jump' ? 2 : 1; d.x += dx * k; d.y += dy * k; d.dir = s.d; }
             else if (s.k === 'turn') d.dir = s.d;
@@ -222,6 +227,8 @@ function createVM(api) {
           break;
         }
         case 'emote': run.out.push({ emote: tgt(op[1]) }); break;
+        case 'follow': run.follow = { leader: tgt(op[1]), who: tgt(op[2]) }; run.out.push({ follow: tgt(op[1]), who: tgt(op[2]) }); break;
+        case 'stopfollow': run.follow = null; run.out.push({ stopfollow: true }); break;
         case 'last': run.last = tgt(op[1]); break;
         case 'pic': run.out.push({ pic: op[1] }); break;
         case 'closepic': run.out.push({ closepic: true }); break;

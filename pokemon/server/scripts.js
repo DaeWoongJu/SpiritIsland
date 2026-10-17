@@ -142,6 +142,8 @@ function compile(ls, env) {
       case 'applymovement': ops.push(['move', target(a[0]), L(a[1])]); break;
       case 'applymovementlasttalked': ops.push(['move', 'last', L(a[0])]); break;
       case 'showemote': ops.push(['emote', target(a[1])]); break;
+      case 'follow': ops.push(['follow', target(a[0]), target(a[1])]); break;
+      case 'stopfollow': ops.push(['stopfollow']); break;
       case 'setlasttalked': ops.push(['last', target(a[0])]); break;
       case 'pokepic': ops.push(['pic', sp(a[0])]); break;
       case 'closepokepic': ops.push(['closepic']); break;
@@ -172,7 +174,8 @@ function compile(ls, env) {
   for (const op of ops) {
     if (['jeq', 'jne', 'jgt', 'jlt', 'setval', 'addval', 'random'].includes(op[0])) op[1] = val(op[1]);
     if (op[0] === 'loadvar') op[2] = val(op[2]);
-    if (['hide', 'show', 'mvobj', 'turn', 'move', 'emote', 'last'].includes(op[0])) op[1] = objIdx(op[1]);
+    if (['hide', 'show', 'mvobj', 'turn', 'move', 'emote', 'last', 'follow'].includes(op[0])) op[1] = objIdx(op[1]);
+    if (op[0] === 'follow') op[2] = objIdx(op[2]);
     if (['jt', 'jf', 'jmp', 'call'].includes(op[0])) op[1] = pcOf(op[1]);
     else if (['jeq', 'jne', 'jgt', 'jlt'].includes(op[0])) op[2] = pcOf(op[2]);
     else if (op[0] === 'move') { const lab = op[2]; if (!moves[lab] && labelLines.has(lab)) moves[lab] = parseMovement(labelLines.get(lab)); if (!moves[lab]) op[0] = 'nop'; }
