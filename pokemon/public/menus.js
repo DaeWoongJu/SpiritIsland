@@ -662,9 +662,18 @@ class UnownPuzzle {
     if (!this.cache[key]) { const k = n - 1; this.cache[key] = G.colorize(im, PAL, false, (k % 4) * 12, Math.floor(k / 4) * 12, 12, 12); }
     return this.cache[key];
   }
-  solved() { for (let r = 1; r <= 4; r++) for (let c = 1; c <= 4; c++) if (this.board[r * 6 + c] !== (r - 1) * 4 + c) return false; return true; }
+  /** 그림이 다 맞았는지: 가운데가 아니어도 16조각이 4×4로 제자리에 모여 있으면 맞춘 것 */
+  solved() {
+    const at = this.board.indexOf(1);
+    if (at < 0) return false;
+    const r0 = Math.floor(at / 6), c0 = at % 6;
+    if (r0 > 2 || c0 > 2) return false;
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) if (this.board[(r0 + r) * 6 + c0 + c] !== r * 4 + c + 1) return false;
+    return true;
+  }
   update() {
     if (this.solvedT) { if (--this.solvedT === 0) this.done(true); return; }
+    this.peek = !!G.input.held.select; // SELECT 누르는 동안 완성 그림 보기
     if (G.tap('up') && this.cy > 0) { this.cy--; G.sfx('move'); }
     if (G.tap('down') && this.cy < 5) { this.cy++; G.sfx('move'); }
     if (G.tap('left') && this.cx > 0) { this.cx--; G.sfx('move'); }
@@ -674,6 +683,7 @@ class UnownPuzzle {
       if (this.held) { const t = this.board[i]; this.board[i] = this.held; this.held = t; G.sfx('select'); }
       else if (this.board[i]) { this.held = this.board[i]; this.board[i] = 0; G.sfx('select'); }
       if (!this.held && this.solved()) { this.solvedT = 60; G.sfx('level'); }
+      else this.wrong = !this.held && [1, 2, 3, 4].every((r) => [1, 2, 3, 4].every((c) => this.board[r * 6 + c]));
     } else if (G.input.pressed.b) {
       if (this.held) { const i = this.board.indexOf(0, 0); const back = this.board.findIndex((v, k) => !v && !blocked(Math.floor(k / 6), k % 6)); this.board[back >= 0 ? back : i] = this.held; this.held = 0; }
       else this.done(false);
@@ -689,7 +699,10 @@ class UnownPuzzle {
       const p = this.piece(this.board[r * 6 + c]);
       if (p) ctx.drawImage(p, x, y, CELL, CELL);
     }
-    G.text(ctx, this.solvedT ? '맞췄다!' : 'A 집기·놓기  B 그만', OX + CELL + 4, OY + 5 * CELL + 7, '#f8e8b8');
+    if (this.peek) {
+      for (let n = 1; n <= 16; n++) { const p = this.piece(n); if (p) ctx.drawImage(p, OX + CELL * (1 + (n - 1) % 4), OY + CELL * (1 + Math.floor((n - 1) / 4)), CELL, CELL); }
+    }
+    G.text(ctx, this.solvedT ? '맞췄다!' : this.wrong ? '틀린 조각 있음! SELECT 정답' : 'A 집기 B 그만 SELECT 정답', OX + CELL + 2, OY + 5 * CELL + 7, '#f8e8b8');
     const x = OX + this.cx * CELL, y = OY + this.cy * CELL;
     const hp = this.piece(this.held);
     if (hp) ctx.drawImage(hp, x + 3, y - 3, CELL, CELL);
