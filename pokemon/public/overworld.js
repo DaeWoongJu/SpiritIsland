@@ -154,23 +154,32 @@ G.enterMap = function enterMap(mapId, x, y, dir) {
 G.landmarkName = (lm) => (G.LANDMARKS && G.LANDMARKS[lm]) || lm;
 
 // ───────── 그리기 ─────────
+/** 하트골드 모드에서는 DS처럼 더 넓게 보이도록 필드를 작게 그린다 (화면 픽셀에 딱 맞는 배율만) */
+function viewZoom() {
+  if (!G.useHG() || !G.R || G.R < 2) return 1;
+  return Math.max(1, Math.round(G.R * 0.55)) / G.R;
+}
 function screenOrigin() {
   let px = ow.x * 16, py = ow.y * 16;
   if (ow.anim) { const k = ow.anim.t / ow.anim.frames; px += ow.anim.dx * 16 * ow.anim.len * k; py += ow.anim.dy * 16 * ow.anim.len * k; }
-  return { left: Math.round(px - 64), top: Math.round(py - 64), px, py };
+  const z = viewZoom(), vw = 160 / z, vh = 144 / z, snap = (v) => Math.round(v * G.R * z) / (G.R * z);
+  return { left: z === 1 ? Math.round(px - 64) : snap(px - (vw - 16) / 2), top: z === 1 ? Math.round(py - 64) : snap(py - (vh - 16) / 2), px, py, z, vw, vh };
 }
 
 G.drawOverworld = function drawOverworld(ctx) {
   const m = ow.map;
   if (!m) return;
   const meta = G.metatiles(m, ow.flash);
-  const { left, top } = screenOrigin();
+  const { left, top, z, vw, vh } = screenOrigin();
   ctx.fillStyle = '#f8f8f8';
   ctx.fillRect(0, 0, 160, 144);
+  ctx.save();
+  ctx.scale(z, z);
+  ow.view = { w: vw, h: vh };
   if (meta) {
     const bx0 = Math.floor(left / 32), by0 = Math.floor(top / 32);
-    for (let by = by0; by <= by0 + 5; by++) {
-      for (let bx = bx0; bx <= bx0 + 5; bx++) {
+    for (let by = by0; by <= by0 + Math.ceil(vh / 32) + 1; by++) {
+      for (let bx = bx0; bx <= bx0 + Math.ceil(vw / 32) + 1; bx++) {
         let block;
         let sheet = meta;
         if (bx >= 0 && by >= 0 && bx < m.w && by < m.h) block = G.blockAt(ow.mapId, bx, by);
@@ -219,6 +228,7 @@ G.drawOverworld = function drawOverworld(ctx) {
     ctx.fillStyle = '#101010'; ctx.fillRect(x + 3, y, 10, 1); ctx.fillRect(x + 3, y + 13, 10, 1); ctx.fillRect(x + 3, y, 1, 14); ctx.fillRect(x + 12, y, 1, 14);
     ctx.fillRect(x + 7, y + 2, 2, 7); ctx.fillRect(x + 7, y + 10, 2, 2);
   }
+  ctx.restore();
   // 어두운 동굴: 플래시 없으면 주변만 보이게
   if (m.palette === 'DARK' && !ow.flash) {
     const g = ctx.createRadialGradient(72, 68, 10, 72, 68, 40);
@@ -255,7 +265,8 @@ function drawObj(ctx, r, left, top, t) {
   if (!spr) return;
   const p = objPixel(r);
   const x = p.x - left, y = p.y - top - 4;
-  if (x < -16 || y < -20 || x > 160 || y > 144) return;
+  const vw = ow.view ? ow.view.w : 160, vh = ow.view ? ow.view.h : 144;
+  if (x < -32 || y < -32 || x > vw + 16 || y > vh + 16) return;
   if (G.useHG()) {
     const mon = spr.kind === 'ICON' ? spr.mon : null;
     const id = mon ? G.hg.follow[mon] : G.hg.npc[o.sprite];
