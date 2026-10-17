@@ -13,7 +13,7 @@ const SRC_DIR = process.env.POKEGOLD_DIR || path.join(CACHE_DIR, 'pokegold');
 const WORLD_FILE = path.join(CACHE_DIR, 'world.json');
 const COMMIT = 'ef0201d8daf47e8b3ea1518eacf890f37d4cd5e8';
 const TARBALL = `https://codeload.github.com/pret/pokegold/tar.gz/${COMMIT}`;
-const BUILD_VERSION = 10; // 변환 방식이 바뀌면 올려서 다시 변환
+const BUILD_VERSION = 11; // 변환 방식이 바뀌면 올려서 다시 변환
 
 // ───────────── 내려받기 + 압축 풀기 ─────────────
 function download(url, redirects = 5) {
@@ -785,12 +785,13 @@ function build(log = console.log) {
       const lab = ev.labels.get(cb[1]);
       if (!lab) continue;
       let flag = null, need = true;
+      const jumps = {}; // .라벨 → 그 라벨로 뛰어갈 때의 조건
       for (const line of linesWithLocals(ev, cb[1])) {
         let m;
         if ((m = line.match(/^checkevent\s+(EVENT_\w+)/))) { flag = m[1]; continue; }
-        if (/^iffalse/.test(line)) { need = true; continue; }
-        if (/^iftrue/.test(line)) { need = false; continue; }
-        if (/^\./.test(line)) { flag = null; continue; }
+        if ((m = line.match(/^iffalse\s+(\.\w+)/))) { if (flag) jumps[m[1]] = { flag, need: false }; need = true; continue; }
+        if ((m = line.match(/^iftrue\s+(\.\w+)/))) { if (flag) jumps[m[1]] = { flag, need: true }; need = false; continue; }
+        if (/^\./.test(line)) { const j = jumps[line]; flag = j ? j.flag : null; need = j ? j.need : true; continue; }
         if ((m = line.match(/^changeblock\s+(\d+)\s*,\s*(\d+)\s*,\s*(\$?\w+)/)) && flag) mp.tileChanges.push({ flag, need, x: +m[1], y: +m[2], b: num(m[3]) });
       }
     }

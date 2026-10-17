@@ -25,11 +25,12 @@ G.openStartMenu = async function openStartMenu() {
     if (G.me.party.length) items.push(['포켓몬', () => G.partyScreen({ mode: 'field' })]);
     items.push(['가방', () => G.bagScreen({ mode: 'field' })]);
     items.push([G.me.name, G.trainerCard]);
+    items.push(['미션', G.missionScreen]);
     items.push(['친구', G.friendsMenu]);
     items.push(['레포트', async () => { if (await G.yesno('지금까지의 활약을 레포트에 기록하겠습니까?')) G.net.send({ t: 'save' }); }]);
     items.push(['설정', G.optionsMenu]);
     items.push(['닫기', null]);
-    const i = await G.choose(items.map((x) => x[0]), { x: 160 - 80, y: 0, w: 80, start: Math.min(last, items.length - 1), rows: items.length });
+    const i = await G.choose(items.map((x) => x[0]), { x: 160 - 80, y: 0, w: 80, start: Math.min(last, items.length - 1), rows: Math.min(8, items.length) });
     if (i < 0 || !items[i][1]) break;
     last = i; G.lastStart = i;
     const r = await items[i][1]();
@@ -414,6 +415,46 @@ G.trainerCard = function trainerCard() {
           ctx.fillStyle = '#101010'; if (got) { ctx.fillRect(x + 6, y + 6, 2, 2); }
         });
         G.text(ctx, '조토', 156, 78, '#806040', 'right');
+      },
+    };
+    G.push(scr);
+  });
+};
+
+// ───────── 미션 ─────────
+G.missionScreen = function missionScreen() {
+  return new Promise((resolve) => {
+    let page = 0, scroll = 0;
+    const scr = {
+      update() {
+        if (G.input.pressed.b || G.input.pressed.a) { G.pop(scr); resolve(); return; }
+        if (G.tap('left') || G.tap('right')) { page = 1 - page; scroll = 0; G.sfx('move'); }
+        if (G.tap('down')) scroll++;
+        if (G.tap('up')) scroll = Math.max(0, scroll - 1);
+      },
+      draw(ctx) {
+        const m = G.me.mission;
+        ctx.fillStyle = '#f8f8f8'; ctx.fillRect(0, 0, 160, 144);
+        ctx.fillStyle = '#c08800'; ctx.fillRect(0, 0, 160, 15);
+        G.text(ctx, page === 0 ? `스토리 ${Math.min(m.n + 1, m.total)}/${m.total}` : '함께 미션', 4, 2, '#f8f8f8');
+        G.text(ctx, '◀▶', 156, 2, '#f8f8f8', 'right');
+        const lines = [];
+        if (page === 0) {
+          if (!m.cur) lines.push(['모든 스토리를 깼다! 축하합니다!', G.BLACK]);
+          else {
+            lines.push([`★ ${m.cur.title}`, '#c03028']);
+            for (const g of m.cur.goals) for (const [k, l] of G.wrap(ctx, g.text, 136).entries()) lines.push([(k ? '   ' : g.done ? '✔ ' : '□ ') + l, g.done ? '#888' : G.BLACK]);
+            lines.push(['', G.BLACK]);
+            for (const p of m.cur.intro || []) for (const l of G.wrap(ctx, G.fill(p.join(' ')), 148)) lines.push([l, '#505050']);
+          }
+          if (m.done.length) { lines.push(['', G.BLACK]); lines.push(['지난 미션', '#c08800']); for (const t of m.done.slice().reverse()) lines.push([`✔ ${t}`, '#888']); }
+        } else {
+          lines.push(['함께 다니면 미션 진행을', '#505050']);
+          lines.push(['친구와 같이 나눠요.', '#505050']);
+          for (const c of m.coop) { lines.push([`${c.done ? '✔' : '□'} ${c.title} (${c.have}/${c.n})`, c.done ? '#888' : G.BLACK]); for (const l of G.wrap(ctx, c.text, 140)) lines.push([`   ${l}`, '#505050']); }
+        }
+        scroll = Math.min(scroll, Math.max(0, lines.length - 10));
+        lines.slice(scroll, scroll + 10).forEach(([l, col], k) => G.text(ctx, l, 4, 18 + k * 12.5, col));
       },
     };
     G.push(scr);

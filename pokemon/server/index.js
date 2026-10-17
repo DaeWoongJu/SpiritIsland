@@ -12,6 +12,7 @@ const { ensureWorld, SRC_DIR } = require('./build');
 const dex = require('./dex');
 const ko = require('./ko');
 const { Battle } = require('./battle');
+const { STORY, COOP } = require('./missions');
 
 const PORT = Number(process.env.PORT) || 3600;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -119,13 +120,14 @@ function broadcastPlayers() {
 function sendState(p) {
   if (!p.data) return;
   const d = p.data;
+  if (!p.mChecking) checkMissions(p);
   sendTo(p, {
     t: 'state',
     me: {
       id: p.id, name: d.name, look: d.look, map: d.map, x: d.x, y: d.y, dir: d.dir, surf: !!d.surf, money: d.money,
       party: d.party.map((m) => dex.publicMon(m, true)), box: d.box.map((m) => dex.publicMon(m, false)),
       bag: d.bag, badges: d.badges, flags: d.flags, beaten: d.beaten, seen: d.seen, caught: d.caught, visited: d.visited, repel: d.repel,
-      team: p.team || null, playMs: d.playMs + (Date.now() - (p.since || Date.now())), fruit: d.fruit,
+      team: p.team || null, mission: missionView(p), playMs: d.playMs + (Date.now() - (p.since || Date.now())), fruit: d.fruit,
     },
   });
 }
@@ -260,12 +262,12 @@ function wildBattle(p, kind, rod, fixed) {
   if (q) say(q, `${ko.josa(p.data.name, '이/가')} 야생 포켓몬을 만났다! 함께 싸우자!`, { toast: true });
 }
 
-function trainerBattle(p, mapId, idx) {
-  const o = obj(mapId, idx);
+function trainerBattle(p, mapId, idx, special) {
+  const o = special ? { trainer: special.key, beaten: special.beaten } : obj(mapId, idx);
   if (!o || !o.trainer || p.battle || !canFight(p)) return;
   const tr = W.trainers[o.trainer];
   if (!tr) return;
-  if (p.data.beaten[o.trainer]) return;
+  if (p.data.beaten[o.trainer] && !special) return;
   const cls = W.trainerClasses.find((c) => c.id === tr.cls) || {};
   const party = tr.party.map((x) => {
     const m = dex.makeMon(x.species, x.level, { moves: x.moves, item: x.item, dvs: { atk: 9, def: 8, spd: 8, spc: 8 } });
@@ -285,7 +287,7 @@ function trainerBattle(p, mapId, idx) {
       { name, ctrls: [{ id: 'trainer', ai: 'trainer', name, party, slots: q && party.length > 1 ? 2 : 1 }] },
     ],
   };
-  startBattle({ battle, humans, meta: { trainerKey: o.trainer, map: mapId, idx, leader: !!o.leader, cls: tr.cls, gives: o.gives || [], win: o.win, sets: [o.beatFlag, ...(o.sets || [])].filter(Boolean) } });
+  startBattle({ battle, humans, meta: { trainerKey: o.trainer, map: mapId, idx, leader: !!o.leader, cls: tr.cls, gives: o.gives || [], win: o.win, sets: [o.beatFlag, ...(o.sets || [])].filter(Boolean), missionNpc: special ? special.mission : null } });
   if (q) say(q, `${ko.josa(p.data.name, '이/가')} 트레이너와 승부를 시작했다! 함께 싸우자!`, { toast: true });
 }
 
@@ -332,6 +334,7 @@ function endBattle(b) {
     const w = r.winner >= 0 ? b.sides[r.winner].name : null;
     for (const p of b.humans) {
       sendTo(p, { t: 'battleEnd', result: r, text: [[w ? `${w}의 승리!` : '무승부!']] });
+      bumpStat(p, 'pvps');
       savePlayer(p); sendState(p);
     }
     broadcastPlayers();
@@ -367,6 +370,8 @@ function endBattle(b) {
       }
     }
     if (meta.fixed && meta.fixed.flagKey && (won || r.reason === 'caught' || r.reason === 'faint' || r.reason === 'draw')) d.flags[meta.fixed.flagKey] = true;
+    if (won && b.humans.length > 1) bumpStat(p, 'coopWins');
+    if (won && meta.missionNpc) checkMissions(p, { type: 'npc', id: meta.missionNpc });
     const lost = !canFight(p);
     // 행복도: 이긴 배틀
     if (won) for (const m of d.party) if (m.hp > 0) m.happiness = Math.min(255, m.happiness + 1);
@@ -382,6 +387,110 @@ function endBattle(b) {
 function postInfo(p, x) {
   const mon = p.data.party.find((m) => m.uid === x.uid);
   return { ...x, name: mon ? dex.displayName(mon) : '', moveName: x.move ? ko.moveName(x.move) : null, intoName: x.into ? ko.speciesName(x.into) : null, from: mon ? mon.species : null, moves: mon ? mon.moves.map((m) => ko.moveName(m.id)) : [] };
+}
+
+// ───────────── 스토리 미션 ─────────────
+function missionState(d) {
+  if (!d.mission) d.mission = { cur: 0, prog: [], started: false, stats: {}, coop: [] };
+  return d.mission;
+}
+function starterOf(d) {
+  if (d.starter) return d.starter;
+  for (const m of [...d.party, ...d.box]) { if (m.species >= 152 && m.species <= 160 && m.otId) return 152 + Math.floor((m.species - 152) / 3) * 3; }
+  return 155;
+}
+function bumpStat(p, k) { const ms = missionState(p.data); ms.stats[k] = (ms.stats[k] || 0) + 1; }
+function applyFlags(d, fx) {
+  if (!fx) return;
+  for (const f of fx.set || []) d.flags[f] = true;
+  for (const f of fx.clear || []) delete d.flags[f];
+}
+function giveReward(p, rw) {
+  const d = p.data, lines = [];
+  if (!rw) return lines;
+  if (rw.money) { d.money += rw.money; lines.push(`상금 ${rw.money}원을 받았다!`); }
+  for (const [it, n] of Object.entries(rw.items || {})) { if (!W.items[it]) continue; bagAdd(d, it, n); lines.push(`${ko.josa(itemKo(it), '을/를')} ${n}개 받았다!`); }
+  if (rw.egg) { const m = dex.makeMon(rw.egg.species, rw.egg.level, { ot: d.name, otId: p.id }); m.egg = true; m.eggSteps = 300; if (d.party.length < 6) d.party.push(m); else d.box.push(m); lines.push('포켓몬의 알을 받았다!'); }
+  return lines;
+}
+function goalOk(d, g, ev, ms, i, m) {
+  if (g.after && ms.prog.slice(0, i).some((x) => !x)) return false;
+  switch (g.type) {
+    case 'flag': return !!d.flags[g.flag];
+    case 'badge': return d.badges.includes(g.badge);
+    case 'beat': return g.keys.filter((k) => d.beaten[k]).length >= (g.n || g.keys.length);
+    case 'item': return !!d.bag[g.item];
+    case 'visit': return (ev.type === 'visit' && ev.map === g.map) || d.map === g.map && ev.type === 'visit';
+    case 'npc': return ev.type === 'npc' && ev.id === m.id;
+    case 'count': return (g.what === 'badges' ? d.badges.length : 0) >= g.n;
+    default: return false;
+  }
+}
+/** 목표 달성을 확인하고, 다 하면 다음 미션으로. 함께 다니는 친구에게도 나눠 준다. */
+function checkMissions(p, ev = {}, fromPartner = false) {
+  const d = p.data;
+  if (!d || p.mChecking) return;
+  p.mChecking = true;
+  let changed = false;
+  try {
+    const ms = missionState(d);
+    for (let guard = 0; guard < STORY.length + 2; guard++) {
+      const m = STORY[ms.cur];
+      if (!m) break;
+      if (!ms.started) {
+        ms.started = true; ms.prog = m.goals.map(() => false);
+        applyFlags(d, m.start);
+        sendTo(p, { t: 'mission', kind: 'start', title: m.title, text: m.intro });
+        changed = true;
+      }
+      m.goals.forEach((g, i) => {
+        if (ms.prog[i] || !goalOk(d, g, ev, ms, i, m)) return;
+        ms.prog[i] = true; changed = true;
+        for (const [it, n] of Object.entries(g.give || {})) if (W.items[it]) bagAdd(d, it, n);
+        sendTo(p, { t: 'mission', kind: 'goal', title: m.title, goal: g.text, text: g.say || null });
+        // 함께 다니는 친구도 같은 미션이면 같이 달성
+        const q = p.team && players.get(p.team);
+        if (!fromPartner && q && q.data && q.team === p.id && g.type !== 'badge' && g.flag !== 'GOT_STARTER') {
+          const qs = missionState(q.data);
+          if (STORY[qs.cur] === m && qs.started && !qs.prog[i]) {
+            qs.prog[i] = true;
+            for (const [it, n] of Object.entries(g.give || {})) if (W.items[it]) bagAdd(q.data, it, n);
+            sendTo(q, { t: 'mission', kind: 'goal', title: m.title, goal: g.text, text: g.say || null, by: d.name });
+            setImmediate(() => { checkMissions(q, {}, true); sendState(q); });
+          }
+        }
+      });
+      if (!ms.prog.every(Boolean)) break;
+      // 미션 완료
+      applyFlags(d, m.done);
+      const lines = giveReward(p, m.reward);
+      sendTo(p, { t: 'mission', kind: 'done', title: m.title, text: [...(m.outro || []), ...lines.map((l) => [l])] });
+      ms.cur++; ms.started = false; ms.prog = [];
+      changed = true;
+      ev = {};
+    }
+    // 함께 하는 미션
+    const st = ms.stats;
+    const val = (what) => (what === 'caught' ? d.caught.length : st[what] || 0);
+    for (const c of COOP) {
+      if (ms.coop.includes(c.id) || val(c.what) < c.n) continue;
+      ms.coop.push(c.id); changed = true;
+      const lines = giveReward(p, c.reward);
+      sendTo(p, { t: 'mission', kind: 'done', title: c.title, text: [[`함께 미션 달성: ${c.text}`], ...lines.map((l) => [l])] });
+    }
+  } finally { p.mChecking = false; }
+  if (changed) { savePlayer(p); sendState(p); }
+}
+function missionView(p) {
+  const ms = missionState(p.data);
+  const m = STORY[ms.cur];
+  return {
+    n: ms.cur, total: STORY.length,
+    cur: m ? { id: m.id, title: m.title, intro: m.intro, goals: m.goals.map((g, i) => ({ text: g.text, done: !!ms.prog[i] })) } : null,
+    npc: m ? m.goals.map((g, i) => (g.type === 'npc' && !ms.prog[i] ? { map: g.map, idx: g.idx, seen: g.seen } : null)).filter(Boolean) : [],
+    done: STORY.slice(0, ms.cur).map((x) => x.title),
+    coop: COOP.map((c) => ({ title: c.title, text: c.text, n: c.n, have: Math.min(c.n, c.what === 'caught' ? p.data.caught.length : ms.stats[c.what] || 0), done: ms.coop.includes(c.id) })),
+  };
 }
 
 // ───────────── 메시지 처리 ─────────────
@@ -437,7 +546,7 @@ const handlers = {
     p.busy = !!msg.busy;
     const pub = publicPlayer(p);
     for (const q of online()) if (q !== p) send(q.ws, { t: 'pmove', p: pub, step: !!msg.step });
-    if (changedMap) { savePlayer(p); }
+    if (changedMap) { checkMissions(p, { type: 'visit', map: d.map }); savePlayer(p); }
   },
 
   busy(p, msg) { p.busy = !!msg.busy; },
@@ -450,6 +559,17 @@ const handlers = {
   },
 
   trainer(p, msg) { trainerBattle(p, msg.map, msg.idx | 0); },
+  missionNpc(p, msg) {
+    const ms = missionState(p.data);
+    const m = STORY[ms.cur];
+    if (!m) return;
+    const gi = m.goals.findIndex((g) => g.type === 'npc' && g.map === msg.map && g.idx === (msg.idx | 0));
+    if (gi < 0 || ms.prog[gi]) return;
+    const g = m.goals[gi];
+    const rival = { 152: 'CYNDAQUIL', 155: 'TOTODILE', 158: 'CHIKORITA' }[starterOf(p.data)] || 'TOTODILE';
+    const key = g.rival ? `RIVAL1:RIVAL1_${g.rival}_${rival}` : g.trainer;
+    trainerBattle(p, msg.map, msg.idx | 0, { key, beaten: g.beaten, mission: m.id });
+  },
 
   staticMon(p, msg) {
     const o = obj(msg.map, msg.idx | 0);
@@ -535,6 +655,7 @@ const handlers = {
       if (o.gift.egg) { mon.egg = true; mon.eggSteps = 600; }
       lines.push(...receiveMon(p, mon));
       if (isStarter) {
+        d.starter = o.gift.species;
         bagAdd(d, 'POKE_BALL', 5);
         lines.push('공박사: 포켓몬 도감과 몬스터볼 5개도 가져가렴!');
         lines.push('야생 포켓몬을 만나면 몬스터볼을 던져서 잡을 수 있단다.');
@@ -765,6 +886,7 @@ const handlers = {
     if (r.kind === 'battle1' || r.kind === 'battle2') return pvpBattle(a, p, r.kind === 'battle2');
     if (r.kind === 'team') {
       a.team = p.id; p.team = a.id;
+      bumpStat(a, 'teams'); bumpStat(p, 'teams');
       sendState(a); sendState(p);
       say(a, `${ko.josa(p.data.name, '과/와')} 함께 다니게 되었다! 같은 맵에서 야생 포켓몬이나 트레이너를 만나면 둘이 함께 싸운다!`);
       say(p, `${ko.josa(a.data.name, '과/와')} 함께 다니게 되었다! 같은 맵에서 야생 포켓몬이나 트레이너를 만나면 둘이 함께 싸운다!`);
@@ -859,6 +981,7 @@ function doTrade(t) {
     return `${ko.josa(from, '은/는')} ${ko.josa(ko.speciesName(e.into), '으로/로')} 진화했다!`;
   };
   const ea = evo(a, mb), eb = evo(b, ma);
+  bumpStat(a, 'trades'); bumpStat(b, 'trades');
   trades.delete(t.id);
   a.trade = null; b.trade = null;
   sendTo(a, { t: 'tradeDone', got: dex.publicMon(mb, false), gave: dex.publicMon(ma, false), evo: ea });

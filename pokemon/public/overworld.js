@@ -727,6 +727,15 @@ async function talk(r) {
 async function talkInner(r) {
   const o = r.o, me = G.me;
   const mapId = ow.mapId;
+  // 미션에서 나타난 사람 (라이벌 등)
+  const mn = me.mission && me.mission.npc.find((n) => n.map === mapId && n.idx === r.idx);
+  if (mn) {
+    if (!me.party.some((m) => m.hp > 0 && !m.egg)) { await G.say('싸울 수 있는 포켓몬이 없다!'); return; }
+    await G.say(mn.seen || [['승부다!']]);
+    G.net.send({ t: 'missionNpc', map: mapId, idx: r.idx });
+    G.waitingBattle = 90;
+    return;
+  }
   if (o.trainer) {
     if (!me.beaten[o.trainer]) {
       if (!me.party.some((m) => m.hp > 0 && !m.egg)) { await G.say('싸울 수 있는 포켓몬이 없다!'); return; }

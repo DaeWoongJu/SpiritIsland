@@ -94,10 +94,27 @@ function onMessage(msg) {
       await G.say([[`${G.josa(msg.gave.name, '을/를')} 보내고`], [`${G.josa(msg.got.name, '을/를')} 받았다!`]]);
       if (msg.evo) { await G.say(msg.evo); }
     }); break;
+    case 'mission': onMission(msg); break;
     case 'chat': addChat(msg.name, msg.text); break;
     case 'kicked': G.kicked = true; alert(msg.text); break;
     case 'error': alert(msg.text); break;
     default: break;
+  }
+}
+
+function onMission(msg) {
+  if (msg.kind === 'start') {
+    later(async () => {
+      await G.say([[`★ 새 미션: ${msg.title}`], ...(msg.text || [])]);
+      const cur = G.me && G.me.mission && G.me.mission.cur;
+      if (cur) G.toast(`미션 목표: ${cur.goals.filter((g) => !g.done).map((g) => g.text).join(' / ')}`);
+    });
+  } else if (msg.kind === 'goal') {
+    G.toast(`✔ ${msg.by ? msg.by + '이(가) ' : ''}${msg.goal}`);
+    if (msg.text) later(() => G.say(msg.text));
+  } else if (msg.kind === 'done') {
+    G.sfx('level');
+    later(() => G.say([[`★ 미션 완료! ${msg.title}`], ...(msg.text || [])]));
   }
 }
 
