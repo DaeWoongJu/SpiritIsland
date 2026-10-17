@@ -389,6 +389,27 @@ function postInfo(p, x) {
   return { ...x, name: mon ? dex.displayName(mon) : '', moveName: x.move ? ko.moveName(x.move) : null, intoName: x.into ? ko.speciesName(x.into) : null, from: mon ? mon.species : null, moves: mon ? mon.moves.map((m) => ko.moveName(m.id)) : [] };
 }
 
+// ───────────── 대사 한국어 ─────────────
+/** 원본(영어) 대사를 번역문으로 바꾸기 — 대사 내용의 해시로 찾는다 */
+function applyKoreanText(world) {
+  let table = {};
+  try { table = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'ko-text.json'), 'utf8')); } catch { return; }
+  let n = 0;
+  const tr = (t) => {
+    if (!Array.isArray(t)) return t;
+    const id = crypto.createHash('sha1').update(JSON.stringify(t)).digest('hex').slice(0, 8);
+    const k = table[id];
+    if (!k) return t;
+    n++;
+    return k.map((para) => [para]);
+  };
+  for (const m of Object.values(world.maps)) {
+    for (const s of m.signs) s.text = tr(s.text);
+    for (const o of m.objects) for (const key of ['text', 'seen', 'beaten', 'after', 'win']) o[key] = tr(o[key]);
+  }
+  console.log(`  대사 한국어 ${n}곳 적용`);
+}
+
 // ───────────── 스토리 미션 ─────────────
 function missionState(d) {
   if (!d.mission) d.mission = { cur: 0, prog: [], started: false, stats: {}, coop: [] };
@@ -1040,6 +1061,7 @@ async function main() {
   W = await ensureWorld({ log: (s) => console.log('  ' + s) });
   dex.init(W);
   W.leaderBadge = LEADER_BADGE;
+  applyKoreanText(W);
   W.ko = { species: ko.KO.species, moves: Object.fromEntries(Object.values(W.moves).map((m) => [m.const, ko.moveName(m.const)])), items: Object.fromEntries(Object.keys(W.items).map((c) => [c, itemKo(c)])), types: ko.TYPES, landmarks: ko.LANDMARKS, badges: ko.BADGES };
   worldGz = zlib.gzipSync(JSON.stringify(W));
   server.listen(PORT, '0.0.0.0', () => {
