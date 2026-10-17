@@ -96,6 +96,7 @@ function objVisible(o, idx, mapId) {
   if (o.itemball && f[`ITEM:${mapId}:${idx}`]) return false;
   if (o.wild && f[`STATIC:${mapId}:${idx}`]) return false;
   if ((ow.removed || new Set()).has(`${mapId}:${idx}`)) return false;
+  if (f[`HIDE:${mapId}:${idx}`]) return false;
   // 시간대
   const tod = ['MORN', 'DAY', 'NITE'][G.timeOfDay()];
   if (o.h1 === -1 && ['MORN', 'DAY', 'NITE'].includes(o.h2name)) return o.h2name === tod;
@@ -144,6 +145,7 @@ G.enterMap = function enterMap(mapId, x, y, dir) {
   const files = [ts.png, ...ow.map.objects.map((o) => G.W.sprites[o.sprite] && G.W.sprites[o.sprite].file)];
   for (const dirName of ['north', 'south', 'west', 'east']) { const c = ow.map.conn[dirName]; if (c && G.W.maps[c.map]) files.push(G.W.tilesets[G.W.maps[c.map].tileset].png); }
   G.preload(files);
+  G.net.send({ t: 'enter', map: mapId, x, y, dir: ow.dir });
   if (ow.map.landmark !== prevLandmark && ['TOWN', 'ROUTE', 'CAVE', 'DUNGEON'].includes(ow.map.env) && !(prevEnv && ['INDOOR', 'GATE'].includes(prevEnv) && false)) {
     ow.popup = { text: G.landmarkName(ow.map.landmark), t: 150 };
   }
@@ -322,7 +324,7 @@ G.updateOverworld = function updateOverworld() {
   updateOthers();
   if (ow.fadeDir) return;
   if (ow.anim) { stepAnim(); return; }
-  if (G.uiBusy() || ow.locked > 0 || G.battle || G.waitingBattle > 0) { if (ow.locked > 0 && !G.uiBusy()) ow.locked--; return; }
+  if (G.uiBusy() || sc.active || ow.locked > 0 || G.battle || G.waitingBattle > 0) { if (ow.locked > 0 && !G.uiBusy()) ow.locked--; return; }
   const d = heldDir();
   if (d) {
     ow.lastDir = d;
@@ -421,6 +423,7 @@ function stepAnim() {
   if (a.t < a.frames) return;
   ow.anim = null;
   ow.step++;
+  if (a.script) { ow.x += a.dx * a.len; ow.y += a.dy * a.len; return; }
   let nx = ow.x + a.dx * a.len, ny = ow.y + a.dy * a.len;
   const r = G.resolve(ow.mapId, nx, ny);
   if (r && r.mapId !== ow.mapId) G.enterMap(r.mapId, r.x, r.y);
@@ -431,6 +434,11 @@ function stepAnim() {
 
 function afterStep() {
   G.net.sendMove(true);
+  // 밟으면 시작하는 원작 장면
+  const ces = ow.map.coordEvents || [];
+  const scene = (G.me && G.me.scenes && G.me.scenes[ow.mapId]) || 0;
+  const ci = ces.findIndex((c) => c.x === ow.x && c.y === ow.y && c.scene === scene);
+  if (ci >= 0) { G.net.send({ t: 'coord', map: ow.mapId, i: ci }); scriptPending(); return; }
   const coll = G.collAt(ow.mapId, ow.x, ow.y);
   const wi = warpAt(ow.mapId, ow.x, ow.y);
   if (wi >= 0 && (isDoorish(coll) || (!carpetDir(coll) && !hasFloorAround()))) { doWarp(wi); return; }
@@ -515,7 +523,7 @@ G.teleport = async function teleport(map, x, y, dir, fade = true) {
 function updateNPCs() {
   for (const r of ow.objs) {
     if (r.anim) { r.anim.t++; if (r.anim.t >= r.anim.frames) r.anim = null; continue; }
-    if (!r.visible || r.busy) continue;
+    if (!r.visible || r.busy || sc.active) continue;
     const mv = r.o.move;
     if (--r.next > 0) continue;
     r.next = 60 + Math.random() * 150;
@@ -637,6 +645,7 @@ async function interact() {
     else if (s.kind === 'ITEM' || s.hidden) { if (s.hidden && !(G.me.flags[s.hidden.flag] || G.me.flags[`HIDDEN:${ow.mapId}:${signIdx}`])) { G.net.send({ t: 'hidden', map: ow.mapId, idx: signIdx }); return; } }
     else {
       if (s.std === 'PCScript' || s.std === 'PokecenterPC' || /PC$/.test(s.std || '')) { G.openPC(); return; }
+      if (s.pc >= 0) { G.net.send({ t: 'sign', map: ow.mapId, idx: signIdx }); await scriptPending(); return; }
       const txt = s.text || STD[s.std] || null;
       if (txt) { await G.say(txt); return; }
     }
@@ -727,16 +736,8 @@ async function talk(r) {
 async function talkInner(r) {
   const o = r.o, me = G.me;
   const mapId = ow.mapId;
-  // 미션에서 나타난 사람 (라이벌 등)
-  const mn = me.mission && me.mission.npc.find((n) => n.map === mapId && n.idx === r.idx);
-  if (mn) {
-    if (!me.party.some((m) => m.hp > 0 && !m.egg)) { await G.say('싸울 수 있는 포켓몬이 없다!'); return; }
-    await G.say(mn.seen || [['승부다!']]);
-    G.net.send({ t: 'missionNpc', map: mapId, idx: r.idx });
-    G.waitingBattle = 90;
-    return;
-  }
-  if (o.trainer) {
+  // 시선으로 싸우는 트레이너
+  if (o.type === 'TRAINER' && o.trainer) {
     if (!me.beaten[o.trainer]) {
       if (!me.party.some((m) => m.hp > 0 && !m.egg)) { await G.say('싸울 수 있는 포켓몬이 없다!'); return; }
       await G.say(o.seen || o.text || [['승부다!']]);
@@ -747,16 +748,9 @@ async function talkInner(r) {
     await G.say(o.after || o.win || o.text || [['…']]);
     return;
   }
-  if (o.wild) {
-    if (o.text) await G.say(o.text);
-    if (!me.party.some((m) => m.hp > 0 && !m.egg)) { await G.say('싸울 수 있는 포켓몬이 없다!'); return; }
-    G.net.send({ t: 'staticMon', map: mapId, idx: r.idx });
-    G.waitingBattle = 90;
-    return;
-  }
   if (o.itemball) { G.net.send({ t: 'pickup', map: mapId, idx: r.idx }); return; }
   if (o.fruit) { G.net.send({ t: 'fruit', map: mapId, idx: r.idx }); return; }
-  if (o.std === 'SmashRock' || (o.std === undefined && /rock\.png$/.test((G.W.sprites[o.sprite] || {}).file || '') && false)) {
+  if (o.std === 'SmashRock') {
     if (G.knows('ROCK_SMASH') && await G.yesno('깨질 것 같은 바위다. 바위깨기를 쓰겠습니까?')) {
       await G.say(`${G.knowsName('ROCK_SMASH')}의 바위깨기!`);
       (ow.removed ||= new Set()).add(`${mapId}:${r.idx}`); r.visible = false; G.sfx('hit');
@@ -770,31 +764,117 @@ async function talkInner(r) {
     } else await G.say(STD.StrengthBoulder);
     return;
   }
-  if (o.mart) { if (o.text && false) await G.say(o.text); G.net.send({ t: 'mart', mart: o.mart }); return; }
-  if (o.std === 'PokecenterNurse') { await G.nurse(); return; }
-  if (o.gift) {
-    const STARTER = { 152: '풀', 155: '불꽃', 158: '물' };
-    const name = G.speciesName(o.gift.species);
-    if (mapId === 'ELMS_LAB' && STARTER[o.gift.species]) {
-      if (me.flags.GOT_STARTER) { await G.say('공박사님이 아끼는 포켓몬이 들어 있다.'); return; }
-      G.showMonPreview = o.gift.species;
-      const ok = await G.yesno([[`${STARTER[o.gift.species]} 포켓몬`, `${G.josa(name, '을/를')} 고를 거니?`]]);
-      G.showMonPreview = null;
-      if (!ok) return;
-      G.net.send({ t: 'gift', map: mapId, idx: r.idx });
-      return;
-    }
-    if (o.text) await G.say(o.text);
-    if (await G.yesno(`${G.josa(name, '을/를')} 받겠습니까?`)) G.net.send({ t: 'gift', map: mapId, idx: r.idx });
-    return;
-  }
-  if (o.gives && o.gives.length && o.gives.some((g) => !me.flags[`GIVE:${mapId}:${r.idx}:${g}`])) {
-    if (o.text) await G.say(o.text);
-    G.net.send({ t: 'gift', map: mapId, idx: r.idx });
-    return;
-  }
+  // 나머지는 원작 스크립트 그대로 (대사, 질문, 선물, 배틀 …)
+  if (o.pc >= 0) { G.net.send({ t: 'talk', map: mapId, idx: r.idx }); await scriptPending(); return; }
   const txt = o.text || STD[o.std] || null;
   await G.say(txt || [['…']]);
+}
+
+// ───────── 원작 스크립트 재생 ─────────
+const sc = { active: false, queue: [], running: false, done: null, timer: 0 };
+G.inScript = () => sc.active;
+/** 서버에 스크립트를 부탁했으면 끝날 때까지 기다린다 */
+function scriptPending() {
+  sc.active = true;
+  clearTimeout(sc.timer);
+  sc.timer = setTimeout(() => { if (sc.active && !sc.running && !sc.queue.length && !sc.started) endScript(); }, 5000);
+  return new Promise((r) => { const prev = sc.done; sc.done = () => { if (prev) prev(); r(); }; });
+}
+function endScript() {
+  sc.active = false; sc.started = false;
+  G.showMonPreview = null;
+  ow.emote = null;
+  G.refreshObjects();
+  G.net.sendMove(false);
+  const d = sc.done; sc.done = null; if (d) d();
+}
+G.onScript = function onScript(msg) {
+  sc.active = true; sc.started = true;
+  sc.queue.push(msg);
+  pump();
+};
+G.onObjects = function onObjects(msg) {
+  for (const x of msg.out || []) { const r = ow.objs[x.hide ?? x.show]; if (r) r.visible = x.show !== undefined; }
+};
+async function pump() {
+  if (sc.running) return;
+  sc.running = true;
+  try {
+    while (sc.queue.length) {
+      const msg = sc.queue.shift();
+      try { await playScript(msg); } catch (e) { console.error(e); if (msg.wait) G.net.send({ t: 'scriptAnswer', id: msg.id, v: 0 }); }
+      if (msg.end) endScript();
+    }
+  } finally { sc.running = false; }
+}
+const objR = (i) => (i === -1 ? null : ow.objs[i]);
+async function moveAlong(target, steps) {
+  for (const st of steps) {
+    if (st.k === 'sleep') { await G.wait(st.n); continue; }
+    if (st.k === 'hide') { const r = objR(target); if (r) r.visible = false; continue; }
+    if (st.k === 'show') { const r = objR(target); if (r) r.visible = true; continue; }
+    const [dx, dy] = DIRS[st.d] || [0, 0];
+    if (target === -1) {
+      ow.dir = st.d;
+      if (st.k === 'turn') { await G.wait(4); continue; }
+      const len = st.k === 'jump' ? 2 : 1;
+      ow.anim = { dx, dy, len, t: 0, frames: st.k === 'jump' ? 24 : Math.round(16 / (st.sp || 1)), jump: st.k === 'jump', script: true };
+      while (ow.anim) await G.frame();
+      continue;
+    }
+    const r = objR(target);
+    if (!r) continue;
+    r.dir = st.d;
+    if (st.k === 'turn') { await G.wait(4); continue; }
+    const len = st.k === 'jump' ? 2 : 1;
+    for (let k = 0; k < len; k++) {
+      r.x += dx; r.y += dy; r.parity = !r.parity;
+      r.anim = { dx, dy, t: 0, frames: Math.round(16 / (st.sp || 1)) };
+      while (r.anim) await G.frame();
+    }
+  }
+}
+async function playScript(msg) {
+  const out = msg.out || [];
+  // 예/아니오 질문은 마지막 대사를 띄운 채로 묻는다
+  let ask = null;
+  if (msg.wait === 'yn') { const last = out[out.length - 1]; if (last && last.text) { ask = last.text; out.pop(); } }
+  for (const x of out) {
+    if (x.text) await G.say(x.text);
+    else if (x.face !== undefined) { const r = objR(x.face); if (r) r.dir = OPP[ow.dir]; }
+    else if (x.turn !== undefined) { if (x.turn === -1) ow.dir = x.dir; else { const r = objR(x.turn); if (r) r.dir = x.dir; } }
+    else if (x.move !== undefined) await moveAlong(x.move, x.steps || []);
+    else if (x.hide !== undefined) { const r = objR(x.hide); if (r) r.visible = false; }
+    else if (x.show !== undefined) { const r = objR(x.show); if (r) { r.visible = true; r.o && (r.dir = r.dir || 'down'); } }
+    else if (x.mvobj !== undefined) { const r = objR(x.mvobj); if (r) { r.x = x.x; r.y = x.y; r.home = { x: x.x, y: x.y }; } }
+    else if (x.emote !== undefined) {
+      const r = objR(x.emote);
+      ow.emote = r ? { x: r.x, y: r.y } : { x: ow.x, y: ow.y };
+      G.sfx('select'); await G.wait(30); ow.emote = null;
+    }
+    else if (x.pic !== undefined) {
+      G.showMonPreview = x.pic;
+      for (let k = 0; k < 300; k++) { await G.frame(); if (k > 10 && (G.input.pressed.a || G.input.pressed.b)) break; }
+    }
+    else if (x.closepic) G.showMonPreview = null;
+    else if (x.pause) await G.wait(Math.min(120, x.pause));
+    else if (x.heal) { G.sfx('heal'); await G.fadeOut(); await G.wait(30); await G.fadeIn(); }
+    else if (x.nurse) await G.nurse();
+    else if (x.pc) G.openPC();
+    else if (x.mart) G.net.send({ t: 'mart', mart: x.mart });
+    else if (x.std) { if (STD[x.std]) await G.say(STD[x.std]); }
+    else if (x.sfx) G.sfx(x.sfx === 'item' ? 'level' : x.sfx);
+    else if (x.shake) { G.sfx('hit'); await G.wait(20); }
+    else if (x.warp) await G.teleport(x.warp.map, x.warp.x, x.warp.y, ow.dir, true);
+  }
+  if (msg.wait === 'yn') {
+    const v = await G.yesno(ask);
+    G.showMonPreview = null;
+    G.net.send({ t: 'scriptAnswer', id: msg.id, v: v ? 1 : 0 });
+  } else if (msg.wait === 'battle') {
+    G.net.send({ t: 'scriptAnswer', id: msg.id, v: 1 });
+    G.waitingBattle = 90;
+  }
 }
 
 G.nurse = async function nurse() {

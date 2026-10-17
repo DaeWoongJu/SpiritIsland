@@ -12,7 +12,8 @@ const { ensureWorld, SRC_DIR } = require('./build');
 const dex = require('./dex');
 const ko = require('./ko');
 const { Battle } = require('./battle');
-const { STORY, COOP } = require('./missions');
+const { STORY, COOP, migrateStory } = require('./missions');
+const { createVM } = require('./vm');
 
 const PORT = Number(process.env.PORT) || 3600;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -26,6 +27,7 @@ const ALWAYS_ON = ['EVENT_BOULDER_IN_BLACKTHORN_GYM_1', 'EVENT_BOULDER_IN_BLACKT
 
 let W = null; // world
 let worldGz = null;
+let vm = null; // 원작 스크립트 실행기
 
 // ───────────── HTTP ─────────────
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2', '.ttf': 'font/ttf' };
@@ -38,7 +40,7 @@ const server = http.createServer((req, res) => {
     if (!W) { res.writeHead(503); res.end('loading'); return; }
     const gz = /gzip/.test(req.headers['accept-encoding'] || '');
     res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-cache', ...(gz ? { 'Content-Encoding': 'gzip' } : {}) });
-    res.end(gz ? worldGz : JSON.stringify(W));
+    res.end(gz ? worldGz : zlib.gunzipSync(worldGz));
     return;
   }
   let p = decodeURIComponent(url.pathname);
@@ -93,7 +95,7 @@ function newPlayerData(name, look) {
   for (const e of W.initialEvents) flags[e] = true;
   for (const e of ALWAYS_ON) flags[e] = true;
   return {
-    v: 1, name, look: look | 0, map: W.spawn.map, x: W.spawn.x, y: W.spawn.y, dir: 'down', surf: false,
+    v: 1, sv: 1, scenes: {}, name, look: look | 0, map: W.spawn.map, x: W.spawn.x, y: W.spawn.y, dir: 'down', surf: false,
     money: 3000, party: [], box: [], bag: { POTION: 1 }, badges: [], flags, beaten: {}, seen: [], caught: [],
     lastHeal: { map: 'PLAYERS_HOUSE_1F', x: 7, y: 4 }, visited: ['NEW_BARK_TOWN'], repel: 0, created: Date.now(), playMs: 0, fruit: {},
   };
@@ -127,7 +129,7 @@ function sendState(p) {
       id: p.id, name: d.name, look: d.look, map: d.map, x: d.x, y: d.y, dir: d.dir, surf: !!d.surf, money: d.money,
       party: d.party.map((m) => dex.publicMon(m, true)), box: d.box.map((m) => dex.publicMon(m, false)),
       bag: d.bag, badges: d.badges, flags: d.flags, beaten: d.beaten, seen: d.seen, caught: d.caught, visited: d.visited, repel: d.repel,
-      team: p.team || null, mission: missionView(p), playMs: d.playMs + (Date.now() - (p.since || Date.now())), fruit: d.fruit,
+      team: p.team || null, scenes: d.scenes || {}, mission: missionView(p), playMs: d.playMs + (Date.now() - (p.since || Date.now())), fruit: d.fruit,
     },
   });
 }
@@ -150,6 +152,17 @@ function receiveMon(p, mon, verb = '받았다') {
   if (d.party.length < 6) { d.party.push(mon); return [`${d.name}${ko.hasBatchim(d.name) ? '은' : '는'} ${ko.josa(nm, '을/를')} ${verb}!`]; }
   d.box.push(mon);
   return [`${d.name}${ko.hasBatchim(d.name) ? '은' : '는'} ${ko.josa(nm, '을/를')} ${verb}!`, `지닌 포켓몬이 가득이라 ${ko.josa(nm, '은/는')} PC로 보내졌다.`];
+}
+
+/** 배지 받기 (+ 그 배지로 쓸 수 있게 되는 비전머신도 함께) */
+function giveBadge(p, badge) {
+  const d = p.data, lines = [];
+  if (!ko.BADGES[badge] || d.badges.includes(badge)) return lines;
+  d.badges.push(badge);
+  lines.push(`${d.name}${ko.hasBatchim(d.name) ? '은' : '는'} ${ko.josa(ko.BADGES[badge], '을/를')} 받았다!`);
+  const hm = BADGE_HM[badge];
+  if (hm && W.items[hm] && !d.bag[hm]) { bagAdd(d, hm); lines.push(`${ko.josa(itemKo(hm), '을/를')} 받았다! (${ko.moveName(W.items[hm].move)})`); }
+  return lines;
 }
 
 // ───────────── 맵 도우미 ─────────────
@@ -287,7 +300,7 @@ function trainerBattle(p, mapId, idx, special) {
       { name, ctrls: [{ id: 'trainer', ai: 'trainer', name, party, slots: q && party.length > 1 ? 2 : 1 }] },
     ],
   };
-  startBattle({ battle, humans, meta: { trainerKey: o.trainer, map: mapId, idx, leader: !!o.leader, cls: tr.cls, gives: o.gives || [], win: o.win, sets: [o.beatFlag, ...(o.sets || [])].filter(Boolean), missionNpc: special ? special.mission : null } });
+  startBattle({ battle, humans, meta: { trainerKey: o.trainer, map: mapId, idx, leader: !!o.leader, cls: tr.cls, gives: o.gives || [], win: o.win, sets: [o.beatFlag, ...(o.sets || [])].filter(Boolean), missionNpc: special ? special.mission : null, script: special ? special.script : null, canLose: special ? !!special.canLose : false } });
   if (q) say(q, `${ko.josa(p.data.name, '이/가')} 트레이너와 승부를 시작했다! 함께 싸우자!`, { toast: true });
 }
 
@@ -350,6 +363,7 @@ function endBattle(b) {
       if (lines.length > 1) text.push([lines[1]]);
     }
     if (b.payDay && won) { d.money += b.payDay; text.push([`${d.name}${ko.hasBatchim(d.name) ? '은' : '는'} ${b.payDay}원을 주웠다!`]); }
+    if (b.kind === 'trainer') (d.fought ||= {})[meta.trainerKey] = true;
     if (b.kind === 'trainer' && won) {
       d.beaten[meta.trainerKey] = true;
       for (const f of meta.sets || []) d.flags[f] = true;
@@ -372,12 +386,17 @@ function endBattle(b) {
     if (meta.fixed && meta.fixed.flagKey && (won || r.reason === 'caught' || r.reason === 'faint' || r.reason === 'draw')) d.flags[meta.fixed.flagKey] = true;
     if (won && b.humans.length > 1) bumpStat(p, 'coopWins');
     if (won && meta.missionNpc) checkMissions(p, { type: 'npc', id: meta.missionNpc });
-    const lost = !canFight(p);
+    let lost = !canFight(p);
+    const run = meta.script || (meta.fixed && meta.fixed.script) || null;
+    const mine = run && p.script === run;
+    // 져도 되는 배틀 (라이벌 첫 승부 등): 눈앞이 캄캄해지지 않고 이야기가 이어진다
+    if (lost && mine && meta.canLose) { for (const m of d.party) dex.healMon(m); lost = false; }
     // 행복도: 이긴 배틀
     if (won) for (const m of d.party) if (m.hp > 0) m.happiness = Math.min(255, m.happiness + 1);
     const items = lost ? [] : post(p);
     sendTo(p, { t: 'battleEnd', result: r, text, post: items.map((x) => postInfo(p, x)) });
     if (lost) blackout(p);
+    if (mine) vm.afterBattle(p, run, r.winner === 1 ? 1 : 0);
     savePlayer(p);
     sendState(p);
   }
@@ -406,6 +425,7 @@ function applyKoreanText(world) {
   for (const m of Object.values(world.maps)) {
     for (const s of m.signs) s.text = tr(s.text);
     for (const o of m.objects) for (const key of ['text', 'seen', 'beaten', 'after', 'win']) o[key] = tr(o[key]);
+    if (m.script) for (const op of m.script.ops) { if (op[0] === 't') op[1] = tr(op[1]); else if (op[0] === 'wl') { op[1] = tr(op[1]); op[2] = tr(op[2]); } }
   }
   console.log(`  대사 한국어 ${n}곳 적용`);
 }
@@ -443,6 +463,7 @@ function goalOk(d, g, ev, ms, i, m) {
     case 'item': return !!d.bag[g.item];
     case 'visit': return (ev.type === 'visit' && ev.map === g.map) || d.map === g.map && ev.type === 'visit';
     case 'npc': return ev.type === 'npc' && ev.id === m.id;
+    case 'fought': return g.keys.some((k) => (d.fought || {})[k] || d.beaten[k]);
     case 'count': return (g.what === 'badges' ? d.badges.length : 0) >= g.n;
     default: return false;
   }
@@ -471,7 +492,7 @@ function checkMissions(p, ev = {}, fromPartner = false) {
         sendTo(p, { t: 'mission', kind: 'goal', title: m.title, goal: g.text, text: g.say || null });
         // 함께 다니는 친구도 같은 미션이면 같이 달성
         const q = p.team && players.get(p.team);
-        if (!fromPartner && q && q.data && q.team === p.id && g.type !== 'badge' && g.flag !== 'GOT_STARTER') {
+        if (!fromPartner && q && q.data && q.team === p.id && g.type !== 'badge' && g.flag !== 'EVENT_GOT_A_POKEMON_FROM_ELM') {
           const qs = missionState(q.data);
           if (STORY[qs.cur] === m && qs.started && !qs.prog[i]) {
             qs.prog[i] = true;
@@ -531,6 +552,7 @@ const handlers = {
     const isNew = !p.data;
     if (!p.data) p.data = newPlayerData(name, msg.look);
     for (const e of ALWAYS_ON) p.data.flags[e] = true;
+    migrateStory(p.data);
     if (msg.look !== undefined && isNew) p.data.look = Math.max(0, Math.min(3, msg.look | 0));
     p.since = Date.now();
     players.set(id, p);
@@ -571,6 +593,45 @@ const handlers = {
   },
 
   busy(p, msg) { p.busy = !!msg.busy; },
+
+  // ── 원작 스크립트: 말 걸기 · 표지판 · 밟으면 시작 · 맵에 들어올 때
+  talk(p, msg) {
+    const d = p.data;
+    const m = W.maps[msg.map];
+    const o = m && m.objects[msg.idx | 0];
+    if (!o || d.map !== msg.map || o.pc == null || o.pc < 0 || !vm.start(p, msg.map, o.pc, { last: msg.idx | 0 })) sendTo(p, { t: 'script', id: 0, out: [], end: true, none: true });
+  },
+  sign(p, msg) {
+    const d = p.data;
+    const m = W.maps[msg.map];
+    const s = m && m.signs[msg.idx | 0];
+    if (!s || d.map !== msg.map || s.pc == null || s.pc < 0 || !vm.start(p, msg.map, s.pc)) sendTo(p, { t: 'script', id: 0, out: [], end: true, none: true });
+  },
+  coord(p, msg) {
+    const d = p.data;
+    const m = W.maps[msg.map];
+    const c = m && (m.coordEvents || [])[msg.i | 0];
+    if (!c || d.map !== msg.map || ((d.scenes || {})[msg.map] || 0) !== c.scene || !vm.start(p, msg.map, c.pc)) sendTo(p, { t: 'script', id: 0, out: [], end: true, none: true });
+  },
+  enter(p, msg) {
+    const d = p.data;
+    const m = W.maps[msg.map];
+    if (!m || p.battle) return;
+    // 손님이 맵을 옮긴 것을 먼저 알려 온다 (move 보다 앞설 수 있음)
+    if (d.map !== msg.map) {
+      d.map = msg.map; d.x = msg.x | 0; d.y = msg.y | 0;
+      const lm = m.landmark;
+      if (W.flypoints.some((f) => f.landmark === lm) && !d.visited.includes(lm)) d.visited.push(lm);
+      checkMissions(p, { type: 'visit', map: d.map });
+    }
+    if (msg.dir) d.dir = msg.dir;
+    const out = vm.callbacks(p, msg.map);
+    if (out.length) sendTo(p, { t: 'objects', out });
+    const pc = m.script ? m.script.scenes[(d.scenes || {})[msg.map] || 0] : -1;
+    if (pc != null && pc >= 0 && m.script.ops[pc] && m.script.ops[pc][0] !== 'end') vm.start(p, msg.map, pc);
+    else sendState(p);
+  },
+  scriptAnswer(p, msg) { vm.answer(p, msg.id | 0, !!msg.v); },
 
   encounter(p, msg) {
     if (!p.data || p.battle) return;
@@ -963,6 +1024,7 @@ const handlers = {
     if (msg.flags) Object.assign(d.flags, msg.flags);
     if (msg.badges) d.badges = msg.badges;
     if (msg.hp !== undefined) for (const m of d.party) m.hp = Math.min(m.stats[0], msg.hp);
+    if (msg.battle && p.battle) { if (msg.battle === 'lose') for (const m of d.party) m.hp = 0; p.battle.finish({ winner: msg.battle === 'win' ? 0 : 1, reason: 'faint' }); p.battle.flush(); return; }
     savePlayer(p); sendState(p);
   },
   save(p) { savePlayer(p); say(p, `${p.data.name}${ko.hasBatchim(p.data.name) ? '은' : '는'} 레포트를 확실히 기록했다!`); },
@@ -1030,6 +1092,7 @@ wss.on('connection', (ws) => {
     p.since = Date.now();
     savePlayer(p);
     if (p.trade) endTrade(p.trade, `${p.data.name}의 연결이 끊어졌다.`);
+    if (vm) vm.cancel(p);
     if (p.battle) {
       const b = p.battle;
       setTimeout(() => {
@@ -1063,7 +1126,11 @@ async function main() {
   W.leaderBadge = LEADER_BADGE;
   applyKoreanText(W);
   W.ko = { species: ko.KO.species, moves: Object.fromEntries(Object.values(W.moves).map((m) => [m.const, ko.moveName(m.const)])), items: Object.fromEntries(Object.keys(W.items).map((c) => [c, itemKo(c)])), types: ko.TYPES, landmarks: ko.LANDMARKS, badges: ko.BADGES };
-  worldGz = zlib.gzipSync(JSON.stringify(W));
+  vm = createVM({
+    W, ko, dex, itemKo, bagAdd, bagUse, receiveMon, sendTo, sendState, save: savePlayer, trainerBattle, wildBattle, giveBadge,
+    timeOfDay: () => dex.timeOfDay(), STARTERS, speciesOf: (c) => { const sp = Object.values(W.species).find((x) => x.const === c); return sp ? sp.id : 0; },
+  });
+  worldGz = zlib.gzipSync(JSON.stringify(W, (k, v) => (k === 'script' ? undefined : v)));
   server.listen(PORT, '0.0.0.0', () => {
     const lan = lanAddresses();
     console.log('');

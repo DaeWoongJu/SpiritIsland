@@ -64,7 +64,7 @@ function onMessage(msg) {
         G.net.sendMove(false);
         if (G.isNew) intro();
         else G.say([[`${G.josa(G.me.name, '이/가')} 돌아왔다!`], [`지금 시간은 ${G.todName()}입니다.`]]);
-      } else if (prev && JSON.stringify(prev.flags) !== JSON.stringify(G.me.flags)) G.refreshObjects();
+      } else if (prev && JSON.stringify(prev.flags) !== JSON.stringify(G.me.flags) && !G.inScript()) G.refreshObjects();
       break;
     }
     case 'players': G.setOthers(msg.list, msg.you); break;
@@ -73,6 +73,8 @@ function onMessage(msg) {
       if (msg.toast) { G.toast(msg.text.map((p) => p.join(' ')).join(' ')); break; }
       later(() => G.say(msg.text));
       break;
+    case 'script': later(() => G.onScript(msg)); break;
+    case 'objects': G.onObjects(msg); break;
     case 'battle': G.onBattle(msg); break;
     case 'battleEnd': G.onBattleEnd(msg); break;
     case 'battleError': G.toast(msg.text); if (G.battle) { G.battle.promptShown = null; G.battle.feed([], msg.view); } break;
@@ -132,12 +134,14 @@ function fit() {
   const wrap = document.getElementById('wrap');
   const pad = document.getElementById('pad');
   const padH = pad && getComputedStyle(pad).display !== 'none' ? pad.offsetHeight : 0;
-  const s = Math.max(1, Math.floor(Math.min((window.innerWidth - 8) / 160, (window.innerHeight - 8 - padH) / 144)));
-  const s2 = Math.min((window.innerWidth - 8) / 160, (window.innerHeight - 8 - padH) / 144);
+  // 위아래에 여백을 두고 가운데에 놓는다 (화면 테두리에 붙지 않게)
+  const availW = window.innerWidth - 24, availH = window.innerHeight - 40 - padH;
+  const s = Math.max(1, Math.floor(Math.min(availW / 160, availH / 144)));
+  const s2 = Math.min(availW / 160, availH / 144);
   const scale = s >= 2 ? s : Math.max(1, s2);
   canvas.style.width = `${160 * scale}px`;
   canvas.style.height = `${144 * scale}px`;
-  wrap.style.height = `${144 * scale}px`;
+  wrap.style.height = `${Math.max(144 * scale + 40, window.innerHeight - padH)}px`;
   // 화면에 보이는 크기 그대로 그려서 글자가 번지지 않게 (도트는 그대로 크게)
   G.R = Math.max(1, Math.round(scale * (window.devicePixelRatio || 1)));
   canvas.width = 160 * G.R;

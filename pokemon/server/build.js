@@ -7,13 +7,14 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const https = require('https');
+const scripts = require('./scripts');
 
 const CACHE_DIR = process.env.POKEMON_CACHE || path.join(__dirname, '..', 'cache');
 const SRC_DIR = process.env.POKEGOLD_DIR || path.join(CACHE_DIR, 'pokegold');
 const WORLD_FILE = path.join(CACHE_DIR, 'world.json');
 const COMMIT = 'ef0201d8daf47e8b3ea1518eacf890f37d4cd5e8';
 const TARBALL = `https://codeload.github.com/pret/pokegold/tar.gz/${COMMIT}`;
-const BUILD_VERSION = 11; // 변환 방식이 바뀌면 올려서 다시 변환
+const BUILD_VERSION = 12; // 변환 방식이 바뀌면 올려서 다시 변환
 
 // ───────────── 내려받기 + 압축 풀기 ─────────────
 function download(url, redirects = 5) {
@@ -773,10 +774,25 @@ function build(log = console.log) {
     }
     return out;
   };
+  // 장면 번호표 (scene_script 순서대로 0, 1, 2 …)
+  const sceneTable = {};
+  for (const ev of Object.values(mapEvents)) {
+    let n = 0;
+    for (const l of ev.ls) {
+      const m = l.match(/^\s*(scene_script\s+\w+\s*,|scene_const)\s*(SCENE_\w+)/);
+      if (m) sceneTable[m[2]] = n++;
+    }
+  }
+  for (const f of ['constants/script_constants.asm', 'constants/ram_constants.asm', 'constants/battle_constants.asm']) if (exists(f)) loadConsts(f);
+  const scriptEnv = { args, num, getText, speciesConst, sceneVal: (n) => (n in sceneTable ? sceneTable[n] : (num(n) || 0)) };
   for (const mp of Object.values(maps)) {
     const ev = mapEvents[mp.id];
     mp.warps = []; mp.signs = []; mp.objects = []; mp.coords = [];
     if (!ev) continue;
+    const sc = scripts.compile(ev.ls, scriptEnv);
+    mp.script = { ops: sc.ops, moves: sc.moves, objConsts: sc.objConsts, scenes: sc.scenes, callbacks: sc.callbacks };
+    mp.coordEvents = sc.coords;
+    const pcOf = (label) => (label && sc.at[label] !== undefined ? sc.at[label] : -1);
     // 맵에 들어올 때 블록 바꾸기 (예: 사천왕 방 문은 이기면 열림)
     mp.tileChanges = [];
     for (const l of ev.ls) {
@@ -807,6 +823,7 @@ function build(log = console.log) {
         if (s.hidden) sign.hidden = s.hidden;
         if (s.std) sign.std = s.std;
         if (s.text) sign.text = s.text;
+        sign.pc = pcOf(a[3]);
         mp.signs.push(sign);
       } else if ((m = l.match(/^\s*object_event\s+(.+)$/))) {
         const a = args(m[1]);
@@ -826,6 +843,7 @@ function build(log = console.log) {
           if (!alt) delete o.trainer;
         }
         if (o.badge && o.gives) badgeHMs[o.badge] = o.gives;
+        o.pc = pcOf(a[11]);
         mp.objects.push(o);
       }
     }

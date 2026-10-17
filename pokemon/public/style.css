@@ -1,7 +1,7 @@
 @font-face { font-family: 'Galmuri9'; src: url('fonts/Galmuri9.woff2') format('woff2'); font-display: block; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #1c1a24; color: #eee; font-family: 'Galmuri9', system-ui, sans-serif; overflow: hidden; }
-#wrap { display: flex; justify-content: center; align-items: center; padding-top: 4px; }
+#wrap { display: flex; justify-content: center; align-items: center; padding: 20px 0; box-sizing: border-box; }
 #screen { image-rendering: pixelated; image-rendering: crisp-edges; background: #f8f8f8; box-shadow: 0 0 0 4px #2c2838, 0 8px 30px rgba(0,0,0,.6); border-radius: 2px; }
 .hidden { display: none !important; }
 #login { position: fixed; inset: 0; display: flex; align-items: center; overflow-y: auto; padding: 16px 0; justify-content: center; background: radial-gradient(circle at 50% 30%, #3a3050, #141218); z-index: 10; }
