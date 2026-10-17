@@ -71,7 +71,7 @@ function untar(buf, dest, keep) {
 
 async function ensureSource(log) {
   if (fs.existsSync(path.join(SRC_DIR, 'maps', 'NewBarkTown.asm'))) return;
-  log('포켓몬 골드 원본 자료(pret/pokegold)를 처음 한 번 내려받습니다. (약 10MB, 인터넷 필요)');
+  log('포켓몬 골드 원본 자료(pret/pokegold)를 처음 한 번 내려받습니다. (몇 MB, 인터넷 필요)');
   const gz = await download(TARBALL);
   const tar = zlib.gunzipSync(gz);
   const tmp = SRC_DIR + '.tmp';

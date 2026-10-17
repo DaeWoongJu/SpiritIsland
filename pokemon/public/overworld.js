@@ -400,8 +400,10 @@ function tryStep(dir) {
       bump(); return;
     }
     const key = `${blocker.idx}`;
-    if (ow.bumps.key === key) ow.bumps.n++; else ow.bumps = { key, n: 1 };
-    if (ow.bumps.n < 6 || blocker.o.type === 'TRAINER' || blocker.o.std) { bump(); return; }
+    // 따로따로 여러 번 눌러 부딪혀야 비켜 줌 (누르고 있는 것은 한 번)
+    if (ow.bumps.key !== key) ow.bumps = { key, n: 0 };
+    if (G.input.pressed[dir]) ow.bumps.n++;
+    if (ow.bumps.n < 5 || blocker.o.type === 'TRAINER' || blocker.o.std || blocker.o.wild || blocker.o.itemball) { bump(); return; }
     // 길을 계속 막고 서 있으면 비켜 줌 (이야기 진행을 다 만들지 않았으므로)
     G.toast(`${G.me.name}: 잠깐 지나갈게요!`);
   }

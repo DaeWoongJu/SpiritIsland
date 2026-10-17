@@ -207,17 +207,17 @@ class BattleScene {
           } else if (G.input.pressed.b) { G.pop(scr); resolve(-1); }
         },
         draw: (ctx) => {
-          G.box(ctx, 0, 56, 72, 40);
+          G.box(ctx, 0, 44, 72, 40);
           const m = pr.moves[scr.i];
-          G.text(ctx, '타입/', 7, 61);
-          G.text(ctx, G.typeName(m.type), 15, 72);
-          G.text(ctx, `${m.pp}/${m.max}`, 65, 82, G.BLACK, 'right');
-          G.box(ctx, 32, 96, 128, 48);
+          G.text(ctx, '타입/', 7, 49);
+          G.text(ctx, G.typeName(m.type), 15, 60);
+          G.text(ctx, `${m.pp}/${m.max}`, 65, 70, G.BLACK, 'right');
+          G.box(ctx, 24, 84, 136, 60);
           pr.moves.forEach((mv, k) => {
-            G.text(ctx, mv.name, 46, 100 + k * 10, mv.ok ? G.BLACK : '#888');
-            if (k === scr.i) G.cursor(ctx, 38, 101 + k * 10);
+            G.text(ctx, mv.name, 38, 90 + k * 12, mv.ok ? G.BLACK : '#888');
+            if (k === scr.i) G.cursor(ctx, 30, 91 + k * 12);
           });
-          for (let k = pr.moves.length; k < 4; k++) G.text(ctx, '-', 46, 100 + k * 10);
+          for (let k = pr.moves.length; k < 4; k++) G.text(ctx, '-', 38, 90 + k * 12);
         },
       };
       G.push(scr);

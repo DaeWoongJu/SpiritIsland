@@ -804,6 +804,17 @@ const handlers = {
     for (const q of online()) send(q.ws, { t: 'chat', name: p.data.name, text });
   },
   look(p, msg) { if (p.data) { p.data.look = Math.max(0, Math.min(3, msg.look | 0)); savePlayer(p); sendState(p); broadcastPlayers(); } },
+  // 시험용 (POKEMON_DEBUG=1 로 켰을 때만)
+  debug(p, msg) {
+    if (!process.env.POKEMON_DEBUG) return;
+    const d = p.data;
+    if (msg.mon) { const m = dex.makeMon(msg.mon, msg.level || 5, { moves: msg.moves, ot: d.name, otId: p.id }); if (msg.exp) m.exp += msg.exp; receiveMon(p, m); }
+    if (msg.item) bagAdd(d, msg.item, msg.qty || 1);
+    if (msg.flags) Object.assign(d.flags, msg.flags);
+    if (msg.badges) d.badges = msg.badges;
+    if (msg.hp !== undefined) for (const m of d.party) m.hp = Math.min(m.stats[0], msg.hp);
+    savePlayer(p); sendState(p);
+  },
   save(p) { savePlayer(p); say(p, `${p.data.name}${ko.hasBatchim(p.data.name) ? '은' : '는'} 레포트를 확실히 기록했다!`); },
 };
 
