@@ -182,7 +182,13 @@ const COOP = [
 // 예전 저장(미션이 이야기를 대신하던 때)을 원작 이벤트 상태로 옮기기
 const STARTER_NAME = { 152: 'CHIKORITA', 155: 'CYNDAQUIL', 158: 'TOTODILE' };
 function migrateStory(d) {
-  if (d.sv >= 1) return;
+  // 2: 공박사 전화(조수가 도라지 포켓몬센터에 옴)를 받지 못한 채 윙배지를 받은 저장
+  if (d.sv === 1) {
+    d.sv = 2;
+    if (d.badges.includes('ZEPHYRBADGE') && !d.flags.EVENT_GOT_TOGEPI_EGG_FROM_ELMS_AIDE) { delete d.flags.EVENT_ELMS_AIDE_IN_VIOLET_POKEMON_CENTER; d.flags.EVENT_ELMS_AIDE_IN_LAB = true; }
+    return;
+  }
+  if (d.sv >= 2) return;
   d.sv = 1;
   d.scenes = d.scenes || {};
   const f = d.flags;

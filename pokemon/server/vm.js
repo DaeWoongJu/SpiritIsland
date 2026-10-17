@@ -9,6 +9,14 @@ const DAILY = /TODAY|DAILY|HAIRCUT|GROOMING|LUCKY_NUMBER|TM27_RETURN|MERCHANT_CL
 const BADGE_RE = /^ENGINE_(\w+BADGE)$/;
 const STRINGS_KO = { '#GEAR': '포켓기어', 'POKéGEAR': '포켓기어', 'MAP CARD': '맵카드', 'RADIO CARD': '라디오카드', 'EXPN CARD': '확장카드', 'PHONE CARD': '전화카드' };
 let seq = 1;
+// 원작에서 포켓기어로 걸려 오는 전화 (스크립트의 specialphonecall) — 바로 받은 것으로 친다
+const PHONE = {
+  SPECIALCALL_ROBBED: { who: '공박사', text: [['여, 여보세요? {PLAYER}?', '큰일 났어!'], ['그, 그러니까… 정말 큰일이야!'], ['어떡하지? 아… 이럴 수가…'], ['지금 당장 연구소로 돌아와 줘!']], set: ['EVENT_ELM_CALLED_ABOUT_STOLEN_POKEMON'] },
+  SPECIALCALL_ASSISTANT: { who: '공박사', text: [['여보세요, {PLAYER}?', '그 알에 대해 알아낸 게 있어!'], ['내 조수가 도라지시티', '포켓몬센터에 가 있단다.'], ['조수와 이야기해 보렴!']], clear: ['EVENT_ELMS_AIDE_IN_VIOLET_POKEMON_CENTER'], set: ['EVENT_ELMS_AIDE_IN_LAB'] },
+  SPECIALCALL_WEIRDBROADCAST: { who: '공박사', text: [['{PLAYER}! 라디오 들었니?', '이상한 방송이 나오고 있어!'], ['로켓단이 금빛시티 라디오탑을', '점거한 것 같아!']] },
+  SPECIALCALL_SSTICKET: { who: '공박사', text: [['{PLAYER}! 줄 것이 있으니', '연구소에 들러 주렴!']] },
+  SPECIALCALL_MASTERBALL: { who: '공박사', text: [['{PLAYER}! 줄 것이 있으니', '연구소에 들러 주렴!']] },
+};
 
 /**
  * api: { W, ko, dex, itemKo, bagAdd, bagUse, receiveMon, addSeen, sendTo, save, sendState,
@@ -85,7 +93,8 @@ function createVM(api) {
   function std(p, run, name) {
     const d = p.data;
     switch (name) {
-      case 'ReceiveItem': case 'ReceiveTogepiEgg':
+      case 'ReceiveTogepiEgg': break; // 알 받는 글은 giveegg 에서 이미 보임
+      case 'ReceiveItem':
         if (run.buf) say(run, [[`${nameOf(d)} ${ko.josa(run.buf, '을/를')} 받았다!`]]);
         break;
       case 'PokecenterNurse': run.out.push({ nurse: true }); break;
@@ -251,6 +260,15 @@ function createVM(api) {
         case 'special':
           if (op[1] === 'UnownPuzzle') { run.puzzle = run.v; return wait(p, run, 'puzzle'); }
           special(p, run, op[1]); break;
+        case 'phone': {
+          const c = PHONE[op[1]];
+          if (!c) break;
+          for (const f of c.set || []) setFlag(d, f, true);
+          for (const f of c.clear || []) setFlag(d, f, false);
+          run.out.push({ sfx: 'item' });
+          say(run, [[`따르릉! ${ko.josa(c.who, '이/가')} 전화를 걸어왔다.`], ...c.text.map((pg, i) => (i === 0 ? [`${c.who}: ${pg[0]}`, ...pg.slice(1)] : pg))]);
+          break;
+        }
         case 'block': run.out.push({ block: { x: op[1], y: op[2], b: op[3] } }); break;
         case 'warpcheck': run.out.push({ warpcheck: true }); break;
         case 'warp': {
@@ -370,6 +388,7 @@ function createVM(api) {
       case 'scene': (d.scenes ||= {})[run.mapId] = op[1]; break;
       case 'random': run.v = Math.floor(Math.random() * (op[1] || 256)); break;
       case 'hide': if (op[1] >= 0) { setFlag(d, hideKey(map, op[1]), true); run.out.push({ hide: op[1] }); } break;
+      case 'phone': { const c = PHONE[op[1]]; if (c) { for (const f of c.set || []) setFlag(d, f, true); for (const f of c.clear || []) setFlag(d, f, false); } break; }
       case 'show': if (op[1] >= 0) { setFlag(d, hideKey(map, op[1]), false); run.out.push({ show: op[1] }); } break;
       default: break;
     }

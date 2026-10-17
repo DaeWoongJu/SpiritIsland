@@ -108,7 +108,7 @@ function newPlayerData(name, look) {
   for (const e of W.initialEvents) flags[e] = true;
   for (const e of ALWAYS_ON) flags[e] = true;
   return {
-    v: 1, sv: 1, scenes: {}, name, look: look | 0, map: W.spawn.map, x: W.spawn.x, y: W.spawn.y, dir: 'down', surf: false,
+    v: 1, sv: 2, scenes: {}, name, look: look | 0, map: W.spawn.map, x: W.spawn.x, y: W.spawn.y, dir: 'down', surf: false,
     money: 3000, party: [], box: [], bag: { POTION: 1 }, badges: [], flags, beaten: {}, seen: [], caught: [],
     lastHeal: { map: 'PLAYERS_HOUSE_1F', x: 7, y: 4 }, visited: ['NEW_BARK_TOWN'], repel: 0, created: Date.now(), playMs: 0, fruit: {},
   };
@@ -565,7 +565,7 @@ const handlers = {
     const isNew = !p.data;
     if (!p.data) p.data = newPlayerData(name, msg.look);
     for (const e of ALWAYS_ON) p.data.flags[e] = true;
-    migrateStory(p.data);
+    migrateStory(p.data); migrateStory(p.data); // 저장 판(sv)마다 한 단계씩
     if (msg.look !== undefined && isNew) p.data.look = Math.max(0, Math.min(3, msg.look | 0));
     p.since = Date.now();
     players.set(id, p);
