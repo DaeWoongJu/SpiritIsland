@@ -333,6 +333,15 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       <label class="btn file">앨범에서 고르기<input id="fileAlbum" type="file" accept="image/*"></label>
     </div>
     <p class="status-box" id="shootMsg" hidden></p>
+    <div class="note" id="noPicker" hidden style="display:grid;gap:8px">
+      <p><b>이 화면에서는 사진 선택 창이 열리지 않아요.</b> Claude 앱 안에서는 카메라와 앨범을 쓸 수 없습니다. <b>크롬</b>이나 <b>삼성 인터넷</b>에서 열어 주세요.</p>
+      <ol class="howto">
+        <li>아래 「링크 복사」를 누릅니다.</li>
+        <li>크롬을 열고 주소창에 붙여 넣어 이동합니다. (처음 한 번은 claude.ai 로그인)</li>
+        <li>거기서 「휴대폰 카메라로 찍기」나 「앨범에서 고르기」를 누르세요.</li>
+      </ol>
+      <div class="row"><span class="mm" id="appLink" style="word-break:break-all;font-size:.85rem">https://claude.ai/artifact/AgcrBFH8kZBugmhuvYWsQg</span><button class="btn" type="button" id="btnCopyLink">링크 복사</button></div>
+    </div>
     <p class="lead" id="liveMsg">「가이드 보며 촬영」은 화면에 얼굴 위치 가이드를 띄워 줍니다. 카메라 권한이 막혀 있으면 「휴대폰 카메라로 찍기」를 쓰세요.</p>
     <div id="liveBox" hidden style="display:grid;gap:12px">
       <div class="cam">
@@ -574,6 +583,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       const im = await decodeImage(file);
       if (!im.w || !im.h) throw new Error('empty');
       setSource(im.el, im.w, im.h); im.done();
+      $('#noPicker').hidden = true;
       try { sessionStorage.removeItem('pp-pending'); } catch {}
       shootMsg('');
     } catch {
@@ -583,7 +593,22 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
   ['#fileCam', '#fileAlbum'].forEach((id) => {
     const inp = $(id);
     // 카메라 앱으로 넘어가는 동안 브라우저가 페이지를 새로 고치는 경우를 대비해 표시해 둠
-    inp.addEventListener('click', () => { try { sessionStorage.setItem('pp-pending', id); } catch {} });
+    inp.addEventListener('click', () => {
+      try { sessionStorage.setItem('pp-pending', id); } catch {}
+      // 선택 창이 열리면 페이지가 가려지거나 포커스를 잃음. 1.5초 동안 아무 일도 없으면 열리지 않은 것
+      let opened = false;
+      const mark = () => { opened = true; };
+      window.addEventListener('blur', mark, { once: true });
+      document.addEventListener('visibilitychange', mark, { once: true });
+      inp.addEventListener('change', mark, { once: true });
+      setTimeout(() => {
+        window.removeEventListener('blur', mark); document.removeEventListener('visibilitychange', mark);
+        if (!opened) {
+          try { sessionStorage.removeItem('pp-pending'); } catch {}
+          $('#noPicker').hidden = false; $('#noPicker').scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }, 1500);
+    });
     inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; loadFile(f).finally(() => { inp.value = ''; }); });
   });
 
@@ -631,7 +656,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false });
     } catch {
-      $('#liveMsg').textContent = '이 화면에서는 카메라를 열 수 없어요. 「휴대폰 카메라로 찍기」를 누르면 기본 카메라 앱으로 찍을 수 있습니다.';
+      $('#liveMsg').textContent = '이 화면에서는 카메라를 바로 열 수 없어요. 「휴대폰 카메라로 찍기」를 눌러 보고, 그것도 안 되면 크롬에서 열어 주세요.';
       return;
     }
     const v = $('#video'); v.srcObject = stream; v.classList.toggle('mirror', facing === 'user');
@@ -1188,6 +1213,13 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     $('#mailAddr').textContent = to;
     $('#mailLink').href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n(다운로드 폴더의 사진 파일을 첨부해 주세요)')}`;
     $('#mailSteps').hidden = false;
+  });
+  $('#btnCopyLink').addEventListener('click', () => {
+    const t = $('#appLink').textContent;
+    navigator.clipboard?.writeText(t).then(() => toast('링크를 복사했어요. 크롬 주소창에 붙여 넣으세요.'), () => {
+      const r = document.createRange(); r.selectNodeContents($('#appLink'));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('링크를 선택했어요. 길게 눌러 복사하세요.');
+    });
   });
   $('#btnCopyAddr').addEventListener('click', () => {
     const t = $('#mailAddr').textContent;
