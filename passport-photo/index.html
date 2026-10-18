@@ -435,6 +435,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
         <div class="slider"><label for="spotSize"><span>지우개 크기</span><span class="mm" id="spotSizeVal"></span></label><input id="spotSize" type="range" min="0.4" max="3" step="0.1" value="1.2"></div>
         <p class="lead" id="spotMsg"></p>
       </div>
+      <label class="toggle"><input type="checkbox" id="optShadow" checked><span><b>벽 그림자도 흰색으로</b><small>머리·목 옆 벽에 생긴 회색 그림자까지 지웁니다. 흰머리나 회색 옷이 같이 지워지면 끄세요.</small></span></label>
       <label class="toggle"><input type="checkbox" id="optMask"><span><b>흰색으로 바뀌는 곳 표시</b><small>빨갛게 칠해진 곳이 흰색으로 바뀝니다. 머리카락이나 옷까지 빨갛다면 「배경 인식 범위」를 줄이세요.</small></span></label>
       <div>
         <h3 style="margin-bottom:8px">자동 점검</h3>
@@ -836,7 +837,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
   // ── 배경 보정 ──
   const opts = () => ({
     wb: $('#optWb').checked, wbStr: $('#wbStr').value / 100,
-    bg: $('#optBg').checked, tol: +$('#tol').value, feather: +$('#feather').value,
+    bg: $('#optBg').checked, tol: +$('#tol').value, feather: +$('#feather').value, shadow: $('#optShadow').checked,
     skin: $('#optSkin').checked ? $('#skinStr').value / 100 : 0, spots: state.spots,
   });
   function syncBgLabels() {
@@ -997,6 +998,14 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       const dBg = (i) => { const a = C0[i] - bg[0], b = C1[i] - bg[1], e = C2[i] - bg[2]; return a * a + b * b + e * e; };
       const prot = new Uint8Array(N);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (inFace(x, y, w, h)) prot[y * w + x] = 1;
+      // 벽 그림자: 배경보다 어둡지만 색이 거의 없는(무채색) 부분. 턱 아래쪽은 더 짙은 그림자까지
+      const yLimit = Math.round(CHIN_MAX / H_MM * h), yLow = Math.round((CHIN_MIN - 4) / H_MM * h);
+      const isShadow = (i) => {
+        if (!o.shadow) return false;
+        const y = (i / w) | 0; if (y > yLimit) return false;
+        const r = C0[i], g = C1[i], b = C2[i], c = Math.max(r, g, b) - Math.min(r, g, b), L = 0.299 * r + 0.587 * g + 0.114 * b;
+        return (c <= 22 && L >= 100) || (y >= yLow && c <= 18 && L >= 60 && r >= b);   // 남색 옷(파란 기)·머리카락(채도 높음)은 제외
+      };
       const seed = (i) => { if (!mask[i] && !prot[i] && dBg(i) < tol2) { mask[i] = 1; q[qt++] = i; } };
       for (let x = 0; x < w; x++) seed(x);
       for (let y = 0; y < h; y++) { seed(y * w); seed(y * w + w - 1); }
@@ -1006,15 +1015,41 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
         for (const n of nb) {
           if (n < 0 || n >= N || mask[n] || prot[n]) continue;
           const a = C0[n] - C0[i], b = C1[n] - C1[i], e = C2[n] - C2[i];
-          if (a * a + b * b + e * e < step2 && dBg(n) < tol2) { mask[n] = 1; q[qt++] = n; }
+          if ((a * a + b * b + e * e < step2 && dBg(n) < tol2) || isShadow(n)) { mask[n] = 1; q[qt++] = n; }
         }
       }
-      const alpha = new Float32Array(N); for (let i = 0; i < N; i++) alpha[i] = mask[i];
-      boxBlur(alpha, w, h, o.feather * w / 413);
+      // 인물 불투명도 p: 배경 0, 인물 1. 배경과 맞닿은 띠(3px)는 채도로 '피부가 섞인 정도'를 계산해
+      // 그림자·배경색이 섞인 테두리만 걷어내고 원래 윤곽을 그대로 살림 (어두운 머리카락·옷 테두리는 그대로)
+      const pa = new Float32Array(N); for (let i = 0; i < N; i++) pa[i] = mask[i] ? 1 : 0;
+      const near = boxMean(pa, w, h, Math.max(1, Math.round(3 * w / 413)));
+      const p = new Float32Array(N), solid = new Uint8Array(N);
       for (let i = 0; i < N; i++) {
-        // 배경은 완전히 흰색, 인물 쪽 경계 픽셀은 살짝만 밝혀 누런 테두리만 지움
-        const a = mask[i] ? 1 : alpha[i] * 0.85; alpha[i] = a; if (a <= 0) continue;
-        const p = i * 4; d[p] += (255 - d[p]) * a; d[p + 1] += (255 - d[p + 1]) * a; d[p + 2] += (255 - d[p + 2]) * a;
+        if (mask[i]) continue;
+        const q4 = i * 4, r = d[q4], g = d[q4 + 1], b = d[q4 + 2];
+        const L = 0.299 * r + 0.587 * g + 0.114 * b, c = Math.max(r, g, b) - Math.min(r, g, b);
+        if (near[i] > 0 && L >= 70 && !prot[i]) p[i] = Math.min(1, Math.max(0, (c - 14) / 20));
+        else p[i] = 1;
+        if (p[i] >= 0.999) solid[i] = 1;
+      }
+      // 테두리 픽셀 색은 바로 안쪽의 순수한 인물 색으로 채움 (회색 띠 제거)
+      for (let it = 0; it < 5; it++) {
+        const add = [];
+        for (let i = 0; i < N; i++) {
+          if (solid[i] || p[i] <= 0) continue;
+          const x = i % w; let sr = 0, sg = 0, sb = 0, n = 0;
+          for (const j of [i - 1, i + 1, i - w, i + w, i - w - 1, i - w + 1, i + w - 1, i + w + 1]) {
+            if (j < 0 || j >= N || !solid[j] || Math.abs((j % w) - x) > 1) continue;
+            sr += d[j * 4]; sg += d[j * 4 + 1]; sb += d[j * 4 + 2]; n++;
+          }
+          if (n) add.push([i, sr / n, sg / n, sb / n]);
+        }
+        add.forEach(([i, r, g, b]) => { d[i * 4] = r; d[i * 4 + 1] = g; d[i * 4 + 2] = b; solid[i] = 1; });
+      }
+      boxBlur(p, w, h, o.feather * w / 413 * 0.6);   // 계단 현상만 없앨 만큼 살짝
+      const alpha = new Float32Array(N);
+      for (let i = 0; i < N; i++) {
+        const a = 1 - p[i]; alpha[i] = a; if (a <= 0) continue;
+        const q4 = i * 4; d[q4] += (255 - d[q4]) * a; d[q4 + 1] += (255 - d[q4 + 1]) * a; d[q4 + 2] += (255 - d[q4 + 2]) * a;
       }
       res.alpha = alpha; res.area = qt / N;
     }
@@ -1058,7 +1093,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     });
   }
   function paint(cv, src) { cv.width = src.width; cv.height = src.height; cv.getContext('2d').drawImage(src, 0, 0); }
-  ['#optWb', '#wbStr', '#optBg', '#tol', '#feather', '#optMask', '#optSkin', '#skinStr', '#spotSize'].forEach((s) => $(s).addEventListener('input', () => { syncBgLabels(); runProcess(); }));
+  ['#optWb', '#wbStr', '#optBg', '#optShadow', '#tol', '#feather', '#optMask', '#optSkin', '#skinStr', '#spotSize'].forEach((s) => $(s).addEventListener('input', () => { syncBgLabels(); runProcess(); }));
   syncBgLabels();
 
   function setSpotMode(on) {
