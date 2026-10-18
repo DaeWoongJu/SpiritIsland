@@ -135,7 +135,7 @@ ol.howto li::marker { font-family: var(--f-data); color: var(--accent); }
 .cam .count { position: absolute; inset: 0; display: grid; place-items: center; font: 700 5rem var(--f-data); color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.5); pointer-events: none; }
 .field { display: grid; gap: 4px; }
 .field label { font-size: 0.85rem; color: var(--muted); }
-input[type="text"], select {
+input[type="text"], input[type="email"], select {
   font: 500 1rem var(--f-body); padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--surface); color: var(--ink); width: 100%; max-width: 320px;
 }
@@ -456,6 +456,26 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
         </div>
         <p class="lead" style="font-size:.88rem">저장 버튼이 동작하지 않으면 미리보기 사진을 길게 눌러(컴퓨터는 오른쪽 클릭) 이미지로 저장하세요.</p>
       </div>
+    </div>
+  </div>
+  <div class="card" data-has-photo>
+    <h3>내 메일로 보내기</h3>
+    <p class="lead">컴퓨터에서 정부24에 올리거나 사진관에 보낼 때 편해요. 휴대폰의 공유 기능으로 Gmail 같은 메일 앱에 사진을 붙여 보냅니다.</p>
+    <div class="field">
+      <label for="mailTo">받을 메일 주소</label>
+      <input id="mailTo" type="email" inputmode="email" autocomplete="email" placeholder="예: myname@gmail.com">
+    </div>
+    <label class="toggle"><input type="checkbox" id="mailSheet"><span><b>인화용 4×6 파일도 함께 보내기</b></span></label>
+    <div class="row"><button class="btn primary" type="button" id="btnMail">메일 앱으로 보내기</button></div>
+    <p class="status-box" id="mailMsg" hidden></p>
+    <div id="mailSteps" hidden style="display:grid;gap:10px">
+      <ol class="howto">
+        <li>사진을 <b>다운로드 폴더</b>에 저장했어요: <span id="mailFiles" class="mm" style="font-size:.85rem;word-break:break-all"></span></li>
+        <li>아래 「메일 쓰기 열기」를 누르거나, 안 열리면 <b>Gmail 앱</b>을 직접 열고 「작성」을 누릅니다.</li>
+        <li>받는 사람에 <b id="mailAddr"></b> 를 넣습니다. <button class="btn" type="button" id="btnCopyAddr" style="padding:4px 10px;font-size:.85rem">주소 복사</button></li>
+        <li>클립 모양(📎) → <b>파일 첨부</b> → <b>다운로드</b> 폴더에서 위 파일을 고른 뒤 보냅니다.</li>
+      </ol>
+      <div class="row"><a class="btn" id="mailLink" href="#" target="_blank" rel="noopener">메일 쓰기 열기</a></div>
     </div>
   </div>
   <div class="card" data-has-photo>
@@ -1104,21 +1124,22 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     if (window.claude && typeof window.claude.use === 'function') {
       try {
         const dl = await window.claude.use('downloads');
-        if (dl) { await dl.save({ filename, data: blob }); toast('저장했어요'); return; }
+        if (dl) { await dl.save({ filename, data: blob }); toast('저장했어요'); return true; }
       } catch (e) {
-        if (e && e.code === 'declined') { toast('저장을 취소했어요'); return; }
-        toast('저장할 수 없어요. 사진을 길게 눌러 저장해 주세요.'); return;
+        if (e && e.code === 'declined') { toast('저장을 취소했어요'); return false; }
+        toast('저장할 수 없어요. 사진을 길게 눌러 저장해 주세요.'); return false;
       }
     }
     const url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     toast('저장했어요');
+    return true;
   }
   $('#btnSave').addEventListener('click', async () => {
     const c = finalCanvas(); saveBlob(await toBlob(c), fname(`${c.width}x${c.height}`));
   });
-  $('#btnSheet').addEventListener('click', async () => {
+  function sheetCanvas() {
     // 4×6 인치(102 × 152 mm) 300 dpi 인화지에 6장
     const one = renderCrop(413); processCanvas(one, opts());
     const s = document.createElement('canvas'); s.width = 1200; s.height = 1800;
@@ -1129,7 +1150,51 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       const px = Math.round(gx + col * (413 + gx)), py = Math.round(gy + r * (531 + gy));
       x.drawImage(one, px, py); x.strokeRect(px - 0.5, py - 0.5, 414, 532);
     }
-    saveBlob(await toBlob(s), fname('인화용_4x6'));
+    return s;
+  }
+  $('#btnSheet').addEventListener('click', async () => { saveBlob(await toBlob(sheetCanvas()), fname('인화용_4x6')); });
+
+  // ── 메일로 보내기 ──
+  // 브라우저는 메일을 직접 보낼 수 없어서: 1) 공유 시트로 메일 앱에 첨부, 2) 안 되면 저장 후 메일 쓰기 화면 + 첨부 안내
+  try { $('#mailTo').value = localStorage.getItem('pp-mail') || ''; } catch {}
+  const mailMsg = (msg, bad) => { const m = $('#mailMsg'); m.textContent = msg; m.hidden = !msg; m.classList.toggle('bad', !!bad); };
+  $('#btnMail').addEventListener('click', async () => {
+    const to = $('#mailTo').value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { mailMsg('메일 주소를 확인해 주세요. 예: myname@gmail.com', true); $('#mailTo').focus(); return; }
+    try { localStorage.setItem('pp-mail', to); } catch {}
+    mailMsg('사진을 준비하는 중이에요…'); $('#mailSteps').hidden = true;
+    const c = finalCanvas(), files = [new File([await toBlob(c)], fname(`${c.width}x${c.height}`), { type: 'image/jpeg' })];
+    if ($('#mailSheet').checked) files.push(new File([await toBlob(sheetCanvas())], fname('인화용_4x6'), { type: 'image/jpeg' }));
+    const who = ($('#who').value || '').trim();
+    const subject = `여권사진${who ? ' - ' + who : ''}`;
+    const body = `여권사진 파일입니다.\n- 정부24 업로드용: ${files[0].name} (${c.width}×${c.height}px, 35×45mm)${files[1] ? '\n- 인화용 4×6: ' + files[1].name : ''}`;
+    if (navigator.canShare && navigator.share) {
+      try {
+        if (navigator.canShare({ files })) {
+          await navigator.share({ files, title: subject, text: `받는 사람: ${to}\n\n${body}` });
+          mailMsg(`메일 앱에서 받는 사람에 ${to} 를 넣고 보내세요.`);
+          return;
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') { mailMsg('공유를 취소했어요.'); return; }
+      }
+    }
+    // 공유 시트를 쓸 수 없는 화면: 파일을 저장하고 직접 첨부하도록 안내
+    let saved = true;
+    for (const f of files) saved = (await saveBlob(f, f.name)) && saved;
+    if (!saved) { mailMsg('사진을 저장하지 못했어요. 위 미리보기 사진을 길게 눌러 저장한 뒤 메일 앱에서 첨부해 주세요.', true); return; }
+    mailMsg('');
+    $('#mailFiles').textContent = files.map((f) => f.name).join(', ');
+    $('#mailAddr').textContent = to;
+    $('#mailLink').href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n(다운로드 폴더의 사진 파일을 첨부해 주세요)')}`;
+    $('#mailSteps').hidden = false;
+  });
+  $('#btnCopyAddr').addEventListener('click', () => {
+    const t = $('#mailAddr').textContent;
+    navigator.clipboard?.writeText(t).then(() => toast('주소를 복사했어요'), () => {
+      const r = document.createRange(); r.selectNodeContents($('#mailAddr'));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('주소를 선택했어요. 복사해서 쓰세요.');
+    });
   });
   try {
     if (sessionStorage.getItem('pp-pending')) {
