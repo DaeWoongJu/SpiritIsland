@@ -557,7 +557,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       try { sessionStorage.removeItem('pp-pending'); } catch {}
       shootMsg('');
     } catch {
-      shootMsg('이 사진을 열 수 없어요. 휴대폰 설정 → 카메라 → 사진 형식을 「호환성 우선(JPG)」으로 바꾸거나, 화면을 캡처한 사진으로 다시 골라 주세요.', true);
+      shootMsg('이 사진을 열 수 없어요. 갤럭시는 카메라 앱 설정 → 고급 사진 옵션 → 「고효율 사진(HEIF)」을 끄고, 아이폰은 설정 → 카메라 → 포맷 → 「호환성 우선」으로 바꾼 뒤 다시 찍어 주세요.', true);
     }
   }
   ['#fileCam', '#fileAlbum'].forEach((id) => {
