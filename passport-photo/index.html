@@ -119,6 +119,11 @@ ol.howto li::marker { font-family: var(--f-data); color: var(--accent); }
 .rule li::before { position: absolute; left: 0; font-weight: 700; }
 .rule li.y::before { content: "○"; color: var(--ok); }
 .rule li.n::before { content: "✕"; color: var(--bad); }
+.rule li.m::before { content: "△"; color: var(--warn); }
+.compare.solo { grid-template-columns: 1fr; max-width: 420px; }
+.compare.solo figure:first-child { display: none; }
+.compare canvas.spotting { cursor: crosshair; outline: 3px solid var(--accent); outline-offset: 2px; touch-action: none; }
+.sub { display: grid; gap: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
 .note { background: var(--warn-soft); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-size: 0.92rem; }
 .note b { color: var(--warn); }
 
@@ -148,7 +153,7 @@ input[type="text"], select {
 .legend span.sw { display: inline-block; width: 18px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 
 /* 배경 */
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px; }
+.compare { scroll-margin-top: 130px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px; }
 .compare figure { margin: 0; display: grid; gap: 6px; }
 .compare canvas { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; display: block; background: #fff; }
 .compare figcaption { font-size: 0.85rem; color: var(--muted); text-align: center; }
@@ -195,7 +200,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       <button type="button" data-go="guide" aria-current="step">규정·찍는 법</button>
       <button type="button" data-go="shoot"><span class="n">1</span>촬영</button>
       <button type="button" data-go="align"><span class="n">2</span>크기 맞추기</button>
-      <button type="button" data-go="bg"><span class="n">3</span>배경 보정</button>
+      <button type="button" data-go="bg"><span class="n">3</span>배경·피부</button>
       <button type="button" data-go="save"><span class="n">4</span>저장·제출</button>
     </nav>
   </div>
@@ -292,11 +297,12 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       </ul></div>
       <div class="rule"><h3>보정</h3><ul>
         <li class="y">밝기·색 균형, 배경을 흰색으로 정리</li>
-        <li class="n">얼굴형·잡티·눈 크기 등 얼굴을 고친 사진</li>
+        <li class="m">뾰루지 같은 일시적 잡티를 약하게 정리 (심사에서 반려될 수 있음)</li>
+        <li class="n">얼굴형·눈 크기를 바꾸거나 점·흉터를 지운 사진</li>
         <li class="n">다른 사진의 얼굴을 합성</li>
       </ul></div>
     </div>
-    <p class="note"><b>보정 범위 안내</b> · 이 앱은 얼굴을 고치지 않습니다. 사진 전체의 누런 색감을 중립으로 맞추고, 배경 부분만 흰색으로 채웁니다. 그래도 최종 판단은 여권 심사 담당자가 하므로, 배경 경계가 어색하면 다시 찍는 편이 안전합니다.</p>
+    <p class="note"><b>보정 범위 안내</b> · 이 앱에는 얼굴형이나 눈·코·입을 바꾸는 기능이 없습니다. 기본으로는 사진 전체의 누런 색감을 중립으로 맞추고 배경만 흰색으로 채웁니다. 피부 결 정리와 잡티 지우기는 직접 켤 때만 약하게 적용됩니다. 그래도 최종 판단은 여권 심사 담당자가 하므로, 배경 경계가 어색하면 다시 찍는 편이 안전합니다.</p>
   </div>
 
   <div class="card">
@@ -382,18 +388,31 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
 <!-- ───────── 3. 배경 보정 ───────── -->
 <section id="s-bg" hidden>
   <div class="card">
-    <h2>3. 배경을 규정에 맞게 보정</h2>
+    <h2>3. 배경·피부 보정</h2>
     <div class="empty" data-need-photo hidden><p>아직 사진이 없어요.</p><button class="btn primary" type="button" data-go="shoot">사진 찍기</button></div>
     <div data-has-photo style="display:grid;gap:16px">
       <div class="compare">
         <figure><canvas id="cvBefore"></canvas><figcaption>원본</figcaption></figure>
-        <figure><canvas id="cvAfter"></canvas><figcaption>보정 후</figcaption></figure>
+        <figure><canvas id="cvAfter"></canvas><figcaption id="afterCap">보정 후</figcaption></figure>
       </div>
       <label class="toggle"><input type="checkbox" id="optWb" checked><span><b>누런 색감 빼기</b><small>배경색을 기준으로 사진 전체의 색 균형을 중립으로 맞춥니다. 전구색 조명 때문에 누렇게 나왔다면 강도를 높이고, 벽지 자체가 아이보리라 피부색이 파래지면 강도를 낮추세요.</small></span></label>
       <div class="slider"><label for="wbStr"><span>색 균형 강도</span><span class="mm" id="wbStrVal"></span></label><input id="wbStr" type="range" min="0" max="100" value="45"></div>
       <label class="toggle"><input type="checkbox" id="optBg" checked><span><b>배경을 흰색으로</b><small>사진 가장자리에서 이어지는 배경 부분만 찾아 흰색으로 채웁니다. 얼굴 영역은 건드리지 않습니다.</small></span></label>
       <div class="slider"><label for="tol"><span>배경 인식 범위</span><span class="mm" id="tolVal"></span></label><input id="tol" type="range" min="10" max="90" value="42"></div>
       <div class="slider"><label for="feather"><span>경계 부드럽게</span><span class="mm" id="featherVal"></span></label><input id="feather" type="range" min="0" max="4" step="0.5" value="1.5"></div>
+      <div class="sub">
+        <h3>피부 보정 (선택)</h3>
+        <p class="note"><b>먼저 읽어 주세요</b> · 여권사진은 본인 얼굴 그대로여야 합니다. 뾰루지·붉은 기 같은 일시적인 잡티를 약하게 정리하는 정도만 쓰고, <b>점·흉터·주름</b>처럼 원래 있는 특징은 지우지 마세요. 많이 고친 사진은 반려되거나, 해외 입국심사에서 본인 확인이 어려울 수 있습니다.</p>
+        <label class="toggle"><input type="checkbox" id="optSkin"><span><b>피부 결 정리</b><small>얼굴 피부만 살짝 매끄럽게 합니다. 눈·눈썹·입 윤곽과 피부 질감은 남깁니다.</small></span></label>
+        <div class="slider"><label for="skinStr"><span>피부 결 정리 강도</span><span class="mm" id="skinStrVal"></span></label><input id="skinStr" type="range" min="0" max="100" value="40"></div>
+        <div class="row">
+          <button class="btn" type="button" id="btnSpot">잡티 지우기</button>
+          <button class="btn" type="button" id="btnSpotUndo">하나 되돌리기</button>
+          <button class="btn" type="button" id="btnSpotClear">모두 취소</button>
+        </div>
+        <div class="slider"><label for="spotSize"><span>지우개 크기</span><span class="mm" id="spotSizeVal"></span></label><input id="spotSize" type="range" min="0.4" max="3" step="0.1" value="1.2"></div>
+        <p class="lead" id="spotMsg"></p>
+      </div>
       <label class="toggle"><input type="checkbox" id="optMask"><span><b>흰색으로 바뀌는 곳 표시</b><small>빨갛게 칠해진 곳이 흰색으로 바뀝니다. 머리카락이나 옷까지 빨갛다면 「배경 인식 범위」를 줄이세요.</small></span></label>
       <div>
         <h3 style="margin-bottom:8px">자동 점검</h3>
@@ -435,6 +454,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       <li><label><input type="checkbox">눈썹과 눈이 머리카락·안경테에 가리지 않는다</label></li>
       <li><label><input type="checkbox">얼굴과 배경에 그림자가 없고, 안경에 빛 반사가 없다</label></li>
       <li><label><input type="checkbox">머리카락·어깨 경계가 자연스럽다 (배경 보정 흔적이 어색하지 않다)</label></li>
+      <li><label><input type="checkbox">점·흉터 등 원래 얼굴 특징이 그대로 남아 있다</label></li>
       <li><label><input type="checkbox">초점이 맞고 흔들리지 않았다</label></li>
     </ul>
     <div class="row"><button class="btn" type="button" id="btnNext">다른 가족 사진 찍기</button></div>
@@ -457,7 +477,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
   const state = {
     src: null,            // 원본 canvas
     T: { x: W_MM / 2, y: H_MM / 2 }, s: 1, th: 0, sFit: 1,
-    taps: null, tapMode: 0, head: null,
+    taps: null, tapMode: 0, head: null, spots: [], spotMode: false,
   };
 
   // ── 단계 이동 ──
@@ -471,6 +491,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     document.querySelectorAll('[data-has-photo]').forEach((el) => { el.hidden = !has; });
     document.querySelectorAll('[data-need-photo]').forEach((el) => { el.hidden = has; });
     if (step !== 'shoot') stopLive();
+    if (step !== 'bg' && state.spotMode) setSpotMode(false);
     window.scrollTo({ top: 0 });
     if (!has) return;
     if (step === 'align') { sizeStage(); drawStage(); }
@@ -495,7 +516,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     c.width = Math.round(w * k); c.height = Math.round(h * k);
     const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
     x.drawImage(drawable, 0, 0, c.width, c.height);
-    state.src = c; state.taps = null; state.head = null; state.th = 0;
+    state.src = c; state.taps = null; state.head = null; state.th = 0; state.spots = [];
     resetFit();
     $('#rot').value = 0;
     go('align');
@@ -537,6 +558,15 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     x.beginPath(); x.ellipse(520, 775, 22, 12, 0, 0, Math.PI * 2); x.ellipse(680, 775, 22, 12, 0, 0, Math.PI * 2); x.fill();
     x.strokeStyle = '#a5685a'; x.lineWidth = 9; x.beginPath(); x.moveTo(555, 935); x.lineTo(645, 935); x.stroke();
     x.strokeStyle = '#c4917a'; x.lineWidth = 6; x.beginPath(); x.moveTo(600, 790); x.lineTo(588, 870); x.lineTo(612, 870); x.stroke();
+    // 피부 질감과 뾰루지 몇 개 (피부 보정 연습용)
+    const fd = x.getImageData(400, 600, 400, 460), px = fd.data;
+    for (let i = 0; i < px.length; i += 4) { const n = (Math.random() - 0.5) * 22; px[i] += n; px[i + 1] += n; px[i + 2] += n; }
+    x.putImageData(fd, 400, 600);
+    [[470, 860, 5], [735, 840, 6], [700, 905, 4], [455, 655, 4]].forEach(([bx, by, br]) => {
+      const rg = x.createRadialGradient(bx, by, 0, bx, by, br * 1.8);
+      rg.addColorStop(0, 'rgba(180,70,60,.85)'); rg.addColorStop(1, 'rgba(180,70,60,0)');
+      x.fillStyle = rg; x.beginPath(); x.arc(bx, by, br * 1.8, 0, Math.PI * 2); x.fill();
+    });
     $('#who').value = $('#who').value || '예시';
     setSource(c, c.width, c.height);
     toast('예시 사진을 불러왔어요. 정수리와 턱을 탭해 보세요.');
@@ -728,11 +758,17 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
   const opts = () => ({
     wb: $('#optWb').checked, wbStr: $('#wbStr').value / 100,
     bg: $('#optBg').checked, tol: +$('#tol').value, feather: +$('#feather').value,
+    skin: $('#optSkin').checked ? $('#skinStr').value / 100 : 0, spots: state.spots,
   });
   function syncBgLabels() {
     $('#wbStrVal').textContent = $('#wbStr').value + '%';
     $('#tolVal').textContent = $('#tol').value;
     $('#featherVal').textContent = $('#feather').value + ' px';
+    $('#skinStrVal').textContent = $('#skinStr').value + '%';
+    $('#spotSizeVal').textContent = (+$('#spotSize').value).toFixed(1) + ' mm';
+    $('#spotMsg').textContent = state.spotMode
+      ? `보정 후 사진에서 지울 잡티를 탭하세요. 지금 ${state.spots.length}곳`
+      : `「잡티 지우기」를 누르면 사진이 커지고, 탭한 곳의 작은 잡티를 주변 피부색으로 채웁니다. 지금 ${state.spots.length}곳`;
   }
   function renderCrop(pw) {
     const ph = Math.round(pw * H_MM / W_MM), c = document.createElement('canvas');
@@ -781,6 +817,81 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     }
     return a;
   }
+  function boxMean(a, w, h, R) {  // 반지름 R 상자 평균 (가로·세로 한 번씩)
+    const t = new Float32Array(a.length), o = new Float32Array(a.length), n = 2 * R + 1;
+    for (let y = 0; y < h; y++) {
+      const row = y * w; let s = 0;
+      for (let x = -R; x <= R; x++) s += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        t[row + x] = s / n;
+        s += a[row + Math.min(w - 1, x + R + 1)] - a[row + Math.max(0, x - R)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let y = -R; y <= R; y++) s += t[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        o[y * w + x] = s / n;
+        s += t[Math.min(h - 1, y + R + 1) * w + x] - t[Math.max(0, y - R) * w + x];
+      }
+    }
+    return o;
+  }
+  // 피부 결 정리: 얼굴 타원 안의 피부색 픽셀에만 가이디드 필터(윤곽 보존 흐림)를 일부 섞음
+  function smoothSkin(d, w, h, str) {
+    const N = w * h, R = Math.max(2, Math.round(w / 413 * 3)), eps = 0.0012 + 0.005 * str;
+    let m = new Float32Array(N);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const mx = x / w * W_MM, my = y / h * H_MM;
+      const e = ((mx - FACE.cx) / (FACE.rx * 1.15)) ** 2 + ((my - FACE.cy) / (FACE.ry * 1.08)) ** 2;
+      if (e >= 1) continue;
+      const i = y * w + x, p = i * 4, r = d[p], g = d[p + 1], b = d[p + 2];
+      const cb = 128 - 0.1687 * r - 0.3313 * g + 0.5 * b, cr = 128 + 0.5 * r - 0.4187 * g - 0.0813 * b;
+      if (cb < 75 || cb > 132 || cr < 128 || cr > 182) continue;
+      m[i] = Math.min(1, (1 - e) / 0.25) * str * 0.7;   // 최대 70%만 섞어 질감 유지
+    }
+    m = boxMean(m, w, h, 2);
+    const P = new Float32Array(N), PP = new Float32Array(N), A = new Float32Array(N), B = new Float32Array(N);
+    for (let c = 0; c < 3; c++) {
+      for (let i = 0; i < N; i++) { const v = d[i * 4 + c] / 255; P[i] = v; PP[i] = v * v; }
+      const mp = boxMean(P, w, h, R), mpp = boxMean(PP, w, h, R);
+      for (let i = 0; i < N; i++) { const v = mpp[i] - mp[i] * mp[i], a = v / (v + eps); A[i] = a; B[i] = mp[i] - a * mp[i]; }
+      const ma = boxMean(A, w, h, R), mb = boxMean(B, w, h, R);
+      for (let i = 0; i < N; i++) {
+        if (m[i] <= 0) continue;
+        const q = ma[i] * P[i] + mb[i];
+        d[i * 4 + c] = (P[i] + (q - P[i]) * m[i]) * 255;
+      }
+    }
+  }
+  // 잡티 지우기: 원 안을 테두리 바깥 피부색으로 부드럽게 채움
+  function healSpots(d, w, h, spots) {
+    const src = new Uint8ClampedArray(d);
+    spots.forEach((sp) => {
+      const c = srcToOut(sp.x, sp.y), cx = c.x / W_MM * w, cy = c.y / H_MM * h;
+      const R = Math.max(1.5, sp.r * state.s / W_MM * w), Rb = R * 1.35, K = 24;
+      let ring = [];
+      for (let k = 0; k < K; k++) {
+        const t = k / K * Math.PI * 2, bx = Math.round(cx + Math.cos(t) * Rb), by = Math.round(cy + Math.sin(t) * Rb);
+        if (bx < 0 || by < 0 || bx >= w || by >= h) continue;
+        const p = (by * w + bx) * 4; ring.push([bx, by, src[p], src[p + 1], src[p + 2]]);
+      }
+      // 머리카락·눈썹처럼 주변과 밝기가 크게 다른 테두리 표본은 버림
+      const lum = (t) => 0.299 * t[2] + 0.587 * t[3] + 0.114 * t[4];
+      const sorted = ring.map(lum).sort((u, v) => u - v), mid = sorted[sorted.length >> 1];
+      ring = ring.filter((t) => Math.abs(lum(t) - mid) < 30);
+      if (!ring.length) return;
+      const x0 = Math.max(0, Math.floor(cx - R * 1.2)), x1 = Math.min(w - 1, Math.ceil(cx + R * 1.2));
+      const y0 = Math.max(0, Math.floor(cy - R * 1.2)), y1 = Math.min(h - 1, Math.ceil(cy + R * 1.2));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const dist = Math.hypot(x - cx, y - cy); if (dist > R * 1.2) continue;
+        let sr = 0, sg = 0, sb = 0, sw = 0;
+        ring.forEach(([bx, by, r, g, b]) => { const wt = 1 / ((x - bx) ** 2 + (y - by) ** 2 + 1); sr += r * wt; sg += g * wt; sb += b * wt; sw += wt; });
+        const a = dist <= R ? 1 : 1 - (dist - R) / (R * 0.2), p = (y * w + x) * 4;
+        d[p] += (sr / sw - d[p]) * a; d[p + 1] += (sg / sw - d[p + 1]) * a; d[p + 2] += (sb / sw - d[p + 2]) * a;
+      }
+    });
+  }
   function processCanvas(c, o) {
     const w = c.width, h = c.height, ctx = c.getContext('2d');
     const img = ctx.getImageData(0, 0, w, h), d = img.data, N = w * h;
@@ -795,21 +906,27 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       }
       bg = median(d, sIdx);
     }
+    if (o.spots.length) healSpots(d, w, h, o.spots);
+    if (o.skin > 0) smoothSkin(d, w, h, o.skin);
     if (o.bg) {
       const tol2 = o.tol * o.tol, step = Math.max(7, o.tol * 0.38), step2 = step * step;
       const mask = new Uint8Array(N), q = new Int32Array(N); let qh = 0, qt = 0;
-      const dBg = (i) => { const p = i * 4, a = d[p] - bg[0], b = d[p + 1] - bg[1], e = d[p + 2] - bg[2]; return a * a + b * b + e * e; };
+      const Rn = Math.max(1, Math.round(w / 413 * 1.5)), ch = [0, 1, 2].map((k) => {
+        const a = new Float32Array(N); for (let i = 0; i < N; i++) a[i] = d[i * 4 + k]; return boxMean(a, w, h, Rn);
+      });
+      const [C0, C1, C2] = ch;
+      const dBg = (i) => { const a = C0[i] - bg[0], b = C1[i] - bg[1], e = C2[i] - bg[2]; return a * a + b * b + e * e; };
       const prot = new Uint8Array(N);
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (inFace(x, y, w, h)) prot[y * w + x] = 1;
       const seed = (i) => { if (!mask[i] && !prot[i] && dBg(i) < tol2) { mask[i] = 1; q[qt++] = i; } };
       for (let x = 0; x < w; x++) seed(x);
       for (let y = 0; y < h; y++) { seed(y * w); seed(y * w + w - 1); }
       while (qh < qt) {
-        const i = q[qh++], x = i % w, p = i * 4;
+        const i = q[qh++], x = i % w;
         const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
         for (const n of nb) {
           if (n < 0 || n >= N || mask[n] || prot[n]) continue;
-          const pn = n * 4, a = d[pn] - d[p], b = d[pn + 1] - d[p + 1], e = d[pn + 2] - d[p + 2];
+          const a = C0[n] - C0[i], b = C1[n] - C1[i], e = C2[n] - C2[i];
           if (a * a + b * b + e * e < step2 && dBg(n) < tol2) { mask[n] = 1; q[qt++] = n; }
         }
       }
@@ -817,7 +934,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       boxBlur(alpha, w, h, o.feather * w / 413);
       for (let i = 0; i < N; i++) {
         // 배경은 완전히 흰색, 인물 쪽 경계 픽셀은 살짝만 밝혀 누런 테두리만 지움
-        const a = mask[i] ? 1 : alpha[i] * 0.5; alpha[i] = a; if (a <= 0) continue;
+        const a = mask[i] ? 1 : alpha[i] * 0.85; alpha[i] = a; if (a <= 0) continue;
         const p = i * 4; d[p] += (255 - d[p]) * a; d[p + 1] += (255 - d[p + 1]) * a; d[p + 2] += (255 - d[p + 2]) * a;
       }
       res.alpha = alpha; res.area = qt / N;
@@ -862,8 +979,30 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     });
   }
   function paint(cv, src) { cv.width = src.width; cv.height = src.height; cv.getContext('2d').drawImage(src, 0, 0); }
-  ['#optWb', '#wbStr', '#optBg', '#tol', '#feather', '#optMask'].forEach((s) => $(s).addEventListener('input', () => { syncBgLabels(); runProcess(); }));
+  ['#optWb', '#wbStr', '#optBg', '#tol', '#feather', '#optMask', '#optSkin', '#skinStr', '#spotSize'].forEach((s) => $(s).addEventListener('input', () => { syncBgLabels(); runProcess(); }));
   syncBgLabels();
+
+  function setSpotMode(on) {
+    state.spotMode = on;
+    $('.compare').classList.toggle('solo', on);
+    $('#cvAfter').classList.toggle('spotting', on);
+    $('#btnSpot').textContent = on ? '잡티 지우기 끝' : '잡티 지우기';
+    $('#afterCap').textContent = on ? '잡티를 탭하세요 · 다 했으면 아래 「잡티 지우기 끝」' : '보정 후';
+    $('#btnSpot').classList.toggle('primary', on);
+    syncBgLabels();
+    if (on) $('.compare').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  $('#btnSpot').addEventListener('click', () => setSpotMode(!state.spotMode));
+  $('#btnSpotUndo').addEventListener('click', () => { state.spots.pop(); syncBgLabels(); runProcess(); });
+  $('#btnSpotClear').addEventListener('click', () => { state.spots = []; syncBgLabels(); runProcess(); });
+  $('#cvAfter').addEventListener('pointerup', (e) => {
+    if (!state.spotMode) return;
+    if (state.spots.length >= 40) { toast('잡티는 40곳까지 지울 수 있어요. 너무 많이 고치면 반려될 수 있어요.'); return; }
+    const r = e.currentTarget.getBoundingClientRect();
+    const sp = outToSrc((e.clientX - r.left) / r.width * W_MM, (e.clientY - r.top) / r.height * H_MM);
+    sp.r = +$('#spotSize').value / 2 / state.s;   // 반지름을 원본 px로 저장 → 다시 맞춰도 같은 자리
+    state.spots.push(sp); syncBgLabels(); runProcess();
+  });
 
   function renderChecks(r) {
     const items = [];
@@ -890,6 +1029,10 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       items.push(mm >= 32 && mm <= 36 ? ['ok', '머리 길이', `${mm.toFixed(1)} mm (규정 32–36 mm)`] : ['bad', '머리 길이', `${mm.toFixed(1)} mm, 규정 32–36 mm를 벗어났어요. 2단계에서 다시 맞추세요.`]);
     } else {
       items.push(['info', '머리 길이', '2단계 가이드에 정수리·턱을 맞췄는지 눈으로 확인해 주세요']);
+    }
+    const o = opts();
+    if (o.skin > 0 || o.spots.length) {
+      items.push(['warn', '피부 보정', `${o.skin > 0 ? '피부 결 정리 ' + Math.round(o.skin * 100) + '%' : ''}${o.skin > 0 && o.spots.length ? ', ' : ''}${o.spots.length ? '잡티 ' + o.spots.length + '곳' : ''}을 적용했어요. 원본과 비교해 본인 얼굴과 다르게 보이지 않는지 확인하세요.`]);
     }
     const pxPerMm = 1 / state.s;
     items.push(pxPerMm >= 413 / W_MM ? ['ok', '해상도', '원본 화질이 충분해요']
@@ -957,7 +1100,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     saveBlob(await toBlob(s), fname('인화용_4x6'));
   });
   $('#btnNext').addEventListener('click', () => {
-    state.src = null; $('#who').value = '';
+    state.src = null; state.spots = []; $('#who').value = '';
     document.querySelectorAll('ul.last input').forEach((i) => { i.checked = false; });
     go('shoot');
   });
