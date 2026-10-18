@@ -239,7 +239,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
           <dt>머리 길이</dt><dd><span class="mm">32–36 mm</span> (정수리~턱)</dd>
           <dt>배경</dt><dd>흰색 단색, 그림자·무늬 없음</dd>
           <dt>촬영 시기</dt><dd>최근 6개월 이내</dd>
-          <dt>저장 파일</dt><dd><span class="mm">413 × 531 px</span> JPG (300 dpi)</dd>
+          <dt>저장 파일</dt><dd><span class="mm">413 × 531 px</span> JPG, 500 KB 이하 (정부24 허용 <span class="mm">395–431 × 507–550 px</span>)</dd>
         </dl>
         <div class="row"><button class="btn primary" type="button" data-go="shoot">사진 찍으러 가기</button></div>
       </div>
@@ -302,6 +302,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
         <li class="m">뾰루지 같은 일시적 잡티를 약하게 정리 (심사에서 반려될 수 있음)</li>
         <li class="n">얼굴형·눈 크기를 바꾸거나 점·흉터를 지운 사진</li>
         <li class="n">다른 사진의 얼굴을 합성</li>
+        <li class="n">제미나이·챗GPT 등 AI로 다시 만들거나 고친 사진</li>
       </ul></div>
     </div>
     <p class="note"><b>보정 범위 안내</b> · 이 앱에는 얼굴형이나 눈·코·입을 바꾸는 기능이 없습니다. 기본으로는 사진 전체의 누런 색감을 중립으로 맞추고 배경만 흰색으로 채웁니다. 피부 결 정리와 잡티 지우기는 직접 켤 때만 약하게 적용됩니다. 그래도 최종 판단은 여권 심사 담당자가 하므로, 배경 경계가 어색하면 다시 찍는 편이 안전합니다.</p>
@@ -312,7 +313,8 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     <ol class="howto">
       <li>이 앱 <b>4단계</b>에서 「정부24 업로드용 JPG 저장」으로 파일을 저장합니다.</li>
       <li>정부24(<a href="https://www.gov.kr" target="_blank" rel="noopener">www.gov.kr</a>) 또는 정부24 앱에서 <b>「여권 재발급」</b>을 검색해 온라인 신청을 시작합니다.</li>
-      <li>사진 첨부 단계에서 저장한 JPG를 올립니다. 업로드 화면에 픽셀·용량 기준이 따로 표시되면 그 기준을 따르세요 (4단계에서 고해상도로도 저장할 수 있습니다).</li>
+      <li>사진 첨부 단계에서 저장한 <b>413 × 531 px JPG</b>를 올립니다. 온라인 신청은 인쇄 크기(cm)가 아니라 <b>파일의 픽셀(가로 395–431, 세로 507–550)과 용량(500 KB 이하)</b>으로 확인합니다. 업로드 화면에 다른 기준이 보이면 그 기준을 따르세요.</li>
+      <li>신청 전에 <a href="https://www.passport.go.kr" target="_blank" rel="noopener">외교부 여권안내</a>의 사진 검증 기능이 있으면 먼저 돌려 보세요.</li>
       <li>사진 심사를 통과하면 발급되고, 수령은 신청 때 고른 기관에 직접 방문해야 합니다.</li>
     </ol>
     <p class="note"><b>온라인 신청이 안 되는 경우</b> · 처음 여권을 만드는 경우, 이전 여권이 전자여권이 아닌 경우, 이름(영문) 변경 등은 온라인 재발급 대상이 아닐 수 있습니다. 이때는 저장한 「인화용 4×6」 파일을 사진관·편의점 인화기로 뽑아 구청에 가져가세요. 자세한 조건은 <a href="https://www.passport.go.kr" target="_blank" rel="noopener">외교부 여권안내</a>와 정부24 안내문을 확인하세요.</p>
@@ -454,8 +456,8 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
         <div class="field">
           <label for="res">파일 크기</label>
           <select id="res">
-            <option value="413">413 × 531 px (300 dpi, 기본)</option>
-            <option value="827">827 × 1063 px (600 dpi, 고해상도)</option>
+            <option value="413">413 × 531 px · 정부24 업로드용 (기본)</option>
+            <option value="827">827 × 1063 px · 인쇄용 고해상도 (정부24에는 올리지 마세요)</option>
           </select>
         </div>
         <p class="meta" id="fileMeta"></p>
@@ -1131,13 +1133,25 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     processCanvas(c, opts());
     return c;
   }
-  const toBlob = (c) => new Promise((res) => c.toBlob(res, 'image/jpeg', 0.95));
+  // JPG의 JFIF 머리글에 dpi를 기록 → 인화·인쇄할 때 정확히 35 × 45 mm(4×6 인치)로 나옴
+  async function setJpegDpi(blob, dpi) {
+    const b = new Uint8Array(await blob.arrayBuffer());
+    if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF && b[3] === 0xE0 && b[6] === 0x4A && b[7] === 0x46 && b[8] === 0x49 && b[9] === 0x46) {
+      b[13] = 1; b[14] = dpi >> 8; b[15] = dpi & 255; b[16] = dpi >> 8; b[17] = dpi & 255;   // 단위=인치, X·Y 밀도
+    }
+    return new Blob([b], { type: 'image/jpeg' });
+  }
+  const toBlob = (c, dpi = 300) => new Promise((res) => c.toBlob(res, 'image/jpeg', 0.95)).then((bl) => setJpegDpi(bl, dpi));
+  const photoDpi = (c) => Math.round(c.width / (W_MM / 25.4));
   let finalUrl = null;
   async function updateFinal() {
-    const c = finalCanvas(), blob = await toBlob(c);
+    const c = finalCanvas(), blob = await toBlob(c, photoDpi(c));
     if (finalUrl) URL.revokeObjectURL(finalUrl);
     finalUrl = URL.createObjectURL(blob); $('#finalImg').src = finalUrl;
-    $('#fileMeta').innerHTML = `<span class="mm">${c.width} × ${c.height} px · ${(blob.size / 1024).toFixed(0)} KB · JPG</span> · 인쇄 시 35 × 45 mm`;
+    const okPx = c.width >= 395 && c.width <= 431 && c.height >= 507 && c.height <= 550, okKb = blob.size <= 500 * 1024;
+    $('#fileMeta').innerHTML = `<span class="mm">${c.width} × ${c.height} px · ${(blob.size / 1024).toFixed(0)} KB · JPG · ${photoDpi(c)} dpi</span> · 인쇄하면 정확히 35 × 45 mm<br>`
+      + (okPx && okKb ? '<span class="pill ok">정부24 파일 기준 통과</span> 픽셀 395–431 × 507–550, 500 KB 이하'
+        : '<span class="pill bad">정부24 업로드 불가</span> 이 크기는 인쇄용이에요. 정부24에는 413 × 531 px로 저장해 올리세요.');
   }
   $('#res').addEventListener('change', updateFinal);
   const fname = (suffix) => {
@@ -1162,7 +1176,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     return true;
   }
   $('#btnSave').addEventListener('click', async () => {
-    const c = finalCanvas(); saveBlob(await toBlob(c), fname(`${c.width}x${c.height}`));
+    const c = finalCanvas(); saveBlob(await toBlob(c, photoDpi(c)), fname(`${c.width}x${c.height}`));
   });
   function sheetCanvas() {
     // 4×6 인치(102 × 152 mm) 300 dpi 인화지에 6장
@@ -1188,7 +1202,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { mailMsg('메일 주소를 확인해 주세요. 예: myname@gmail.com', true); $('#mailTo').focus(); return; }
     try { localStorage.setItem('pp-mail', to); } catch {}
     mailMsg('사진을 준비하는 중이에요…'); $('#mailSteps').hidden = true;
-    const c = finalCanvas(), files = [new File([await toBlob(c)], fname(`${c.width}x${c.height}`), { type: 'image/jpeg' })];
+    const c = finalCanvas(), files = [new File([await toBlob(c, photoDpi(c))], fname(`${c.width}x${c.height}`), { type: 'image/jpeg' })];
     if ($('#mailSheet').checked) files.push(new File([await toBlob(sheetCanvas())], fname('인화용_4x6'), { type: 'image/jpeg' }));
     const who = ($('#who').value || '').trim();
     const subject = `여권사진${who ? ' - ' + who : ''}`;
