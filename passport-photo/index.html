@@ -148,6 +148,8 @@ input[type="text"], select {
 .slider { display: grid; gap: 2px; }
 .slider label { display: flex; justify-content: space-between; font-size: 0.88rem; color: var(--muted); }
 .slider input { width: 100%; accent-color: var(--accent); }
+.status-box { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.status-box.bad { background: var(--bad-soft); color: var(--bad); }
 .status { font-weight: 600; color: var(--accent); min-height: 1.6em; }
 .legend { display: grid; gap: 4px; font-size: 0.88rem; color: var(--muted); }
 .legend span.sw { display: inline-block; width: 18px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
@@ -330,6 +332,7 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       <label class="btn file">휴대폰 카메라로 찍기<input id="fileCam" type="file" accept="image/*" capture="environment"></label>
       <label class="btn file">앨범에서 고르기<input id="fileAlbum" type="file" accept="image/*"></label>
     </div>
+    <p class="status-box" id="shootMsg" hidden></p>
     <p class="lead" id="liveMsg">「가이드 보며 촬영」은 화면에 얼굴 위치 가이드를 띄워 줍니다. 카메라 권한이 막혀 있으면 「휴대폰 카메라로 찍기」를 쓰세요.</p>
     <div id="liveBox" hidden style="display:grid;gap:12px">
       <div class="cam">
@@ -356,6 +359,14 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     <h3>먼저 연습해 보고 싶다면</h3>
     <p class="lead">누런 배경에서 찍힌 예시 사진으로 2~4단계를 미리 해볼 수 있어요.</p>
     <div class="row"><button class="btn" type="button" id="btnSample">예시 사진 불러오기</button></div>
+  </div>
+  <div class="card">
+    <h3>「휴대폰 카메라로 찍기」를 눌러도 다음으로 안 넘어가면</h3>
+    <ol class="howto">
+      <li>휴대폰의 <b>기본 카메라 앱</b>으로 먼저 찍습니다.</li>
+      <li>이 화면으로 돌아와 <b>「앨범에서 고르기」</b>로 방금 찍은 사진을 고릅니다.</li>
+      <li>Claude 앱 안에서 열었다면, 링크를 <b>사파리나 크롬</b>에서 열어 보세요.</li>
+    </ol>
   </div>
 </section>
 
@@ -521,19 +532,40 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     $('#rot').value = 0;
     go('align');
   }
-  async function loadFile(file) {
-    if (!file) return;
-    try {
+  const shootMsg = (msg, bad) => { const m = $('#shootMsg'); m.textContent = msg; m.hidden = !msg; m.classList.toggle('bad', !!bad); };
+  function decodeImage(file) {   // 1순위: <img> (사진 방향 자동 반영), 실패하면 createImageBitmap
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      const timer = setTimeout(() => reject(new Error('timeout')), 20000);
+      img.onload = () => { clearTimeout(timer); resolve({ el: img, w: img.naturalWidth, h: img.naturalHeight, done: () => URL.revokeObjectURL(url) }); };
+      img.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(url); reject(new Error('img')); };
+      img.src = url;
+    }).catch(async () => {
       let bmp;
       try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
-      catch { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
-      setSource(bmp, bmp.width || bmp.naturalWidth, bmp.height || bmp.naturalHeight);
+      catch { bmp = await createImageBitmap(file); }
+      return { el: bmp, w: bmp.width, h: bmp.height, done: () => bmp.close && bmp.close() };
+    });
+  }
+  async function loadFile(file) {
+    if (!file) { shootMsg('사진이 전달되지 않았어요. 기본 카메라 앱으로 찍은 다음 「앨범에서 고르기」로 골라 주세요.', true); return; }
+    shootMsg('사진을 불러오는 중이에요…');
+    try {
+      const im = await decodeImage(file);
+      if (!im.w || !im.h) throw new Error('empty');
+      setSource(im.el, im.w, im.h); im.done();
+      try { sessionStorage.removeItem('pp-pending'); } catch {}
+      shootMsg('');
     } catch {
-      toast('이 사진을 열 수 없어요. JPG나 PNG로 다시 골라 주세요.');
+      shootMsg('이 사진을 열 수 없어요. 휴대폰 설정 → 카메라 → 사진 형식을 「호환성 우선(JPG)」으로 바꾸거나, 화면을 캡처한 사진으로 다시 골라 주세요.', true);
     }
   }
-  $('#fileCam').addEventListener('change', (e) => { loadFile(e.target.files[0]); e.target.value = ''; });
-  $('#fileAlbum').addEventListener('change', (e) => { loadFile(e.target.files[0]); e.target.value = ''; });
+  ['#fileCam', '#fileAlbum'].forEach((id) => {
+    const inp = $(id);
+    // 카메라 앱으로 넘어가는 동안 브라우저가 페이지를 새로 고치는 경우를 대비해 표시해 둠
+    inp.addEventListener('click', () => { try { sessionStorage.setItem('pp-pending', id); } catch {} });
+    inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; loadFile(f).finally(() => { inp.value = ''; }); });
+  });
 
   // 예시 사진: 전구색 조명 아래 누런 벽 앞에서 찍힌 상반신
   $('#btnSample').addEventListener('click', () => {
@@ -1099,6 +1131,13 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
     }
     saveBlob(await toBlob(s), fname('인화용_4x6'));
   });
+  try {
+    if (sessionStorage.getItem('pp-pending')) {
+      sessionStorage.removeItem('pp-pending');
+      go('shoot');
+      shootMsg('카메라에서 돌아오는 동안 화면이 새로 고쳐져 사진을 받지 못했어요. 기본 카메라 앱으로 찍은 다음 「앨범에서 고르기」로 골라 주세요.', true);
+    }
+  } catch {}
   $('#btnNext').addEventListener('click', () => {
     state.src = null; state.spots = []; $('#who').value = '';
     document.querySelectorAll('ul.last input').forEach((i) => { i.checked = false; });
