@@ -1023,13 +1023,30 @@ ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--
       const pa = new Float32Array(N); for (let i = 0; i < N; i++) pa[i] = mask[i] ? 1 : 0;
       const near = boxMean(pa, w, h, Math.max(1, Math.round(3 * w / 413)));
       const p = new Float32Array(N), solid = new Uint8Array(N);
+      const Lbg = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2];
+      const yHair = Math.round((FACE.cy - 3) / H_MM * h);   // 눈 위쪽 = 머리카락 테두리 구간
       for (let i = 0; i < N; i++) {
         if (mask[i]) continue;
         const q4 = i * 4, r = d[q4], g = d[q4 + 1], b = d[q4 + 2];
         const L = 0.299 * r + 0.587 * g + 0.114 * b, c = Math.max(r, g, b) - Math.min(r, g, b);
-        if (near[i] > 0 && L >= 70 && !prot[i]) p[i] = Math.min(1, Math.max(0, (c - 14) / 20));
-        else p[i] = 1;
+        if (near[i] > 0 && L >= 70 && !prot[i]) {
+          let a = Math.min(1, Math.max(0, (c - 14) / 20));               // 피부가 섞인 정도
+          // 머리카락 테두리(배경과 섞인 회색 잔머리)는 어두운 정도만큼 머리카락으로 남김 → 정수리가 깎이지 않음
+          if (i < yHair * w) a = Math.max(a, Math.min(1, Math.max(0, (Lbg - 8 - L) / (Lbg - 68))));
+          p[i] = a;
+        } else p[i] = 1;
         if (p[i] >= 0.999) solid[i] = 1;
+      }
+      // 머리 윗선의 작게 파인 곳(약 0.2 mm)을 메움: 닫기 연산 후 새로 채워진 곳은 아래에서 머리색으로 칠함
+      {
+        const Rc = Math.max(1, Math.round(2 * w / 413)), bin = new Float32Array(N);
+        for (let i = 0; i < yHair * w; i++) bin[i] = p[i] > 0.45 ? 1 : 0;
+        for (let i = yHair * w; i < N; i++) bin[i] = 1;
+        const dil = boxMean(bin, w, h, Rc); for (let i = 0; i < N; i++) dil[i] = dil[i] > 0 ? 1 : 0;
+        const clo = boxMean(dil, w, h, Rc);
+        for (let i = 0; i < yHair * w; i++) {
+          if (clo[i] >= 0.999 && p[i] <= 0.45 && !prot[i]) { p[i] = 0.9; solid[i] = 0; }
+        }
       }
       // 테두리 픽셀 색은 바로 안쪽의 순수한 인물 색으로 채움 (회색 띠 제거)
       for (let it = 0; it < 5; it++) {
