@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>가족 여권사진</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 레이아웃: 위쪽 단계 탭 + 한 번에 한 단계만 보이는 단일 열 작업대 (사진 규격 mm 표기를 데이터 글꼴로) */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #15212c;
+  --muted: #5a6774;
+  --line: #dce2e8;
+  --accent: #1f3d5e;
+  --accent-soft: #e4ecf4;
+  --accent-ink: #ffffff;
+  --ok: #1d7448;
+  --ok-soft: #e2f2e9;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --bad: #b0281f;
+  --bad-soft: #fbe5e3;
+  --stage: #6b737b;
+  --f-display: "IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif;
+  --f-body: "Noto Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #17202a; --ink: #e5ebf1; --muted: #9babba; --line: #2a3542;
+    --accent: #9cc0e6; --accent-soft: #1d2d3f; --accent-ink: #0f151b;
+    --ok: #6fcf9b; --ok-soft: #15301f; --warn: #f0b85a; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1714;
+    --stage: #3a434c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #17202a; --ink: #e5ebf1; --muted: #9babba; --line: #2a3542;
+  --accent: #9cc0e6; --accent-soft: #1d2d3f; --accent-ink: #0f151b;
+  --ok: #6fcf9b; --ok-soft: #15301f; --warn: #f0b85a; --warn-soft: #33270f; --bad: #f08a80; --bad-soft: #3a1714;
+  --stage: #3a434c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.65 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+img, canvas, video { max-width: 100%; }
+[hidden] { display: none !important; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.3; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.05rem; }
+p { margin: 0; }
+a { color: var(--accent); }
+.mm { font-family: var(--f-data); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.wrap { max-width: 760px; margin: 0 auto; }
+
+header.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--bg); padding-block: 14px 10px;
+  border-bottom: 1px solid var(--line);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 { font-size: 1.25rem; }
+.brand .mm { color: var(--muted); font-size: 0.85rem; }
+nav.steps { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+nav.steps::-webkit-scrollbar { display: none; }
+nav.steps button {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: 500 0.88rem var(--f-body); padding: 6px 12px; border-radius: 999px; cursor: pointer;
+}
+nav.steps button .n { font-family: var(--f-data); margin-right: 4px; }
+nav.steps button[aria-current="step"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+main section { display: grid; gap: 18px; padding-top: 20px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.lead { color: var(--muted); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font: 600 0.95rem var(--f-body); padding: 10px 16px; border-radius: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, nav.steps button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+label.file { position: relative; overflow: hidden; }
+label.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* 규격 도식 */
+.spec { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 20px; align-items: center; }
+.spec svg { width: 100%; height: auto; display: block; }
+.spec svg .frame { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.spec svg .person { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+.spec svg .guide { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 6 5; fill: none; }
+.spec svg .band { fill: var(--ok); opacity: 0.18; }
+.spec svg .dim { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.spec svg text { fill: var(--muted); font: 500 17px var(--f-data); }
+.spec svg text.k { fill: var(--accent); }
+dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+dl.facts dt { color: var(--muted); font-size: 0.88rem; }
+dl.facts dd { margin: 0; font-weight: 500; }
+
+ol.howto { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; }
+ol.howto li::marker { font-family: var(--f-data); color: var(--accent); }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.rule { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.rule h3 { font-size: 0.98rem; }
+.rule ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 0.92rem; }
+.rule li { padding-left: 1.4em; position: relative; }
+.rule li::before { position: absolute; left: 0; font-weight: 700; }
+.rule li.y::before { content: "○"; color: var(--ok); }
+.rule li.n::before { content: "✕"; color: var(--bad); }
+.note { background: var(--warn-soft); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-size: 0.92rem; }
+.note b { color: var(--warn); }
+
+/* 촬영 */
+.cam { position: relative; background: #000; border-radius: 14px; overflow: hidden; max-width: 480px; width: 100%; margin: 0 auto; aspect-ratio: 3 / 4; }
+.cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam video.mirror { transform: scaleX(-1); }
+.cam svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cam .count { position: absolute; inset: 0; display: grid; place-items: center; font: 700 5rem var(--f-data); color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.5); pointer-events: none; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 0.85rem; color: var(--muted); }
+input[type="text"], select {
+  font: 500 1rem var(--f-body); padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); width: 100%; max-width: 320px;
+}
+
+/* 맞추기 */
+.editor { display: grid; grid-template-columns: minmax(0, 380px) 1fr; gap: 18px; align-items: start; }
+.stage { width: 100%; max-width: 380px; touch-action: none; border-radius: 12px; background: var(--stage); display: block; cursor: grab; }
+.stage.tapping { cursor: crosshair; }
+.ctrl { display: grid; gap: 14px; min-width: 0; }
+.slider { display: grid; gap: 2px; }
+.slider label { display: flex; justify-content: space-between; font-size: 0.88rem; color: var(--muted); }
+.slider input { width: 100%; accent-color: var(--accent); }
+.status { font-weight: 600; color: var(--accent); min-height: 1.6em; }
+.legend { display: grid; gap: 4px; font-size: 0.88rem; color: var(--muted); }
+.legend span.sw { display: inline-block; width: 18px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+/* 배경 */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 520px; }
+.compare figure { margin: 0; display: grid; gap: 6px; }
+.compare canvas { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; display: block; background: #fff; }
+.compare figcaption { font-size: 0.85rem; color: var(--muted); text-align: center; }
+.toggle { display: flex; gap: 10px; align-items: flex-start; }
+.toggle input { width: 20px; height: 20px; accent-color: var(--accent); margin-top: 3px; flex: 0 0 auto; }
+.toggle small { display: block; color: var(--muted); }
+ul.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul.checks li { display: flex; gap: 10px; align-items: baseline; }
+.pill { flex: 0 0 auto; font: 700 0.78rem var(--f-body); padding: 2px 9px; border-radius: 999px; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+
+/* 저장 */
+.final { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
+.final img { width: 175px; border: 1px solid var(--line); background: #fff; display: block; }
+.final .meta { color: var(--muted); font-size: 0.88rem; }
+ul.last { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ul.last label { display: flex; gap: 8px; align-items: flex-start; }
+ul.last input { width: 18px; height: 18px; margin-top: 4px; accent-color: var(--ok); flex: 0 0 auto; }
+.empty { text-align: center; padding: 30px 16px; color: var(--muted); display: grid; gap: 12px; justify-items: center; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-weight: 500;
+  z-index: 20; max-width: calc(100% - 32px);
+}
+@media (max-width: 640px) {
+  .spec, .editor, .final { grid-template-columns: 1fr; }
+  .spec svg { max-width: 220px; margin: 0 auto; }
+  .stage { margin: 0 auto; }
+  .final img { margin: 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>가족 여권사진</h1><span class="mm">35 × 45 mm · 413 × 531 px</span></div>
+    <nav class="steps" aria-label="단계">
+      <button type="button" data-go="guide" aria-current="step">규정·찍는 법</button>
+      <button type="button" data-go="shoot"><span class="n">1</span>촬영</button>
+      <button type="button" data-go="align"><span class="n">2</span>크기 맞추기</button>
+      <button type="button" data-go="bg"><span class="n">3</span>배경 보정</button>
+      <button type="button" data-go="save"><span class="n">4</span>저장·제출</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+<!-- ───────── 규정 · 찍는 법 ───────── -->
+<section id="s-guide">
+  <div class="card">
+    <div class="spec">
+      <svg viewBox="0 0 470 560" role="img" aria-label="여권사진 규격 도식: 가로 3.5cm, 세로 4.5cm, 머리 길이 3.2~3.6cm">
+        <rect class="frame" x="20" y="60" width="350" height="450"/>
+        <rect class="band" x="20" y="420" width="350" height="40"/>
+        <path class="person" d="M40 510 C55 485 120 474 162 466 L163 432 C126 412 112 362 112 272 C112 166 150 100 195 100 C240 100 278 166 278 272 C278 362 264 412 227 432 L228 466 C270 474 335 485 350 510 Z"/>
+        <line class="guide" x1="20" y1="100" x2="370" y2="100"/>
+        <line class="guide" x1="195" y1="60" x2="195" y2="510"/>
+        <!-- 가로 -->
+        <path class="dim" d="M20 40 H370 M20 32 V48 M370 32 V48"/>
+        <text x="150" y="28">3.5 cm</text>
+        <!-- 세로 -->
+        <path class="dim" d="M395 60 V510 M387 60 H403 M387 510 H403"/>
+        <!-- 머리 -->
+        <path class="dim" d="M420 100 V440 M412 100 H428 M412 440 H428"/>
+        <text x="300" y="545">4.5 cm</text>
+        <text class="k" x="432" y="262" transform="rotate(90 432 262)">머리 3.2–3.6</text>
+        <text x="28" y="92">정수리</text>
+        <text x="28" y="412">턱은 초록 띠 안</text>
+      </svg>
+      <div style="display:grid;gap:12px;min-width:0">
+        <h2>집에서 찍고, 규격대로 맞춰서, 정부24에 올리기</h2>
+        <p class="lead">휴대폰으로 찍은 사진을 외교부 여권사진 규격(3.5 × 4.5 cm)에 맞게 자르고, 누렇거나 어두운 배경을 흰색으로 보정해 JPG로 저장합니다. 사진은 이 기기 안에서만 처리되고 어디에도 전송되지 않습니다.</p>
+        <dl class="facts">
+          <dt>사진 크기</dt><dd class="mm">35 × 45 mm</dd>
+          <dt>머리 길이</dt><dd><span class="mm">32–36 mm</span> (정수리~턱)</dd>
+          <dt>배경</dt><dd>흰색 단색, 그림자·무늬 없음</dd>
+          <dt>촬영 시기</dt><dd>최근 6개월 이내</dd>
+          <dt>저장 파일</dt><dd><span class="mm">413 × 531 px</span> JPG (300 dpi)</dd>
+        </dl>
+        <div class="row"><button class="btn primary" type="button" data-go="shoot">사진 찍으러 가기</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>집에서 잘 찍는 법</h2>
+    <ol class="howto">
+      <li><b>흰 벽이나 흰 천 앞</b>에 섭니다. 벽에서 <b>50 cm~1 m</b> 떨어져야 뒤로 그림자가 지지 않습니다.</li>
+      <li><b>낮의 창문을 마주 보고</b> 서거나, 얼굴 양쪽에서 빛이 고르게 오게 합니다. 천장 조명만 쓰면 눈 밑·코 밑에 그림자가 생깁니다.</li>
+      <li><b>다른 가족이 찍어 주세요.</b> 셀카는 얼굴이 가까워 코가 커 보이고 왜곡됩니다. 1~1.5 m 떨어져서 <b>뒷면 카메라</b>로, 렌즈를 <b>눈높이</b>에 맞춥니다.</li>
+      <li><b>플래시는 끄고</b>, 머리부터 가슴 위까지 넉넉히 나오게 찍습니다. 자르는 건 이 앱이 합니다.</li>
+      <li>얼굴과 어깨는 <b>정면</b>, 고개는 기울이지 않고, <b>입을 다문 무표정</b>으로 렌즈를 봅니다.</li>
+      <li>여러 장 찍어서 가장 선명한 것을 고르세요. 흔들린 사진은 반려됩니다.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>여권사진 규정 체크리스트</h2>
+    <p class="lead">외교부 여권사진 규정을 항목별로 정리했습니다. ○는 이렇게, ✕는 이러면 반려될 수 있다는 뜻입니다.</p>
+    <div class="rules">
+      <div class="rule"><h3>얼굴·표정</h3><ul>
+        <li class="y">정면을 보고 얼굴·어깨가 수평</li>
+        <li class="y">눈을 뜨고, 입을 다문 무표정</li>
+        <li class="n">웃어서 치아가 보이는 표정</li>
+        <li class="n">고개를 기울이거나 돌린 자세</li>
+      </ul></div>
+      <div class="rule"><h3>머리카락·액세서리</h3><ul>
+        <li class="y">눈썹과 눈, 얼굴 윤곽이 보이게</li>
+        <li class="y">귀는 꼭 보이지 않아도 됨</li>
+        <li class="n">앞머리가 눈이나 눈썹을 가림</li>
+        <li class="n">모자·머리띠·두건 (종교 사유는 얼굴 전체가 보이면 가능)</li>
+      </ul></div>
+      <div class="rule"><h3>안경</h3><ul>
+        <li class="y">가능하면 벗고 찍기를 권장</li>
+        <li class="y">쓸 경우 렌즈에 빛 반사가 없어야 함</li>
+        <li class="n">색안경·선글라스, 컬러렌즈</li>
+        <li class="n">테가 눈을 가리는 안경</li>
+      </ul></div>
+      <div class="rule"><h3>옷차림</h3><ul>
+        <li class="y">배경과 구분되는 색 옷 (어두운 색이 무난)</li>
+        <li class="n">흰옷, 연한 아이보리 옷 (배경과 섞임)</li>
+        <li class="n">어깨가 드러나 맨몸처럼 보이는 옷</li>
+      </ul></div>
+      <div class="rule"><h3>배경·조명·화질</h3><ul>
+        <li class="y">흰색 단색 배경, 컬러사진</li>
+        <li class="y">얼굴 전체가 고르게 밝고 선명</li>
+        <li class="n">배경에 그림자·무늬·사물</li>
+        <li class="n">얼굴 그림자, 빛 번짐, 적목, 흐림</li>
+      </ul></div>
+      <div class="rule"><h3>아이·영유아</h3><ul>
+        <li class="y">아이 혼자 나오게, 눈 뜨고 입 다문 모습</li>
+        <li class="y">신생아는 흰 천 위에 눕혀 위에서 촬영</li>
+        <li class="n">보호자의 손, 의자, 장난감이 보임</li>
+        <li class="n">공갈젖꼭지를 문 모습</li>
+      </ul></div>
+      <div class="rule"><h3>보정</h3><ul>
+        <li class="y">밝기·색 균형, 배경을 흰색으로 정리</li>
+        <li class="n">얼굴형·잡티·눈 크기 등 얼굴을 고친 사진</li>
+        <li class="n">다른 사진의 얼굴을 합성</li>
+      </ul></div>
+    </div>
+    <p class="note"><b>보정 범위 안내</b> · 이 앱은 얼굴을 고치지 않습니다. 사진 전체의 누런 색감을 중립으로 맞추고, 배경 부분만 흰색으로 채웁니다. 그래도 최종 판단은 여권 심사 담당자가 하므로, 배경 경계가 어색하면 다시 찍는 편이 안전합니다.</p>
+  </div>
+
+  <div class="card">
+    <h2>정부24로 제출하기</h2>
+    <ol class="howto">
+      <li>이 앱 <b>4단계</b>에서 「정부24 업로드용 JPG 저장」으로 파일을 저장합니다.</li>
+      <li>정부24(<a href="https://www.gov.kr" target="_blank" rel="noopener">www.gov.kr</a>) 또는 정부24 앱에서 <b>「여권 재발급」</b>을 검색해 온라인 신청을 시작합니다.</li>
+      <li>사진 첨부 단계에서 저장한 JPG를 올립니다. 업로드 화면에 픽셀·용량 기준이 따로 표시되면 그 기준을 따르세요 (4단계에서 고해상도로도 저장할 수 있습니다).</li>
+      <li>사진 심사를 통과하면 발급되고, 수령은 신청 때 고른 기관에 직접 방문해야 합니다.</li>
+    </ol>
+    <p class="note"><b>온라인 신청이 안 되는 경우</b> · 처음 여권을 만드는 경우, 이전 여권이 전자여권이 아닌 경우, 이름(영문) 변경 등은 온라인 재발급 대상이 아닐 수 있습니다. 이때는 저장한 「인화용 4×6」 파일을 사진관·편의점 인화기로 뽑아 구청에 가져가세요. 자세한 조건은 <a href="https://www.passport.go.kr" target="_blank" rel="noopener">외교부 여권안내</a>와 정부24 안내문을 확인하세요.</p>
+  </div>
+</section>
+
+<!-- ───────── 1. 촬영 ───────── -->
+<section id="s-shoot" hidden>
+  <div class="card">
+    <h2>1. 사진 찍기</h2>
+    <div class="field">
+      <label for="who">누구 사진인가요? (파일 이름에 들어가요)</label>
+      <input id="who" type="text" placeholder="예: 엄마, 민준" autocomplete="off">
+    </div>
+    <div class="row">
+      <button class="btn primary" type="button" id="btnLive">가이드 보며 촬영</button>
+      <label class="btn file">휴대폰 카메라로 찍기<input id="fileCam" type="file" accept="image/*" capture="environment"></label>
+      <label class="btn file">앨범에서 고르기<input id="fileAlbum" type="file" accept="image/*"></label>
+    </div>
+    <p class="lead" id="liveMsg">「가이드 보며 촬영」은 화면에 얼굴 위치 가이드를 띄워 줍니다. 카메라 권한이 막혀 있으면 「휴대폰 카메라로 찍기」를 쓰세요.</p>
+    <div id="liveBox" hidden style="display:grid;gap:12px">
+      <div class="cam">
+        <video id="video" playsinline muted></video>
+        <svg viewBox="0 0 300 400" preserveAspectRatio="none" aria-hidden="true">
+          <defs><mask id="hole"><rect width="300" height="400" fill="#fff"/><rect x="45" y="50" width="210" height="270" fill="#000"/></mask></defs>
+          <rect width="300" height="400" fill="rgba(0,0,0,.45)" mask="url(#hole)"/>
+          <rect x="45" y="50" width="210" height="270" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <ellipse cx="150" cy="176" rx="64" ry="102" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="7 6"/>
+          <line x1="45" y1="74" x2="255" y2="74" stroke="#7fe0a8" stroke-width="1.5"/>
+          <rect x="45" y="266" width="210" height="24" fill="rgba(127,224,168,.25)"/>
+          <text x="150" y="384" fill="#fff" font-size="14" text-anchor="middle" font-family="sans-serif">얼굴을 점선 안에, 정수리를 초록 선에</text>
+        </svg>
+        <div class="count" id="count" hidden></div>
+      </div>
+      <div class="row" style="justify-content:center">
+        <button class="btn" type="button" id="btnFlip">카메라 전환</button>
+        <button class="btn primary" type="button" id="btnSnap">3초 후 촬영</button>
+        <button class="btn" type="button" id="btnStop">닫기</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>먼저 연습해 보고 싶다면</h3>
+    <p class="lead">누런 배경에서 찍힌 예시 사진으로 2~4단계를 미리 해볼 수 있어요.</p>
+    <div class="row"><button class="btn" type="button" id="btnSample">예시 사진 불러오기</button></div>
+  </div>
+</section>
+
+<!-- ───────── 2. 크기 맞추기 ───────── -->
+<section id="s-align" hidden>
+  <div class="card">
+    <h2>2. 머리 크기와 위치 맞추기</h2>
+    <div class="empty" data-need-photo hidden><p>아직 사진이 없어요.</p><button class="btn primary" type="button" data-go="shoot">사진 찍기</button></div>
+    <div class="editor" data-has-photo>
+      <canvas id="stage" class="stage" aria-label="사진 맞추기 화면. 끌어서 옮기고 두 손가락으로 확대"></canvas>
+      <div class="ctrl">
+        <div class="status" id="tapStatus">가장 쉬운 방법: 아래 버튼을 누르고 정수리와 턱을 차례로 탭하세요.</div>
+        <div class="row">
+          <button class="btn primary" type="button" id="btnTap">정수리·턱 찍어서 자동 맞춤</button>
+        </div>
+        <p class="lead">직접 맞추려면 사진을 끌어서 옮기고, 두 손가락(마우스 휠)이나 아래 막대로 크기를 조절하세요.</p>
+        <div class="slider"><label for="zoom"><span>크기</span><span class="mm" id="zoomVal"></span></label><input id="zoom" type="range" min="-200" max="300" step="1" value="0"></div>
+        <div class="slider"><label for="rot"><span>기울기 바로잡기</span><span class="mm" id="rotVal">0.0°</span></label><input id="rot" type="range" min="-10" max="10" step="0.1" value="0"></div>
+        <div class="legend">
+          <div><span class="sw" style="background:#3ad07f"></span>정수리(머리카락 맨 위)를 이 선에</div>
+          <div><span class="sw" style="background:rgba(58,208,127,.4)"></span>턱 끝이 이 띠 안에 → 머리 32–36 mm</div>
+          <div><span class="sw" style="border:2px dashed #fff;background:var(--stage)"></span>얼굴 중심을 세로 점선에</div>
+        </div>
+        <div class="row"><button class="btn" type="button" id="btnReset">처음 크기로</button><button class="btn primary" type="button" data-go="bg">다음: 배경 보정</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── 3. 배경 보정 ───────── -->
+<section id="s-bg" hidden>
+  <div class="card">
+    <h2>3. 배경을 규정에 맞게 보정</h2>
+    <div class="empty" data-need-photo hidden><p>아직 사진이 없어요.</p><button class="btn primary" type="button" data-go="shoot">사진 찍기</button></div>
+    <div data-has-photo style="display:grid;gap:16px">
+      <div class="compare">
+        <figure><canvas id="cvBefore"></canvas><figcaption>원본</figcaption></figure>
+        <figure><canvas id="cvAfter"></canvas><figcaption>보정 후</figcaption></figure>
+      </div>
+      <label class="toggle"><input type="checkbox" id="optWb" checked><span><b>누런 색감 빼기</b><small>배경색을 기준으로 사진 전체의 색 균형을 중립으로 맞춥니다. 전구색 조명 때문에 누렇게 나왔다면 강도를 높이고, 벽지 자체가 아이보리라 피부색이 파래지면 강도를 낮추세요.</small></span></label>
+      <div class="slider"><label for="wbStr"><span>색 균형 강도</span><span class="mm" id="wbStrVal"></span></label><input id="wbStr" type="range" min="0" max="100" value="45"></div>
+      <label class="toggle"><input type="checkbox" id="optBg" checked><span><b>배경을 흰색으로</b><small>사진 가장자리에서 이어지는 배경 부분만 찾아 흰색으로 채웁니다. 얼굴 영역은 건드리지 않습니다.</small></span></label>
+      <div class="slider"><label for="tol"><span>배경 인식 범위</span><span class="mm" id="tolVal"></span></label><input id="tol" type="range" min="10" max="90" value="42"></div>
+      <div class="slider"><label for="feather"><span>경계 부드럽게</span><span class="mm" id="featherVal"></span></label><input id="feather" type="range" min="0" max="4" step="0.5" value="1.5"></div>
+      <label class="toggle"><input type="checkbox" id="optMask"><span><b>흰색으로 바뀌는 곳 표시</b><small>빨갛게 칠해진 곳이 흰색으로 바뀝니다. 머리카락이나 옷까지 빨갛다면 「배경 인식 범위」를 줄이세요.</small></span></label>
+      <div>
+        <h3 style="margin-bottom:8px">자동 점검</h3>
+        <ul class="checks" id="checks"></ul>
+      </div>
+      <div class="row"><button class="btn" type="button" data-go="align">← 크기 다시 맞추기</button><button class="btn primary" type="button" data-go="save">다음: 저장</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── 4. 저장 ───────── -->
+<section id="s-save" hidden>
+  <div class="card">
+    <h2>4. 저장하고 제출하기</h2>
+    <div class="empty" data-need-photo hidden><p>아직 사진이 없어요.</p><button class="btn primary" type="button" data-go="shoot">사진 찍기</button></div>
+    <div class="final" data-has-photo>
+      <img id="finalImg" alt="완성된 여권사진 미리보기">
+      <div style="display:grid;gap:14px;min-width:0">
+        <div class="field">
+          <label for="res">파일 크기</label>
+          <select id="res">
+            <option value="413">413 × 531 px (300 dpi, 기본)</option>
+            <option value="827">827 × 1063 px (600 dpi, 고해상도)</option>
+          </select>
+        </div>
+        <p class="meta" id="fileMeta"></p>
+        <div class="row">
+          <button class="btn primary" type="button" id="btnSave">정부24 업로드용 JPG 저장</button>
+          <button class="btn" type="button" id="btnSheet">인화용 4×6 (6장) 저장</button>
+        </div>
+        <p class="lead" style="font-size:.88rem">저장 버튼이 동작하지 않으면 미리보기 사진을 길게 눌러(컴퓨터는 오른쪽 클릭) 이미지로 저장하세요.</p>
+      </div>
+    </div>
+  </div>
+  <div class="card" data-has-photo>
+    <h3>올리기 전 마지막 확인</h3>
+    <ul class="last">
+      <li><label><input type="checkbox">입을 다문 무표정이고, 두 눈을 뜨고 정면을 보고 있다</label></li>
+      <li><label><input type="checkbox">눈썹과 눈이 머리카락·안경테에 가리지 않는다</label></li>
+      <li><label><input type="checkbox">얼굴과 배경에 그림자가 없고, 안경에 빛 반사가 없다</label></li>
+      <li><label><input type="checkbox">머리카락·어깨 경계가 자연스럽다 (배경 보정 흔적이 어색하지 않다)</label></li>
+      <li><label><input type="checkbox">초점이 맞고 흔들리지 않았다</label></li>
+    </ul>
+    <div class="row"><button class="btn" type="button" id="btnNext">다른 가족 사진 찍기</button></div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  // ── 규격 (mm) ──
+  const W_MM = 35, H_MM = 45;
+  const CROWN = 4;            // 정수리 선 위치
+  const CHIN_MIN = CROWN + 32, CHIN_MAX = CROWN + 36, CHIN_IDEAL = CROWN + 34;
+  const FACE = { cx: 17.5, cy: (CROWN + CHIN_IDEAL) / 2, rx: 10, ry: 15 };  // 얼굴 보호 영역
+  const PAD = 7;              // 편집 화면에서 사진 바깥으로 보이는 여유 (mm)
+
+  const $ = (s) => document.querySelector(s);
+  const state = {
+    src: null,            // 원본 canvas
+    T: { x: W_MM / 2, y: H_MM / 2 }, s: 1, th: 0, sFit: 1,
+    taps: null, tapMode: 0, head: null,
+  };
+
+  // ── 단계 이동 ──
+  const steps = ['guide', 'shoot', 'align', 'bg', 'save'];
+  function go(step) {
+    steps.forEach((k) => { $('#s-' + k).hidden = k !== step; });
+    document.querySelectorAll('nav.steps button').forEach((b) => {
+      if (b.dataset.go === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+    });
+    const has = !!state.src;
+    document.querySelectorAll('[data-has-photo]').forEach((el) => { el.hidden = !has; });
+    document.querySelectorAll('[data-need-photo]').forEach((el) => { el.hidden = has; });
+    if (step !== 'shoot') stopLive();
+    window.scrollTo({ top: 0 });
+    if (!has) return;
+    if (step === 'align') { sizeStage(); drawStage(); }
+    if (step === 'bg') runProcess();
+    if (step === 'save') runProcess().then(updateFinal);
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-go]');
+    if (b) go(b.dataset.go);
+  });
+
+  let toastTimer;
+  function toast(msg) {
+    const t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+
+  // ── 사진 불러오기 ──
+  function setSource(drawable, w, h) {
+    const max = 2400, k = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+    x.drawImage(drawable, 0, 0, c.width, c.height);
+    state.src = c; state.taps = null; state.head = null; state.th = 0;
+    resetFit();
+    $('#rot').value = 0;
+    go('align');
+  }
+  async function loadFile(file) {
+    if (!file) return;
+    try {
+      let bmp;
+      try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+      catch { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); }); }
+      setSource(bmp, bmp.width || bmp.naturalWidth, bmp.height || bmp.naturalHeight);
+    } catch {
+      toast('이 사진을 열 수 없어요. JPG나 PNG로 다시 골라 주세요.');
+    }
+  }
+  $('#fileCam').addEventListener('change', (e) => { loadFile(e.target.files[0]); e.target.value = ''; });
+  $('#fileAlbum').addEventListener('change', (e) => { loadFile(e.target.files[0]); e.target.value = ''; });
+
+  // 예시 사진: 전구색 조명 아래 누런 벽 앞에서 찍힌 상반신
+  $('#btnSample').addEventListener('click', () => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 1600;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 1200, 1600);
+    g.addColorStop(0, '#e9dcb0'); g.addColorStop(1, '#d6c79a');
+    x.fillStyle = g; x.fillRect(0, 0, 1200, 1600);
+    const sh = x.createRadialGradient(820, 760, 80, 820, 760, 520);   // 벽 그림자
+    sh.addColorStop(0, 'rgba(120,100,60,.22)'); sh.addColorStop(1, 'rgba(120,100,60,0)');
+    x.fillStyle = sh; x.fillRect(0, 0, 1200, 1600);
+    x.fillStyle = '#2b3550';                                         // 어깨·옷
+    x.beginPath(); x.moveTo(200, 1600); x.bezierCurveTo(230, 1250, 420, 1190, 600, 1180); x.bezierCurveTo(780, 1190, 970, 1250, 1000, 1600); x.fill();
+    x.fillStyle = '#d9ab8c'; x.fillRect(530, 1000, 140, 200);          // 목
+    x.beginPath(); x.ellipse(600, 790, 205, 270, 0, 0, Math.PI * 2); x.fillStyle = '#e3b597'; x.fill();  // 얼굴
+    x.fillStyle = '#231b17';                                          // 머리카락
+    x.beginPath(); x.ellipse(600, 700, 235, 230, 0, Math.PI * 1.02, Math.PI * 1.98); x.lineTo(820, 720);
+    x.bezierCurveTo(760, 600, 640, 590, 560, 610); x.bezierCurveTo(470, 630, 400, 690, 380, 720); x.fill();
+    x.beginPath(); x.ellipse(600, 560, 225, 110, 0, Math.PI, 0); x.fill();
+    x.fillStyle = '#3b2a22';                                          // 눈썹·눈·입
+    x.fillRect(475, 720, 90, 14); x.fillRect(635, 720, 90, 14);
+    x.beginPath(); x.ellipse(520, 775, 22, 12, 0, 0, Math.PI * 2); x.ellipse(680, 775, 22, 12, 0, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#a5685a'; x.lineWidth = 9; x.beginPath(); x.moveTo(555, 935); x.lineTo(645, 935); x.stroke();
+    x.strokeStyle = '#c4917a'; x.lineWidth = 6; x.beginPath(); x.moveTo(600, 790); x.lineTo(588, 870); x.lineTo(612, 870); x.stroke();
+    $('#who').value = $('#who').value || '예시';
+    setSource(c, c.width, c.height);
+    toast('예시 사진을 불러왔어요. 정수리와 턱을 탭해 보세요.');
+  });
+
+  // ── 실시간 카메라 ──
+  let stream = null, facing = 'environment';
+  async function startLive() {
+    stopLive();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 2560 }, height: { ideal: 1920 } }, audio: false });
+    } catch {
+      $('#liveMsg').textContent = '이 화면에서는 카메라를 열 수 없어요. 「휴대폰 카메라로 찍기」를 누르면 기본 카메라 앱으로 찍을 수 있습니다.';
+      return;
+    }
+    const v = $('#video'); v.srcObject = stream; v.classList.toggle('mirror', facing === 'user');
+    await v.play().catch(() => {});
+    $('#liveBox').hidden = false;
+  }
+  function stopLive() {
+    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+    const box = $('#liveBox'); if (box) box.hidden = true;
+  }
+  $('#btnLive').addEventListener('click', () => {
+    if (!navigator.mediaDevices?.getUserMedia) { $('#liveMsg').textContent = '이 브라우저는 실시간 카메라를 지원하지 않아요. 「휴대폰 카메라로 찍기」를 쓰세요.'; return; }
+    startLive();
+  });
+  $('#btnFlip').addEventListener('click', () => { facing = facing === 'user' ? 'environment' : 'user'; startLive(); });
+  $('#btnStop').addEventListener('click', stopLive);
+  $('#btnSnap').addEventListener('click', () => {
+    const v = $('#video'); if (!stream || !v.videoWidth) return;
+    const cnt = $('#count'); let n = 3; cnt.hidden = false; cnt.textContent = n;
+    $('#btnSnap').disabled = true;
+    const tick = setInterval(() => {
+      n -= 1;
+      if (n > 0) { cnt.textContent = n; return; }
+      clearInterval(tick); cnt.hidden = true; $('#btnSnap').disabled = false;
+      // 미리보기는 거울처럼 보여도 저장은 실제 방향으로
+      setSource(v, v.videoWidth, v.videoHeight);
+    }, 1000);
+  });
+
+  // ── 변환 (원본 px → 사진 mm) ──
+  function resetFit() {
+    const { width: w, height: h } = state.src;
+    state.sFit = Math.max(W_MM / w, H_MM / h);
+    state.s = state.sFit; state.th = 0;
+    state.T = { x: W_MM / 2, y: H_MM / 2 };
+    syncSliders();
+  }
+  function outToSrc(x, y) {
+    const dx = x - state.T.x, dy = y - state.T.y, c = Math.cos(-state.th), sn = Math.sin(-state.th);
+    return { x: (c * dx - sn * dy) / state.s + state.src.width / 2, y: (sn * dx + c * dy) / state.s + state.src.height / 2 };
+  }
+  function srcVec(px, py) { // 원본 점 → 회전·확대만 적용한 벡터
+    const dx = (px - state.src.width / 2) * state.s, dy = (py - state.src.height / 2) * state.s;
+    const c = Math.cos(state.th), sn = Math.sin(state.th);
+    return { x: c * dx - sn * dy, y: sn * dx + c * dy };
+  }
+  function srcToOut(px, py) { const v = srcVec(px, py); return { x: state.T.x + v.x, y: state.T.y + v.y }; }
+  function scaleAround(f, ax, ay) {
+    const ns = Math.min(state.sFit * 8, Math.max(state.sFit * 0.25, state.s * f));
+    f = ns / state.s; state.s = ns;
+    state.T.x = ax + f * (state.T.x - ax); state.T.y = ay + f * (state.T.y - ay);
+  }
+  function rotateTo(th) {
+    const d = th - state.th, ax = W_MM / 2, ay = H_MM / 2, c = Math.cos(d), sn = Math.sin(d);
+    const dx = state.T.x - ax, dy = state.T.y - ay;
+    state.T.x = ax + c * dx - sn * dy; state.T.y = ay + sn * dx + c * dy; state.th = th;
+  }
+  function drawPhoto(ctx, k, ox, oy) {
+    ctx.save();
+    ctx.setTransform(k, 0, 0, k, ox, oy);
+    ctx.translate(state.T.x, state.T.y); ctx.rotate(state.th); ctx.scale(state.s, state.s);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(state.src, -state.src.width / 2, -state.src.height / 2);
+    ctx.restore();
+  }
+  function syncSliders() {
+    const z = Math.round(Math.log2(state.s / state.sFit) * 100);
+    $('#zoom').value = z; $('#zoomVal').textContent = Math.round(state.s / state.sFit * 100) + '%';
+    $('#rotVal').textContent = (state.th * 180 / Math.PI).toFixed(1) + '°';
+  }
+
+  // ── 편집 화면 ──
+  const stage = $('#stage'); const VW = W_MM + PAD * 2, VH = H_MM + PAD * 2;
+  function sizeStage() {
+    const cssW = stage.clientWidth || 340, dpr = window.devicePixelRatio || 1;
+    stage.width = Math.round(cssW * dpr); stage.height = Math.round(cssW * VH / VW * dpr);
+    stage.style.height = (cssW * VH / VW) + 'px';
+  }
+  window.addEventListener('resize', () => { if (!$('#s-align').hidden && state.src) { sizeStage(); drawStage(); } });
+  function drawStage() {
+    if (!state.src) return;
+    const ctx = stage.getContext('2d'), k = stage.width / VW, o = PAD * k;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--stage').trim() || '#6b737b';
+    ctx.fillRect(0, 0, stage.width, stage.height);
+    ctx.fillStyle = '#fff'; ctx.fillRect(o, o, W_MM * k, H_MM * k);
+    drawPhoto(ctx, k, o, o);
+    // 사진 밖 어둡게
+    ctx.setTransform(k, 0, 0, k, o, o);
+    ctx.fillStyle = 'rgba(20,24,28,.6)';
+    ctx.beginPath(); ctx.rect(-PAD, -PAD, VW, VH); ctx.rect(0, 0, W_MM, H_MM); ctx.fill('evenodd');
+    ctx.lineWidth = 1.2 / k * (window.devicePixelRatio || 1);
+    ctx.strokeStyle = '#fff'; ctx.strokeRect(0, 0, W_MM, H_MM);
+    // 턱 띠, 정수리 선, 중심선, 얼굴 타원
+    ctx.fillStyle = 'rgba(58,208,127,.32)'; ctx.fillRect(0, CHIN_MIN, W_MM, CHIN_MAX - CHIN_MIN);
+    ctx.strokeStyle = '#3ad07f'; ctx.lineWidth = 2 / k * (window.devicePixelRatio || 1);
+    ctx.beginPath(); ctx.moveTo(0, CROWN); ctx.lineTo(W_MM, CROWN); ctx.stroke();
+    ctx.setLineDash([1.2, 1]); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1 / k * (window.devicePixelRatio || 1);
+    ctx.beginPath(); ctx.moveTo(W_MM / 2, 0); ctx.lineTo(W_MM / 2, H_MM); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(W_MM / 2, (CROWN + CHIN_IDEAL) / 2, 12, 17, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    // 눈금 라벨
+    ctx.fillStyle = '#fff'; ctx.font = '600 1.6px ' + getComputedStyle(document.body).fontFamily;
+    ctx.textBaseline = 'middle';
+    ctx.fillText('정수리', W_MM + 0.6, CROWN);
+    ctx.fillText('턱', W_MM + 0.6, (CHIN_MIN + CHIN_MAX) / 2);
+    // 탭한 점
+    if (state.taps) state.taps.forEach((p) => {
+      const q = srcToOut(p.x, p.y);
+      ctx.fillStyle = '#ff4d6d'; ctx.beginPath(); ctx.arc(q.x, q.y, 0.7, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  function evMM(e) {
+    const r = stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * VW - PAD, y: (e.clientY - r.top) / r.height * VH - PAD };
+  }
+  const ptrs = new Map(); let moved = 0, pinch = null;
+  stage.addEventListener('pointerdown', (e) => {
+    stage.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, evMM(e)); moved = 0;
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId)) return;
+    const p = evMM(e), prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, p);
+    if (ptrs.size === 1) {
+      moved += Math.hypot(p.x - prev.x, p.y - prev.y);
+      if (state.tapMode && moved < 1.2) return;
+      state.T.x += p.x - prev.x; state.T.y += p.y - prev.y;
+    } else if (ptrs.size === 2 && pinch) {
+      moved = 99;
+      const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      scaleAround(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); pinch = d; syncSliders();
+    }
+    drawStage();
+  });
+  function endPtr(e) {
+    if (!ptrs.has(e.pointerId)) return;
+    const p = ptrs.get(e.pointerId); ptrs.delete(e.pointerId);
+    if (ptrs.size < 2) pinch = null;
+    if (state.tapMode && moved < 1.2 && ptrs.size === 0) handleTap(p);
+  }
+  stage.addEventListener('pointerup', endPtr);
+  stage.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); pinch = null; });
+  stage.addEventListener('wheel', (e) => {
+    e.preventDefault(); const p = evMM(e);
+    scaleAround(Math.exp(-e.deltaY * 0.0015), p.x, p.y); syncSliders(); drawStage();
+  }, { passive: false });
+  $('#zoom').addEventListener('input', (e) => {
+    const ns = state.sFit * Math.pow(2, e.target.value / 100);
+    scaleAround(ns / state.s, W_MM / 2, H_MM / 2); syncSliders(); drawStage();
+  });
+  $('#rot').addEventListener('input', (e) => { rotateTo(e.target.value * Math.PI / 180); syncSliders(); drawStage(); });
+  $('#btnReset').addEventListener('click', () => { resetFit(); $('#rot').value = 0; state.taps = null; drawStage(); });
+
+  const tapStatus = $('#tapStatus');
+  $('#btnTap').addEventListener('click', () => {
+    state.tapMode = 1; state.taps = []; stage.classList.add('tapping');
+    tapStatus.textContent = '① 정수리(머리카락 맨 윗부분)를 탭하세요.';
+    drawStage();
+  });
+  function handleTap(p) {
+    const sp = outToSrc(p.x, p.y);
+    state.taps.push(sp);
+    if (state.tapMode === 1) { state.tapMode = 2; tapStatus.textContent = '② 턱 끝을 탭하세요.'; drawStage(); return; }
+    state.tapMode = 0; stage.classList.remove('tapping');
+    const [P, Q] = state.taps, L = Math.hypot(Q.x - P.x, Q.y - P.y);
+    if (L < 20 || Q.y <= P.y) { tapStatus.textContent = '정수리를 먼저, 턱을 그 아래에 탭해 주세요. 다시 눌러 시도하세요.'; state.taps = null; drawStage(); return; }
+    state.s = (CHIN_IDEAL - CROWN) / L;
+    const v = srcVec((P.x + Q.x) / 2, (P.y + Q.y) / 2);
+    state.T = { x: W_MM / 2 - v.x, y: (CROWN + CHIN_IDEAL) / 2 - v.y };
+    syncSliders(); drawStage();
+    tapStatus.textContent = '맞췄어요. 정수리가 초록 선, 턱이 초록 띠 안에 있는지 확인하세요.';
+  }
+
+  // ── 배경 보정 ──
+  const opts = () => ({
+    wb: $('#optWb').checked, wbStr: $('#wbStr').value / 100,
+    bg: $('#optBg').checked, tol: +$('#tol').value, feather: +$('#feather').value,
+  });
+  function syncBgLabels() {
+    $('#wbStrVal').textContent = $('#wbStr').value + '%';
+    $('#tolVal').textContent = $('#tol').value;
+    $('#featherVal').textContent = $('#feather').value + ' px';
+  }
+  function renderCrop(pw) {
+    const ph = Math.round(pw * H_MM / W_MM), c = document.createElement('canvas');
+    c.width = pw; c.height = ph;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, pw, ph);
+    drawPhoto(ctx, pw / W_MM, 0, 0);
+    return c;
+  }
+  function bgSampleIdx(w, h) {  // 머리 옆 위쪽 모서리 + 맨 윗줄
+    const out = [];
+    const add = (x0, y0, x1, y1) => {
+      for (let y = Math.floor(y0); y < y1; y += 2) for (let x = Math.floor(x0); x < x1; x += 2) out.push(y * w + x);
+    };
+    add(0, 0, w * 0.14, h * 0.45); add(w * 0.86, 0, w, h * 0.45); add(w * 0.14, 0, w * 0.86, h * 0.05);
+    return out;
+  }
+  function median(d, idx) {
+    const hs = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    idx.forEach((i) => { hs[0][d[i * 4]]++; hs[1][d[i * 4 + 1]]++; hs[2][d[i * 4 + 2]]++; });
+    return hs.map((hh) => { let a = 0; for (let v = 0; v < 256; v++) { a += hh[v]; if (a >= idx.length / 2) return v; } return 255; });
+  }
+  function inFace(x, y, w, h) {
+    const mx = x / w * W_MM, my = y / h * H_MM;
+    return ((mx - FACE.cx) / FACE.rx) ** 2 + ((my - FACE.cy) / FACE.ry) ** 2 < 1;
+  }
+  function boxBlur(a, w, h, r) {
+    if (r <= 0) return a;
+    const t = new Float32Array(a.length), R = Math.max(1, Math.round(r));
+    for (let pass = 0; pass < 2; pass++) {
+      for (let y = 0; y < h; y++) {          // 가로
+        let s = 0; const row = y * w;
+        for (let x = -R; x <= R; x++) s += a[row + Math.min(w - 1, Math.max(0, x))];
+        for (let x = 0; x < w; x++) {
+          t[row + x] = s / (2 * R + 1);
+          s += a[row + Math.min(w - 1, x + R + 1)] - a[row + Math.max(0, x - R)];
+        }
+      }
+      for (let x = 0; x < w; x++) {          // 세로
+        let s = 0;
+        for (let y = -R; y <= R; y++) s += t[Math.min(h - 1, Math.max(0, y)) * w + x];
+        for (let y = 0; y < h; y++) {
+          a[y * w + x] = s / (2 * R + 1);
+          s += t[Math.min(h - 1, y + R + 1) * w + x] - t[Math.max(0, y - R) * w + x];
+        }
+      }
+    }
+    return a;
+  }
+  function processCanvas(c, o) {
+    const w = c.width, h = c.height, ctx = c.getContext('2d');
+    const img = ctx.getImageData(0, 0, w, h), d = img.data, N = w * h;
+    const sIdx = bgSampleIdx(w, h);
+    let bg = median(d, sIdx);
+    const res = { bgBefore: bg.slice(), alpha: null, area: 0 };
+    if (o.wb) {
+      const L = (bg[0] + bg[1] + bg[2]) / 3;
+      const g = bg.map((v) => 1 + o.wbStr * (Math.min(1.3, Math.max(0.8, L / Math.max(1, v))) - 1));
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = Math.min(255, d[i] * g[0]); d[i + 1] = Math.min(255, d[i + 1] * g[1]); d[i + 2] = Math.min(255, d[i + 2] * g[2]);
+      }
+      bg = median(d, sIdx);
+    }
+    if (o.bg) {
+      const tol2 = o.tol * o.tol, step = Math.max(7, o.tol * 0.38), step2 = step * step;
+      const mask = new Uint8Array(N), q = new Int32Array(N); let qh = 0, qt = 0;
+      const dBg = (i) => { const p = i * 4, a = d[p] - bg[0], b = d[p + 1] - bg[1], e = d[p + 2] - bg[2]; return a * a + b * b + e * e; };
+      const prot = new Uint8Array(N);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (inFace(x, y, w, h)) prot[y * w + x] = 1;
+      const seed = (i) => { if (!mask[i] && !prot[i] && dBg(i) < tol2) { mask[i] = 1; q[qt++] = i; } };
+      for (let x = 0; x < w; x++) seed(x);
+      for (let y = 0; y < h; y++) { seed(y * w); seed(y * w + w - 1); }
+      while (qh < qt) {
+        const i = q[qh++], x = i % w, p = i * 4;
+        const nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
+        for (const n of nb) {
+          if (n < 0 || n >= N || mask[n] || prot[n]) continue;
+          const pn = n * 4, a = d[pn] - d[p], b = d[pn + 1] - d[p + 1], e = d[pn + 2] - d[p + 2];
+          if (a * a + b * b + e * e < step2 && dBg(n) < tol2) { mask[n] = 1; q[qt++] = n; }
+        }
+      }
+      const alpha = new Float32Array(N); for (let i = 0; i < N; i++) alpha[i] = mask[i];
+      boxBlur(alpha, w, h, o.feather * w / 413);
+      for (let i = 0; i < N; i++) {
+        // 배경은 완전히 흰색, 인물 쪽 경계 픽셀은 살짝만 밝혀 누런 테두리만 지움
+        const a = mask[i] ? 1 : alpha[i] * 0.5; alpha[i] = a; if (a <= 0) continue;
+        const p = i * 4; d[p] += (255 - d[p]) * a; d[p + 1] += (255 - d[p + 1]) * a; d[p + 2] += (255 - d[p + 2]) * a;
+      }
+      res.alpha = alpha; res.area = qt / N;
+    }
+    ctx.putImageData(img, 0, 0);
+    res.bgAfter = median(d, sIdx);
+    // 얼굴 밝기
+    let sum = 0, n = 0;
+    for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+      const mx = x / w * W_MM, my = y / h * H_MM;
+      if (((mx - FACE.cx) / (FACE.rx * 0.6)) ** 2 + ((my - FACE.cy) / (FACE.ry * 0.6)) ** 2 < 1) {
+        const p = (y * w + x) * 4; sum += 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]; n++;
+      }
+    }
+    res.faceLum = n ? sum / n : 0;
+    return res;
+  }
+
+  let lastRes = null, procTimer = null;
+  function runProcess() {
+    return new Promise((resolve) => {
+      clearTimeout(procTimer);
+      procTimer = setTimeout(() => {
+        const before = renderCrop(413), after = renderCrop(413);
+        const res = processCanvas(after, opts());
+        lastRes = res;
+        paint($('#cvBefore'), before);
+        const vis = document.createElement('canvas'); vis.width = after.width; vis.height = after.height;
+        const vx = vis.getContext('2d'); vx.drawImage(after, 0, 0);
+        if ($('#optMask').checked && res.alpha) {
+          const im = vx.getImageData(0, 0, vis.width, vis.height), dd = im.data;
+          for (let i = 0; i < res.alpha.length; i++) {
+            const a = res.alpha[i] * 0.55; if (a <= 0) continue;
+            dd[i * 4] += (230 - dd[i * 4]) * a; dd[i * 4 + 1] += (40 - dd[i * 4 + 1]) * a; dd[i * 4 + 2] += (60 - dd[i * 4 + 2]) * a;
+          }
+          vx.putImageData(im, 0, 0);
+        }
+        paint($('#cvAfter'), vis);
+        renderChecks(res);
+        resolve(res);
+      }, 60);
+    });
+  }
+  function paint(cv, src) { cv.width = src.width; cv.height = src.height; cv.getContext('2d').drawImage(src, 0, 0); }
+  ['#optWb', '#wbStr', '#optBg', '#tol', '#feather', '#optMask'].forEach((s) => $(s).addEventListener('input', () => { syncBgLabels(); runProcess(); }));
+  syncBgLabels();
+
+  function renderChecks(r) {
+    const items = [];
+    const lum = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+    const chroma = (c) => Math.max(...c) - Math.min(...c);
+    const bl = lum(r.bgAfter), bc = chroma(r.bgAfter);
+    items.push(bl >= 238 ? ['ok', '배경 밝기', `흰색에 가까워요 (밝기 ${Math.round(bl)}/255)`]
+      : bl >= 205 ? ['warn', '배경 밝기', `약간 어두워요 (밝기 ${Math.round(bl)}/255). 「배경을 흰색으로」를 켜거나 인식 범위를 늘려 보세요.`]
+      : ['bad', '배경 밝기', `배경이 어두워요 (밝기 ${Math.round(bl)}/255). 더 밝은 곳에서 다시 찍는 걸 권해요.`]);
+    const tint = r.bgAfter[2] < r.bgAfter[0] - 4 ? '누런' : r.bgAfter[2] > r.bgAfter[0] + 4 ? '푸른' : '';
+    items.push(bc <= 8 ? ['ok', '배경 색', '색이 치우치지 않은 흰색이에요']
+      : bc <= 18 ? ['warn', '배경 색', `${tint || '약간의'} 기가 조금 남았어요. 「누런 색감 빼기」 강도를 올려 보세요.`]
+      : ['bad', '배경 색', `${tint || '색'} 기가 뚜렷해요. 색감 빼기를 켜거나 다시 찍어 주세요.`]);
+    if (r.alpha) {
+      items.push(r.area > 0.72 ? ['warn', '배경 인식', '너무 넓게 잡혔어요. 「흰색으로 바뀌는 곳 표시」로 머리카락·옷이 지워지지 않았는지 보세요.']
+        : r.area < 0.12 ? ['warn', '배경 인식', '배경이 거의 잡히지 않았어요. 「배경 인식 범위」를 늘려 보세요.']
+        : ['ok', '배경 인식', `사진의 ${Math.round(r.area * 100)}%를 배경으로 보고 흰색으로 채웠어요`]);
+    }
+    items.push(r.faceLum < 95 ? ['warn', '얼굴 밝기', '얼굴이 어두워요. 창문을 마주 보고 다시 찍으면 좋아요.']
+      : r.faceLum > 225 ? ['warn', '얼굴 밝기', '얼굴이 너무 밝아요(빛 번짐). 직사광선을 피하세요.']
+      : ['ok', '얼굴 밝기', '적당해요']);
+    if (state.taps && state.taps.length === 2) {
+      const [P, Q] = state.taps, mm = Math.hypot(Q.x - P.x, Q.y - P.y) * state.s;
+      items.push(mm >= 32 && mm <= 36 ? ['ok', '머리 길이', `${mm.toFixed(1)} mm (규정 32–36 mm)`] : ['bad', '머리 길이', `${mm.toFixed(1)} mm, 규정 32–36 mm를 벗어났어요. 2단계에서 다시 맞추세요.`]);
+    } else {
+      items.push(['info', '머리 길이', '2단계 가이드에 정수리·턱을 맞췄는지 눈으로 확인해 주세요']);
+    }
+    const pxPerMm = 1 / state.s;
+    items.push(pxPerMm >= 413 / W_MM ? ['ok', '해상도', '원본 화질이 충분해요']
+      : pxPerMm >= 413 / W_MM * 0.7 ? ['warn', '해상도', '원본을 많이 확대해서 약간 흐릴 수 있어요']
+      : ['bad', '해상도', '원본 화질이 부족해 흐려요. 더 가까이(또는 줌으로) 다시 찍어 주세요.']);
+    const ul = $('#checks'); ul.textContent = '';
+    const word = { ok: '통과', warn: '확인', bad: '문제', info: '참고' };
+    items.forEach(([lv, name, msg]) => {
+      const li = document.createElement('li');
+      const pill = document.createElement('span'); pill.className = 'pill ' + lv; pill.textContent = word[lv];
+      const t = document.createElement('span'); const b = document.createElement('b'); b.textContent = name + ' ';
+      t.append(b, msg); li.append(pill, t); ul.append(li);
+    });
+  }
+
+  // ── 저장 ──
+  function finalCanvas() {
+    const pw = +$('#res').value, c = renderCrop(pw);
+    processCanvas(c, opts());
+    return c;
+  }
+  const toBlob = (c) => new Promise((res) => c.toBlob(res, 'image/jpeg', 0.95));
+  let finalUrl = null;
+  async function updateFinal() {
+    const c = finalCanvas(), blob = await toBlob(c);
+    if (finalUrl) URL.revokeObjectURL(finalUrl);
+    finalUrl = URL.createObjectURL(blob); $('#finalImg').src = finalUrl;
+    $('#fileMeta').innerHTML = `<span class="mm">${c.width} × ${c.height} px · ${(blob.size / 1024).toFixed(0)} KB · JPG</span> · 인쇄 시 35 × 45 mm`;
+  }
+  $('#res').addEventListener('change', updateFinal);
+  const fname = (suffix) => {
+    const who = ($('#who').value || '').trim().replace(/[\\/:*?"<>|\s]+/g, '_');
+    const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    return `여권사진_${who ? who + '_' : ''}${ymd}_${suffix}.jpg`;
+  };
+  async function saveBlob(blob, filename) {
+    if (window.claude && typeof window.claude.use === 'function') {
+      try {
+        const dl = await window.claude.use('downloads');
+        if (dl) { await dl.save({ filename, data: blob }); toast('저장했어요'); return; }
+      } catch (e) {
+        if (e && e.code === 'declined') { toast('저장을 취소했어요'); return; }
+        toast('저장할 수 없어요. 사진을 길게 눌러 저장해 주세요.'); return;
+      }
+    }
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('저장했어요');
+  }
+  $('#btnSave').addEventListener('click', async () => {
+    const c = finalCanvas(); saveBlob(await toBlob(c), fname(`${c.width}x${c.height}`));
+  });
+  $('#btnSheet').addEventListener('click', async () => {
+    // 4×6 인치(102 × 152 mm) 300 dpi 인화지에 6장
+    const one = renderCrop(413); processCanvas(one, opts());
+    const s = document.createElement('canvas'); s.width = 1200; s.height = 1800;
+    const x = s.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1200, 1800);
+    const gx = (1200 - 2 * 413) / 3, gy = (1800 - 3 * 531) / 4;
+    x.strokeStyle = '#bbb'; x.lineWidth = 1;
+    for (let r = 0; r < 3; r++) for (let col = 0; col < 2; col++) {
+      const px = Math.round(gx + col * (413 + gx)), py = Math.round(gy + r * (531 + gy));
+      x.drawImage(one, px, py); x.strokeRect(px - 0.5, py - 0.5, 414, 532);
+    }
+    saveBlob(await toBlob(s), fname('인화용_4x6'));
+  });
+  $('#btnNext').addEventListener('click', () => {
+    state.src = null; $('#who').value = '';
+    document.querySelectorAll('ul.last input').forEach((i) => { i.checked = false; });
+    go('shoot');
+  });
+})();
+</script>
+</body>
+</html>
