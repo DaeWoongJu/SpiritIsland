@@ -285,6 +285,8 @@ function renderFieldTabs() {
   const st = v.story;
   tabs.push(`<button data-f="room" class="${app.viewField === 'room' ? 'cur' : ''} ${st.active ? 'alert' : ''}">📖 보스방 (함께) <small>${st.active ? `⏳${st.left}초` : '대기'}</small></button>`);
   void my;
+  const pk = Object.values(my.picks || {}).reduce((a, b) => a + b, 0);
+  tabs.push(`<button data-act="pick" class="${pk ? 'alert' : ''}" title="보스·미션 보상으로 원하는 유닛 고르기">🎁 선택소 <small>${pk ? `선택권 ${pk}장` : '선택권 없음'}</small></button>`);
   if (v.event) tabs.push(`<button data-f="ev" class="${app.viewField === 'ev' ? 'cur' : ''} alert">⚔ 스토리 이벤트 <small>⏳${v.event.left}초</small></button>`);
   else tabs.push(`<button disabled title="정해진 웨이브에 열려요">⚔ 스토리 이벤트 <small>${v.nextEvent ? `${v.nextEvent}웨이브` : '끝'}</small></button>`);
   // 보스방·이벤트를 보고 있으면 보내기/돌려보내기
@@ -302,6 +304,7 @@ onPress($('#fieldtabs'), (b) => {
   if (b.dataset.f) switchField(b.dataset.f);
   else if (b.dataset.act === 'dispatch') { cmd({ t: 'dispatch', field: app.viewField, n: app.viewField === 'room' ? 1 : 3 }); Sound.play('rare'); }
   else if (b.dataset.act === 'recall') cmd({ t: 'recall', field: app.viewField });
+  else if (b.dataset.act === 'pick') toggleDrawer('pick');
 });
 app.on3dReady = () => { if (app.info && !app.use3d && !$('#game').classList.contains('hidden')) setup3d(); };
 app.Sound = Sound;
@@ -378,6 +381,7 @@ function onTick(v) {
     if (f[0] === 'story') { onStoryFx(f); continue; }
     if (f[0] === 'hidden') { rememberHidden(f[1]); continue; }
     if (f[0] === 'reveal') { rememberReveal(f[1], f[2]); continue; }
+    if (f[0] === 'pick') { if (f[1] === app.myIdx) { banner(`🎁 ${app.cat.tiers[f[2] - 1].name} 선택권!`); Sound.play('bless'); } continue; }
     if (where !== '*' && where !== app.viewField) { if (f[0] === 'leak' && where === 'm' + app.myIdx) { Sound.play('leak'); toast('💔 내 전장에서 요괴가 빠져나갔어요!'); } continue; }
     if (app.use3d) Board3D.fx(f, app); else addFx(f, now);
   }
@@ -485,14 +489,14 @@ function renderControls() {
   if (!p) return;
   const L = app.leaderMap[app.info.players[app.myIdx].leader];
   const cats = app.cat.cats;
-  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, p.autoGather, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
+  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, p.autoGather, p.waveSummons, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
   if (key === renderControls.key) return;
   renderControls.key = key;
   const cdPct = p.skillCd > 0 ? (p.skillCd / p.skillMax) * 100 : 0;
   $('#controls').innerHTML = `
     <div class="gold">💰 ${p.gold}</div>
-    <button class="btn-summon" data-a="summon" ${p.gold < p.cost ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 소환진에</small></button>
-    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · Lv2 이상</small></button>
+    <button class="btn-summon" data-a="summon" ${p.gold < p.cost || p.waveSummons >= p.summonCap ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 이번 라운드 ${p.waveSummons}/${p.summonCap}</small></button>
+    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost || p.waveSummons >= p.summonCap ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · Lv2 이상 · ${p.waveSummons}/${p.summonCap}</small></button>
     <div class="grp">${Object.entries(cats).map(([id, c], i) => `<button data-a="up" data-c="${id}" ${p.gold < p.ucost[id] ? 'disabled' : ''} title="${c.name} 유닛 피해 +12%">${c.icon} ${c.name} +${p.upg[id]} <kbd>${i + 1}</kbd><small>${p.ucost[id]}G</small></button>`).join('')}</div>
     <div class="grp"><button class="btn-skill ${app.aiming ? 'aim' : ''}" data-a="skill" ${p.skillCd > 0 ? 'disabled' : ''} title="${esc(L.skill.desc)}">${L.icon} ${esc(L.skill.name)} <kbd>E</kbd><small>${p.skillCd > 0 ? `${p.skillCd}초` : L.skill.target ? '위치 선택' : '바로 사용'}</small><span class="cdv" style="height:${cdPct}%"></span></button></div>
     <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="autoGather" class="${p.autoGather ? 'on' : ''}" title="켜 두면 유닛 하나를 옮길 때 내 전장의 같은 유닛이 모두 따라와요">🧲 자동 모으기<small>${p.autoGather ? '켬 · 같은 유닛 따라옴' : '끔'}</small></button><button data-a="sellMenu" class="${app.sellMenu ? 'on' : ''}">💰 일괄 판매<small>등급별로 한꺼번에</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
@@ -707,6 +711,7 @@ function renderSideTabs() {
   const badge = (d, n) => { const el = document.querySelector(`#sidetabs [data-d=${d}] .badge`); el.textContent = n; el.classList.toggle('hidden', !n); };
   badge('recipe', p.craftable.length);
   badge('mission', p.tickets || 0);
+  badge('pick', Object.values(p.picks || {}).reduce((a, b) => a + b, 0));
   const sv = app.v.story;
   badge('story', sv.states.filter((x) => x === 'open').length + (sv.active ? 1 : 0));
   for (const b of document.querySelectorAll('#sidetabs button')) b.classList.toggle('on', b.dataset.d === app.drawer);
@@ -744,6 +749,13 @@ function renderDrawer() {
       <div class="sec" style="color:#ff3a4a">🔮 LVZ 히든 족보 (${app.cat.recipes.filter((r) => r.hidden && known.has(r.id)).length}/${app.cat.recipes.filter((r) => r.hidden).length} 발견)</div>
       <div class="hint">처음엔 ???로 가려져 있어요. <b>5웨이브를 깰 때마다</b> 재료가 하나씩, <b>게임을 이기면</b> 족보 2개가 통째로 공개돼요. 직접 맞혀 만들어도 공개돼요 (모두 이 컴퓨터에 기억돼요).</div>
       ${app.cat.recipes.filter((r) => r.hidden).map(row).join('')}`;
+  } else if (app.drawer === 'pick') {
+    const total = Object.values(p.picks).reduce((a, b) => a + b, 0);
+    html += `<h3>🎁 선택소</h3><div class="hint">보스·우두머리·미션·보스 스토리·스토리 이벤트를 깨면 <b>선택권</b>을 받아요. 선택권 등급의 유닛 중 <b>원하는 걸 골라</b> 뽑을 수 있어요 (라운드 소환 횟수와 상관없이).</div>
+      <div class="hint" style="margin-top:4px">우두머리 → Lv2 · 보스·미션·스토리 1~3장 → Lv3 · 스토리 4~6장·스토리 이벤트 → H</div>
+      ${!total ? '<div class="sec">아직 선택권이 없어요.</div>' : ''}
+      ${[2, 3, 4].map((tr) => { const n = p.picks[tr] || 0; const tt = app.cat.tiers[tr - 1]; const list = app.cat.units.filter((u) => u.tier === tr && !u.hero && !u.hidden); const have = haveCounts();
+        return `<div class="sec" style="color:${tt.color}">${tt.name} 선택권 ${n}장</div><div class="pickgrid">${list.map((u) => `<button class="pickcard" data-pick="${tr}" data-type="${u.id}" ${n ? '' : 'disabled'} style="--c:${tt.color}" title="${esc(u.desc)}"><b>${u.icon} ${esc(u.name)}</b><small>${app.cat.cats[u.cat].icon} 피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}/초 · 사거리 ${u.range}</small><small>${esc(u.desc)}</small>${have[u.id] ? `<i>보유 ${have[u.id]}</i>` : ''}</button>`).join('')}</div>`; }).join('')}`;
   } else if (app.drawer === 'mission') {
     const done = p.missions.filter((m) => m[2]).length;
     html += `<h3>🎖 미션 (${done}/${p.missions.length})</h3><div class="hint">미션을 달성할 때마다 <b>영웅 영입권</b> 1장 → 영웅 3명 중 1명을 데려와요. 보스 스토리 2·4·6장과 스토리 이벤트도 영입권을 줘요.</div>
@@ -765,6 +777,7 @@ function renderDrawer() {
 onPress($('#drawer'), (b) => {
   if (b.dataset.close) closeDrawer();
   else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft }); Sound.play('merge'); }
+  else if (b.dataset.pick) { cmd({ t: 'pick', tier: Number(b.dataset.pick), type: b.dataset.type }); Sound.play('rare'); }
   else if (b.dataset.story) { cmd({ t: 'story', id: b.dataset.story }); setTimeout(() => { cmd({ t: 'dispatch', field: 'room', n: 1 }); switchField('room'); }, 150); }
   else if (b.dataset.join) { cmd({ t: 'dispatch', field: 'room', n: 1 }); switchField('room'); }
   else if (b.dataset.view) switchField(b.dataset.view);

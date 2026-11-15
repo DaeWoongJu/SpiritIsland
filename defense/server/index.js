@@ -294,6 +294,7 @@ wss.on('connection', (ws) => {
         if (msg.wave) room.game.waveTimer = 0;
         if (msg.bless) for (const p of room.game.players) room.game.offerBlessing(p);
         if (msg.end) room.game.end(true, '테스트로 끝냈어요.');
+        if (msg.pick) for (const p of room.game.players) room.game.grantPick(p, msg.pick, '테스트');
         break;
       }
       case 'chat': {

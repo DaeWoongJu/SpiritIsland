@@ -275,16 +275,17 @@ const BLESS_MAP = Object.fromEntries(BLESSINGS.map((b) => [b.id, b]));
 const DIFFICULTIES = [
   { id: 'easy', name: '쉬움', hp: 0.75, limit: 90, lives: 30, gold: 1.2 },
   { id: 'normal', name: '보통', hp: 1.2, limit: 75, lives: 20, gold: 1.0 },
-  { id: 'hard', name: '어려움', hp: 1.9, limit: 65, lives: 15, gold: 0.95 },
-  { id: 'hell', name: '지옥', hp: 2.8, limit: 55, lives: 10, gold: 0.9 },
+  { id: 'hard', name: '어려움', hp: 1.6, limit: 65, lives: 15, gold: 0.95 },
+  { id: 'hell', name: '지옥', hp: 2.2, limit: 55, lives: 10, gold: 0.9 },
 ];
 
 const ECON = {
-  startGold: 380,
+  startGold: 260,
+  summonsPerWave: 2, // 라운드마다 소환할 수 있는 횟수 (선택권·보상은 따로)
   summonCost: 50,
   premiumCost: 180, // 고급 소환: 희귀 이상 보장
   sellRate: [0, 25, 70, 200, 520, 1200, 0, 0],
-  waveBonus: (w) => 50 + w * 6,
+  waveBonus: (w) => 40 + w * 5,
   upgradeCost: (lv) => 60 + lv * 45,
   upgradeStep: 0.12, // 강화 1단계마다 피해 +12%
   maxUpgrade: 30,

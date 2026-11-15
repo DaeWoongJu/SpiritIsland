@@ -201,3 +201,9 @@ kbd { display: inline-block; font-size: .72em; padding: 0 4px; border-radius: 4p
 .plus { color: #8a7a8a; margin: 0 3px; font-weight: 800; }
 .rc .out b { font-weight: 900; margin-right: 3px; }
 .selected { max-height: 40vh; overflow-y: auto; }
+
+.pickgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pickcard { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; padding: 6px 8px; border: 2px solid var(--c) !important; background: linear-gradient(180deg, #2a1e30, #1a121e) !important; font-size: .86em; position: relative; }
+.pickcard small { font-weight: 500; color: var(--muted); font-size: .86em; }
+.pickcard i { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: .78em; color: #ffd060; }
+.pickcard:not(:disabled):hover { box-shadow: 0 0 12px var(--c); }

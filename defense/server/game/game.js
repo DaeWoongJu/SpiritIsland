@@ -6,7 +6,7 @@ const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
 const ROOM_CENTER = [11, 7]; // 보스방 보스 자리 (고정)
-const FIELD_HP = 1.12; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
+const FIELD_HP = 0.85; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
 function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
@@ -56,7 +56,7 @@ class Game {
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
       bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
-      items: {}, autoGather: true,
+      items: {}, autoGather: true, picks: { 2: 0, 3: 0, 4: 0 }, waveSummons: 0,
     }));
     // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
     this.fields = [];
@@ -119,6 +119,13 @@ class Game {
   }
 
   sellPrice(p, u) { return Math.round(D.ECON.sellRate[D.UNIT_MAP[u.type].tier] * (p.leader === 'merchant' ? 1.2 : 1)); }
+  /** 선택소 선택권 (tier: 2=Lv2, 3=Lv3, 4=H) */
+  grantPick(p, tier, why) {
+    p.picks[tier] = (p.picks[tier] || 0) + 1;
+    this.msg(`🎁 ${p.name}: ${why} — ${D.TIERS[tier - 1].name} 선택권 +1 (🎁 선택소에서 원하는 유닛을 골라요)`, 'legend');
+    this.fxp('*', ['pick', p.idx, tier]);
+  }
+
   /** 소환진의 빈칸 (내 전장) */
   summonSpot(pidx, type = null) {
     // 같은 유닛이 이미 있으면 그 무리에 합류 (한 칸에 겹쳐 쌓임)
@@ -165,6 +172,7 @@ class Game {
     this.curPlan = plan;
     this.nextPlan = this.wave < D.WAVES || this.endless ? this.planWave(this.wave + 1) : null;
     this.waveTimer = D.WAVE_TIME;
+    for (const p of this.players) p.waveSummons = 0;
     const q = [];
     for (let i = 0; i < plan.count; i++) q.push({ type: plan.second && i % 3 === 2 ? plan.second : plan.main, mod: plan.mod });
     if (plan.mini) q.push({ mini: true, mod: plan.mod });
@@ -221,8 +229,9 @@ class Game {
     this.eventsDone.push({ idx: this.event.idx, win });
     if (win) {
       for (const p of this.players) {
-        p.tickets++; p.gold += 500 + this.wave * 10; p.items.star = (p.items.star || 0) + 1;
+        p.tickets++; p.gold += 300 + this.wave * 6; p.items.star = (p.items.star || 0) + 1;
         this.offerHero(p);
+        this.grantPick(p, 4, '스토리 이벤트');
       }
       this.msg(`🏆 스토리 이벤트 성공! 「${ev.boss}」 처치 — 모두 영웅 영입권 +1 · 골드 · 🌠 별의 파편`, 'legend');
     } else this.msg(`💨 「${ev.boss}」이(가) 사라졌어요… 스토리 이벤트 실패`, 'bad');
@@ -269,6 +278,7 @@ class Game {
         p.items[s.item] = (p.items[s.item] || 0) + 1;
         p.gold += s.gold;
         if (s.ch % 2 === 0) { p.tickets++; this.offerHero(p); }
+        this.grantPick(p, s.ch <= 3 ? 3 : 4, `보스 스토리 ${s.ch}장`);
       }
       this.msg(`📖 ${s.ch}장 「${s.title}」 클리어! 모두 ${D.ITEMS[s.item].icon} ${D.ITEMS[s.item].name} · 골드 +${s.gold}${s.ch % 2 === 0 ? ' · 영웅 영입권 +1' : ''}`, 'legend');
       this.fxp('*', ['story', 'clear', s.id, -1]);
@@ -452,6 +462,7 @@ class Game {
     if ((e.boss || e.mini) && owner) {
       this.msg(e.boss ? `🏆 ${owner.name}: 보스 「${e.name}」 처치! 축복을 하나 고르세요.` : `👿 ${owner.name}: ${e.name} 처치! 축복을 하나 고르세요.`, 'good');
       this.offerBlessing(owner);
+      this.grantPick(owner, e.boss ? 3 : 2, e.boss ? '보스 처치' : '우두머리 처치');
     }
   }
 
@@ -554,6 +565,7 @@ class Game {
       case 'summon': {
         const premium = !!c.premium;
         const cost = this.summonCost(p, premium);
+        if (p.waveSummons >= D.ECON.summonsPerWave) return `이번 라운드 소환 ${D.ECON.summonsPerWave}번을 다 썼어요. 다음 라운드에 다시! (🎁 선택소 선택권은 따로 쓸 수 있어요)`;
         if (p.gold < cost) return '골드가 부족해요.';
         if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return `유닛은 한 사람당 ${D.ECON.maxUnits}개까지예요.`;
         // 소환은 내 전장의 소환진에서 (같은 유닛이 있으면 그 무리에 합류)
@@ -561,6 +573,7 @@ class Game {
         const spot = null;
         p.gold -= cost;
         p.summons++;
+        p.waveSummons++;
         const u = this.giveUnit(p, this.rollTier(p, premium), false, spot);
         return u ? { ok: u.id } : null;
       }
@@ -694,6 +707,17 @@ class Game {
         return null;
       }
       case 'setAuto': { p.autoGather = !!c.on; return null; }
+      case 'pick': {
+        // 선택소: 선택권으로 그 등급 유닛 중 원하는 것을 골라 뽑기
+        const tier = Number(c.tier);
+        if (!(p.picks[tier] > 0)) return '그 등급 선택권이 없어요.';
+        if (!(D.BY_TIER[tier] || []).includes(c.type)) return null;
+        const u = this.giveUnit(p, tier, false, null, c.type);
+        if (!u) return '빈자리가 없어요.';
+        p.picks[tier]--;
+        this.msg(`🎁 ${p.name}: 선택소에서 ${D.TIERS[tier - 1].name} 「${D.UNIT_MAP[c.type].icon} ${D.UNIT_MAP[c.type].name}」 선택!`, tier >= 4 ? 'legend' : 'info');
+        return { ok: u.id };
+      }
       case 'sellMany': case 'sellTier': {
         // 여러 개 한꺼번에 팔기: 고른 유닛들 / 등급 전체 (영웅·히든은 빼고)
         let list;
@@ -812,6 +836,7 @@ class Game {
         p.done.push(m.id);
         p.tickets++;
         this.msg(`🎖 ${p.name}: 미션 「${m.icon} ${m.name}」 달성! 영웅 영입권 +1`, 'legend');
+        this.grantPick(p, 3, `미션 「${m.name}」`);
         this.fxp('*', ['mission', p.idx]);
       }
       this.offerHero(p);
@@ -1057,7 +1082,7 @@ class Game {
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
-        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, units: this.units.filter((u) => u.owner === p.idx).length,
+        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, picks: p.picks, waveSummons: p.waveSummons, summonCap: D.ECON.summonsPerWave, units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
         items: p.items, craftable: this.craftable(p),
       })),
@@ -1074,6 +1099,14 @@ function botAct(g, p) {
   if (g.result) return;
   if (p.choice) g.command(p.id, { t: 'bless', id: p.choice[0] });
   if (p.heroChoice) g.command(p.id, { t: 'hero', id: p.heroChoice[0] });
+  for (const tier of [4, 3, 2]) {
+    if (!(p.picks[tier] > 0)) continue;
+    const have = {};
+    for (const u of g.units) if (u.owner === p.idx) have[u.type] = (have[u.type] || 0) + 1;
+    // 족보에 가장 가까워지는 재료(Lv2·Lv3) / H 는 가장 센 것
+    const best = D.BY_TIER[tier].slice().sort((a, b) => (tier === 4 ? D.UNIT_MAP[b].dmg / D.UNIT_MAP[b].cd - D.UNIT_MAP[a].dmg / D.UNIT_MAP[a].cd : (have[b] || 0) - (have[a] || 0)))[0];
+    g.command(p.id, { t: 'pick', tier, type: best });
+  }
   // 소환진에 남은 유닛(영웅·조합·보상)은 길 옆으로
   const Fm = g.F['m' + p.idx];
   const inZone = g.units.filter((u) => u.owner === p.idx && u.field === Fm.id && Fm.zone.has(u.x + ',' + u.y));
