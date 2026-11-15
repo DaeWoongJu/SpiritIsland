@@ -171,11 +171,22 @@ test('각자 전장 · 보스 스토리 · 스토리 이벤트', () => {
   assert.ok(g.enemies.some((e) => e.field === 'room' && e.storyBoss === 's1'));
   // 보스방은 둘이 함께: 동료도 시작 중복 불가, 유닛은 둘 다 보낼 수 있음
   assert.strictEqual(typeof g.command('b', { t: 'story', id: 's1' }), 'string');
-  g.command('a', { t: 'dispatch', field: 'room', n: 2 });
+  g.command('a', { t: 'dispatch', field: 'room', n: 3 });
+  assert.strictEqual(g.units.filter((u) => u.field === 'room').length, 1, '보스방에는 한 사람당 한 명');
+  // 다른 유닛을 보내면 교대
+  const first = g.units.find((u) => u.field === 'room');
+  const other = g.units.find((u) => u.owner === 0 && u.field === 'm0');
+  g.command('a', { t: 'send', unit: other.id, field: 'room' });
+  assert.strictEqual(first.field, 'm0');
+  assert.strictEqual(other.field, 'room');
   g.players[1].gold = 1e5;
   g.command('b', { t: 'summon' });
   g.command('b', { t: 'dispatch', field: 'room', n: 1 });
-  assert.strictEqual(g.units.filter((u) => u.field === 'room').length, 3);
+  assert.strictEqual(g.units.filter((u) => u.field === 'room').length, 2);
+  // 보스는 고정
+  const bx = g.enemies.find((e) => e.storyBoss).x;
+  for (let i = 0; i < 40; i++) g.tick();
+  assert.strictEqual(g.enemies.find((e) => e.storyBoss).x, bx);
   assert.deepStrictEqual(new Set(g.units.filter((u) => u.field === 'room').map((u) => u.owner)), new Set([0, 1]));
   const boss = g.enemies.find((e) => e.storyBoss);
   g.hurt(boss, boss.hp + 1, g.units.find((u) => u.field === 'room'), { pierce: true });

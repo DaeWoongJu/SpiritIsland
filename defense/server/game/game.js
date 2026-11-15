@@ -5,7 +5,8 @@ const D = require('./data');
 const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
-const FIELD_HP = 1.05; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
+const ROOM_CENTER = [11, 7]; // 보스방 보스 자리 (고정)
+const FIELD_HP = 1.38; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
 function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
@@ -55,7 +56,12 @@ class Game {
     // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
     this.fields = [];
     for (const p of this.players) this.fields.push(makeField('m' + p.idx, 'main', p.idx, this.map, this.diff));
-    this.fields.push(makeField('room', 'room', null, M.ROOM_MAP, this.diff));
+    // 보스방: 보스는 가운데 고정, 유닛은 보스와 가까운 칸부터
+    const room = makeField('room', 'room', null, M.ROOM_MAP, this.diff);
+    room.center = ROOM_CENTER;
+    room.blocked.add(ROOM_CENTER.join(','));
+    room.spots = room.spots.filter((sp) => !room.blocked.has(sp.x + ',' + sp.y)).map((sp) => ({ ...sp, d: Math.max(Math.abs(sp.x - ROOM_CENTER[0]), Math.abs(sp.y - ROOM_CENTER[1])) })).sort((a, b) => a.d - b.d || Math.abs(a.y - ROOM_CENTER[1]) - Math.abs(b.y - ROOM_CENTER[1]));
+    this.fields.push(room);
     this.story = { cleared: [], active: null, deadline: 0, cdUntil: 0, by: null }; // 보스 스토리 진행 (둘이 함께)
     this.fields.push(makeField('ev', 'event', null, M.EVENT_MAP, this.diff));
     this.F = Object.fromEntries(this.fields.map((f) => [f.id, f]));
@@ -198,12 +204,13 @@ class Game {
     if (state === 'locked') return this.wave < s.wave ? `${s.wave}웨이브부터 도전할 수 있어요.` : '이전 장을 먼저 깨야 해요.';
     if (this.story.active) return '이미 도전 중이에요.';
     if (this.story.cdUntil > this.time) return `잠시 뒤 다시 도전할 수 있어요 (${Math.ceil(this.story.cdUntil - this.time)}초)`;
-    const base = hpBase(Math.max(this.wave, s.wave)) * this.diff.hp * FIELD_HP * Math.max(1, this.players.length * 0.85);
+    // 보스 체력은 그 장이 열리는 웨이브 기준 (늦게 다시 도전하면 그만큼 쉬워짐), 난이도 영향은 완만하게
+    const base = hpBase(s.wave) * 1.2 * Math.sqrt(this.diff.hp / 1.2) * FIELD_HP * Math.max(1, this.players.length * 0.85);
     this.spawnBoss('room', { k: s.model, name: s.boss, hp: base * s.hp, speed: 0.5, armor: s.armor, storyBoss: s.id, gold: 0 });
     this.story.active = s.id;
     this.story.deadline = this.time + D.STORY_TIME;
     this.story.by = p.idx;
-    this.msg(`📖 ${p.name}: 보스 스토리 ${s.ch}장 「${s.title}」 시작! 둘 다 보스방에 유닛을 보내 함께 잡으세요`, 'event');
+    this.msg(`📖 ${p.name}: 보스 스토리 ${s.ch}장 「${s.title}」 시작! 둘 다 보스방에 한 명씩 보내 함께 잡으세요`, 'event');
     this.fxp('*', ['story', 'start', s.id, p.idx]);
     return null;
   }
@@ -230,7 +237,29 @@ class Game {
   spawnBoss(field, o) {
     const e = this.spawn({ custom: o }, field);
     e.boss = true; e.special = true;
+    if (field === 'room') { e.fixed = true; e.speed = 0; e.x = ROOM_CENTER[0] + 0.5; e.y = ROOM_CENTER[1] + 0.5; }
     return e;
+  }
+
+  /** 보스 한 마리를 칠 때의 초당 피해 (보스방에 보낼 '가장 센 유닛' 고르기) */
+  bossDps(u) {
+    const st = this.unitStats(u);
+    const t = st.t;
+    let d = st.dmg / st.cd;
+    if (t.crit) d *= 1 + t.crit.chance * (t.crit.mult - 1);
+    const k = 1 + D.ECON.upgradeStep * this.players[u.owner].upg[t.cat];
+    if (t.burn) d += t.burn.dps * k;
+    if (t.poison) d += t.poison.dps * k;
+    if (t.pierceArmor) d *= 1.4;
+    return d;
+  }
+
+  sendHome(u) {
+    const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
+    if (!home) return;
+    this.fxp(u.field, ['tele', u.x, u.y]);
+    u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
+    this.fxp(u.field, ['tele', u.x, u.y]);
   }
 
   /** 보스방·이벤트 전장에 보냈던 유닛을 원래 자리로 */
@@ -483,6 +512,7 @@ class Game {
         let spot = null;
         const f = fieldOf(c.field);
         if (c.tile) {
+          if (f === 'room') return '보스방에는 소환할 수 없어요. 내 전장의 유닛을 보내세요.';
           if (!this.canUse(p, f)) return '여기에는 내 유닛을 둘 수 없어요.';
           if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
           spot = { x: c.tile[0], y: c.tile[1], field: f };
@@ -499,6 +529,10 @@ class Game {
         const f = typeof c.field === 'string' ? c.field : u.field;
         if (!this.canUse(p, f)) return f === 'ev' ? '스토리 이벤트가 열려 있을 때만 보낼 수 있어요.' : '여기에는 내 유닛을 둘 수 없어요.';
         if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
+        if (f === 'room' && u.field !== 'room') {
+          // 보스방에는 한 사람당 한 명: 이미 있으면 교대
+          for (const o of this.units) if (o.owner === p.idx && o.field === 'room') this.sendHome(o);
+        }
         if (f !== u.field) {
           // 다른 전장으로 보내기 (보스방·이벤트 전장에서 돌아올 자리 기억)
           if (f !== 'm' + p.idx && u.field === 'm' + p.idx) u.home = { field: u.field, x: u.x, y: u.y };
@@ -515,8 +549,9 @@ class Game {
         // 가장 센 유닛 n개를 보스방·이벤트 전장으로 보내기
         const f = c.field;
         if (!this.canUse(p, f) || f === 'm' + p.idx) return '보낼 수 없는 곳이에요.';
-        const n = Math.max(1, Math.min(8, Number(c.n) || 3));
-        const cand = this.units.filter((u) => u.owner === p.idx && u.field === 'm' + p.idx).sort((a, b) => D.UNIT_MAP[b.type].tier - D.UNIT_MAP[a.type].tier || b.dmg - a.dmg).slice(0, n);
+        const n = f === 'room' ? 1 : Math.max(1, Math.min(8, Number(c.n) || 3));
+        const pool = this.units.filter((u) => u.owner === p.idx && u.field === 'm' + p.idx);
+        const cand = (f === 'room' ? pool.map((u) => [u, this.bossDps(u)]).sort((a, b) => b[1] - a[1]).map((x) => x[0]) : pool.sort((a, b) => D.UNIT_MAP[b.type].tier - D.UNIT_MAP[a.type].tier || b.dmg - a.dmg)).slice(0, n);
         let sent = 0;
         for (const u of cand) { const s = this.autoSpot(p.idx, f); if (!s) break; this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: f }); sent++; }
         return sent ? null : '보낼 유닛이 없어요.';
@@ -627,7 +662,7 @@ class Game {
         if (!p.heroChoice || !p.heroChoice.includes(c.id)) return null;
         let spot = null;
         const f = fieldOf(c.field);
-        if (c.tile && this.canUse(p, f)) { if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1], field: f }; }
+        if (c.tile && this.canUse(p, f) && f !== 'room') { if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1], field: f }; }
         const u = this.giveUnit(p, 6, false, spot, c.id);
         if (!u) return '빈자리가 없어요.';
         p.heroes.push(c.id);
@@ -751,6 +786,7 @@ class Game {
           continue;
         }
       }
+      if (e.fixed) continue;
       let sp = e.speed;
       if (e.ability === 'rage' || e.ability === 'all') if (e.hp < e.maxHp * 0.5) sp *= 1.6;
       let slow = e.slowUntil > this.time ? e.slowPct : 0;
