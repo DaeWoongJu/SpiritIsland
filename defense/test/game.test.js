@@ -47,9 +47,21 @@ test('소환 · 합성 · 판매 · 강화', () => {
   // 강화
   g.command('a', { t: 'upgrade', cat: 'blade' });
   assert.strictEqual(p.upg.blade, 1);
-  // 길 위에는 못 세움
-  const [px, py] = g.map.pathTiles.find(([x, y]) => x >= 0 && y >= 0);
-  assert.strictEqual(typeof g.command('a', { t: 'summon', tile: [px, py], field: 'm0' }), 'string');
+  // 소환은 항상 소환진(3×3)에 나옴
+  const r2 = g.command('a', { t: 'summon', tile: [0, 0] });
+  const nu = g.units.find((u) => u.id === r2.ok);
+  assert.ok(g.F.m0.zone.has(nu.x + ',' + nu.y), '소환진에 나와야 함');
+  // 여러 개 한꺼번에 옮기기 · 같은 유닛 모으기 · 소환진 비우기
+  const ids = g.units.slice(0, 3).map((u) => u.id);
+  const s0 = g.autoSpot(0);
+  g.command('a', { t: 'moveMany', units: ids, tile: [s0.x, s0.y] });
+  for (const id of ids) { const u = g.units.find((x) => x.id === id); assert.ok(Math.max(Math.abs(u.x - s0.x), Math.abs(u.y - s0.y)) <= 2, '목표 근처로'); }
+  for (const u of g.units) u.type = 'hunter';
+  g.units[0].x = 0; g.units[0].y = 0;
+  g.command('a', { t: 'gather', unit: g.units[1].id });
+  assert.ok(Math.max(Math.abs(g.units[0].x - g.units[1].x), Math.abs(g.units[0].y - g.units[1].y)) <= 2, '같은 유닛이 모임');
+  g.command('a', { t: 'clearZone' });
+  assert.ok(!g.units.some((u) => g.F.m0.zone.has(u.x + ',' + u.y)), '소환진이 비워짐');
   // 남의 유닛은 못 건드림
   assert.strictEqual(g.command('b', { t: 'sell', unit: g.units[0].id }), null);
 });
@@ -161,9 +173,9 @@ test('각자 전장 · 보스 스토리 · 스토리 이벤트', () => {
   p.gold = 1e5;
   for (let i = 0; i < 4; i++) g.command('a', { t: 'summon' });
   assert.ok(g.units.every((u) => u.field === 'm0'));
-  // 남의 전장에는 못 둠
+  // 남의 전장에는 못 둠 (옮기기)
   const s1 = g.autoSpot(1, 'm1');
-  assert.strictEqual(typeof g.command('a', { t: 'summon', tile: [s1.x, s1.y], field: 'm1' }), 'string');
+  assert.strictEqual(typeof g.command('a', { t: 'move', unit: g.units[0].id, tile: [s1.x, s1.y], field: 'm1' }), 'string');
   // 스토리: 웨이브가 모자라면 잠김
   assert.strictEqual(typeof g.command('a', { t: 'story', id: 's1' }), 'string');
   g.wave = 4;

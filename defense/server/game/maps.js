@@ -246,14 +246,25 @@ const GEN_LIST = [
 function decorate(map, r) {
   const pathSet = new Set();
   for (const p of map.paths) for (const k of rasterize(p.pts, p.loop)) pathSet.add(k);
+  // 소환진: 길이 없는 3×3 칸 (가운데에 가깝고, 길 옆 좋은 자리는 되도록 덜 차지하게)
+  const near = (x, y, r0) => { for (let dy = -r0; dy <= r0; dy++) for (let dx = -r0; dx <= r0; dx++) if (pathSet.has(x + dx + ',' + (y + dy))) return true; return false; };
+  const baseSet = new Set((map.base || []).map((b) => b.join(',')));
+  let best = null, bs = Infinity;
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    let ok = true;
+    for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) if (pathSet.has(x + dx + ',' + (y + dy)) || baseSet.has(x + dx + ',' + (y + dy))) { ok = false; break; }
+    if (!ok) continue;
+    const score = Math.hypot(x - W / 2, (y - H / 2) * 1.4) + (near(x, y, 2) ? 0 : 3) + (near(x, y, 1) ? 0 : 0) - (near(x, y, 2) && !near(x, y, 1) ? 4 : 0);
+    if (score < bs) { bs = score; best = [x, y]; }
+  }
+  map.summon = best || [Math.floor(W / 2), Math.floor(H / 2)];
+  const inZone = (x, y) => Math.abs(x - map.summon[0]) <= 1 && Math.abs(y - map.summon[1]) <= 1;
   const decor = [];
   const theme = THEMES[map.theme];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    if (pathSet.has(x + ',' + y)) continue;
+    if (pathSet.has(x + ',' + y) || inZone(x, y)) continue;
     // 길 바로 옆은 비워 둠 (근접 유닛 자리)
-    let near = false;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (pathSet.has(x + dx + ',' + (y + dy))) near = true;
-    if (!near && r() < 0.07) decor.push([x, y, theme.decor[Math.floor(r() * theme.decor.length)]]);
+    if (!near(x, y, 1) && r() < 0.07) decor.push([x, y, theme.decor[Math.floor(r() * theme.decor.length)]]);
   }
   map.decor = decor;
   map.pathTiles = [...pathSet].map((k) => k.split(',').map(Number));
@@ -291,7 +302,7 @@ function randomMap(seed) {
 
 /** 화면용 요약 (목록에 넣을 것만) */
 function summary(m) {
-  return { id: m.id, name: m.name, theme: m.theme, kind: m.kind, kindName: m.kindName, note: m.note, paths: m.paths, decor: m.decor, pathTiles: m.pathTiles, base: m.base || null, W, H };
+  return { id: m.id, name: m.name, theme: m.theme, kind: m.kind, kindName: m.kindName, note: m.note, paths: m.paths, decor: m.decor, pathTiles: m.pathTiles, base: m.base || null, summon: m.summon, W, H };
 }
 
 module.exports = { W, H, THEMES, MAPS, MAP_MAP, ROOM_MAP, EVENT_MAP, randomMap, summary, rasterize, rng };

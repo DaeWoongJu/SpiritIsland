@@ -31,7 +31,12 @@ function makeField(id, kind, owner, map, diff) {
     spots.push({ x, y, d });
   }
   spots.sort((a, b) => a.d - b.d);
-  return { id, kind, owner, map, paths, blocked, spots, loopMode: map.kind === 'loop', lives: diff.lives, limit: diff.limit, count: 0, spawnN: 0 };
+  // 소환진 (3×3): 소환한 유닛은 모두 여기에 나옴 → 넘치면 가까운 빈칸부터
+  const sc = map.summon || [12, 7];
+  const zone = new Set();
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) zone.add(sc[0] + dx + ',' + (sc[1] + dy));
+  const summonSpots = spots.slice().sort((a, b) => Math.max(Math.abs(a.x - sc[0]), Math.abs(a.y - sc[1])) - Math.max(Math.abs(b.x - sc[0]), Math.abs(b.y - sc[1])) || Math.hypot(a.x - sc[0], a.y - sc[1]) - Math.hypot(b.x - sc[0], b.y - sc[1]));
+  return { id, kind, owner, map, paths, blocked, spots, summonSpots, zone, loopMode: map.kind === 'loop', lives: diff.lives, limit: diff.limit, count: 0, spawnN: 0 };
 }
 
 class Game {
@@ -81,6 +86,7 @@ class Game {
     this.event = null; // { idx, deadline }
     this.eventsDone = [];
     this.discovered = []; // 이번 판에 공개된 히든 조합
+    this.revealed = {}; // 히든 조합 족보 힌트: 조합 id → 공개된 재료 수
     this.nextPlan = this.planWave(1);
   }
 
@@ -101,12 +107,27 @@ class Game {
     let best = null, bs = Infinity;
     for (const s of F.spots) {
       if (s.d > 3 && best) break;
-      if (this.occupied(F.id, s.x, s.y)) continue;
+      if (this.occupied(F.id, s.x, s.y) || F.zone.has(s.x + ',' + s.y)) continue;
       const score = s.d * 10 + this.rand() * 4;
       if (score < bs) { bs = score; best = s; }
     }
     if (!best) for (const s of F.spots) if (!this.occupied(F.id, s.x, s.y)) { best = s; break; }
     return best ? { x: best.x, y: best.y, field: F.id } : null;
+  }
+
+  /** 소환진의 빈칸 (내 전장) */
+  summonSpot(pidx) {
+    const F = this.F['m' + pidx];
+    for (const s of F.summonSpots) if (!this.occupied(F.id, s.x, s.y)) return { x: s.x, y: s.y, field: F.id };
+    return null;
+  }
+  /** (x, y) 에서 가까운 빈칸 n개 (여럿을 한꺼번에 옮길 때) */
+  spotsNear(fid, x, y, n) {
+    const F = this.F[fid];
+    const out = [];
+    const cand = F.spots.filter((s) => !this.occupied(fid, s.x, s.y)).sort((a, b) => Math.max(Math.abs(a.x - x), Math.abs(a.y - y)) - Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) || Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
+    for (const s of cand) { out.push(s); if (out.length >= n) break; }
+    return out;
   }
 
   /** 다음 웨이브 계획 */
@@ -155,9 +176,28 @@ class Game {
         p.gold += Math.round(g);
       }
     }
+    // 5웨이브를 깰 때마다 히든 조합 족보 힌트 (재료 하나씩 공개)
+    if (this.wave > 1 && (this.wave - 1) % 5 === 0) this.revealHint(1);
     // 스토리 이벤트
     const ei = D.EVENTS.findIndex((e) => e.wave === this.wave);
     if (ei >= 0 && !this.event) this.openEvent(ei);
+  }
+
+  // ───────── 히든 조합 족보 힌트 ─────────
+  /** n: 공개할 재료 수 (99 = 통째로) */
+  revealHint(n, known = []) {
+    const pool = D.RECIPES.filter((r) => r.hidden && !this.discovered.includes(r.id) && !known.includes(r.id) && (this.revealed[r.id] || 0) < r.need.length);
+    if (!pool.length) return null;
+    // 이미 조금 공개된 것부터 이어서 (없으면 무작위)
+    const started = pool.filter((r) => this.revealed[r.id]);
+    const r = started.length && n < 99 ? started[0] : this.pick(pool);
+    const before = this.revealed[r.id] || 0;
+    this.revealed[r.id] = Math.min(r.need.length, before + n);
+    const names = r.need.slice(before, this.revealed[r.id]).map((x) => (x[0] === '#' ? D.ITEMS[x.slice(1)].name : D.UNIT_MAP[x].name));
+    const full = this.revealed[r.id] >= r.need.length;
+    this.msg(full ? `📜 족보 공개! 히든 조합 「${D.UNIT_MAP[r.out].name}」 = ${r.need.map((x) => (x[0] === '#' ? D.ITEMS[x.slice(1)].name : D.UNIT_MAP[x].name)).join(' + ')}` : `📜 족보 힌트! ??? 조합의 재료: ${names.join(', ')} (${this.revealed[r.id]}/${r.need.length})`, 'legend');
+    this.fxp('*', ['reveal', r.id, this.revealed[r.id]]);
+    return r.id;
   }
 
   // ───────── 스토리 이벤트 (함께) ─────────
@@ -428,7 +468,7 @@ class Game {
     if (!type && this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return null;
     let t = tier;
     if (roll && tier === 2) t = this.rand() < 0.15 ? 3 : 2;
-    const s = spot || this.autoSpot(p.idx);
+    const s = spot || this.summonSpot(p.idx);
     if (!s) return null;
     const ty = type || this.pick(D.BY_TIER[t]);
     const tt = D.UNIT_MAP[ty].tier;
@@ -509,15 +549,9 @@ class Game {
         const cost = this.summonCost(p, premium);
         if (p.gold < cost) return '골드가 부족해요.';
         if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return `유닛은 한 사람당 ${D.ECON.maxUnits}개까지예요.`;
-        let spot = null;
-        const f = fieldOf(c.field);
-        if (c.tile) {
-          if (f === 'room') return '보스방에는 소환할 수 없어요. 내 전장의 유닛을 보내세요.';
-          if (!this.canUse(p, f)) return '여기에는 내 유닛을 둘 수 없어요.';
-          if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
-          spot = { x: c.tile[0], y: c.tile[1], field: f };
-          if (f !== 'm' + p.idx) spot.home = this.autoSpot(p.idx);
-        } else if (!(spot = this.autoSpot(p.idx))) return '빈자리가 없어요.';
+        // 소환은 항상 내 전장의 소환진에서
+        const spot = this.summonSpot(p.idx);
+        if (!spot) return '빈자리가 없어요.';
         p.gold -= cost;
         p.summons++;
         const u = this.giveUnit(p, this.rollTier(p, premium), false, spot);
@@ -555,6 +589,48 @@ class Game {
         let sent = 0;
         for (const u of cand) { const s = this.autoSpot(p.idx, f); if (!s) break; this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: f }); sent++; }
         return sent ? null : '보낼 유닛이 없어요.';
+      }
+      case 'moveMany': {
+        // 드래그로 고른 여러 유닛을 목표 칸 주변으로 (같은 전장 안에서, 보스방 제외)
+        const list = (Array.isArray(c.units) ? c.units : []).slice(0, 40).map(unit).filter(Boolean);
+        if (!list.length || !c.tile) return null;
+        const f = typeof c.field === 'string' ? c.field : list[0].field;
+        if (f === 'room') { const u0 = list[0]; return this.command(pid, { t: 'send', unit: u0.id, field: 'room' }); }
+        if (!this.canUse(p, f)) return '여기에는 내 유닛을 둘 수 없어요.';
+        const movers = list.filter((u) => !(u.field === f && u.x === c.tile[0] && u.y === c.tile[1]));
+        const spots = this.spotsNear(f, c.tile[0], c.tile[1], movers.length);
+        movers.sort((a, b) => Math.hypot(a.x - c.tile[0], a.y - c.tile[1]) - Math.hypot(b.x - c.tile[0], b.y - c.tile[1]));
+        movers.forEach((u, i) => { if (spots[i]) this.command(pid, { t: 'move', unit: u.id, tile: [spots[i].x, spots[i].y], field: f }); });
+        return null;
+      }
+      case 'gather': {
+        // 같은 유닛끼리 모으기: 고른 유닛 옆으로 같은 종류를 모음 (내 전장 안)
+        const u = unit(c.unit);
+        if (!u || u.field === 'room') return null;
+        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type && x.field === u.field);
+        if (!same.length) return '같은 유닛이 없어요.';
+        same.sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
+        // 이미 붙어 있는 건 그대로
+        const far = same.filter((x) => Math.max(Math.abs(x.x - u.x), Math.abs(x.y - u.y)) > 1);
+        const spots = this.spotsNear(u.field, u.x, u.y, far.length);
+        far.forEach((x, i) => { if (spots[i]) { x.x = spots[i].x; x.y = spots[i].y; x.cdLeft = Math.max(x.cdLeft, 0.4); this.fxp(x.field, ['tele', x.x, x.y]); } });
+        return null;
+      }
+      case 'autoPlace': {
+        // 길 옆 좋은 빈자리로 (여러 개 가능)
+        const list = (Array.isArray(c.units) ? c.units : [c.unit]).map(unit).filter(Boolean);
+        for (const u of list) {
+          const s = this.autoSpot(p.idx, u.field === 'room' ? 'm' + p.idx : u.field);
+          if (s) this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: s.field });
+        }
+        return null;
+      }
+      case 'clearZone': {
+        // 소환진에 있는 내 유닛을 모두 길 옆으로
+        const F = this.F['m' + p.idx];
+        const list = this.units.filter((u) => u.owner === p.idx && u.field === F.id && F.zone.has(u.x + ',' + u.y)).map((u) => u.id);
+        if (!list.length) return '소환진이 비어 있어요.';
+        return this.command(pid, { t: 'autoPlace', units: list });
       }
       case 'send': {
         // 유닛 하나를 다른 전장(보스방·이벤트·내 전장)의 빈자리로
@@ -660,10 +736,7 @@ class Game {
       }
       case 'hero': {
         if (!p.heroChoice || !p.heroChoice.includes(c.id)) return null;
-        let spot = null;
-        const f = fieldOf(c.field);
-        if (c.tile && this.canUse(p, f) && f !== 'room') { if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1], field: f }; }
-        const u = this.giveUnit(p, 6, false, spot, c.id);
+        const u = this.giveUnit(p, 6, false, null, c.id);
         if (!u) return '빈자리가 없어요.';
         p.heroes.push(c.id);
         p.tickets--;
@@ -908,6 +981,8 @@ class Game {
   end(win, reason) {
     if (this.result) return;
     this.result = { win, reason, wave: this.wave, time: Math.round(this.time) };
+    // 게임을 깨면 히든 조합 족보 2개를 통째로 공개
+    if (win) { const a = this.revealHint(99); const b = this.revealHint(99, a ? [a] : []); this.result.revealed = [a, b].filter(Boolean); }
     this.msg(win ? `🎉 승리! ${reason}` : `💀 패배… ${reason}`, win ? 'good' : 'bad');
   }
 
@@ -935,7 +1010,7 @@ class Game {
       fields: this.fields.map((f) => ({ id: f.id, lives: f.lives, limit: f.limit, count: f.count, enemies: this.enemies.filter((e) => e.field === f.id).length, boss: bossOf(f.id) })),
       event: this.event ? { idx: this.event.idx, left: Math.max(0, Math.ceil(this.event.deadline - this.time)) } : null,
       nextEvent: (D.EVENTS.find((e) => e.wave > this.wave) || {}).wave || null,
-      eventsDone: this.eventsDone, discovered: this.discovered,
+      eventsDone: this.eventsDone, discovered: this.discovered, revealed: this.revealed,
       story: { cleared: this.story.cleared, active: this.story.active, left: this.story.active ? Math.max(0, Math.ceil(this.story.deadline - this.time)) : 0, cd: Math.max(0, Math.ceil(this.story.cdUntil - this.time)), states: D.STORY.map((s) => this.storyState(s)) },
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
@@ -957,6 +1032,10 @@ function botAct(g, p) {
   if (g.result) return;
   if (p.choice) g.command(p.id, { t: 'bless', id: p.choice[0] });
   if (p.heroChoice) g.command(p.id, { t: 'hero', id: p.heroChoice[0] });
+  // 소환진에 남은 유닛(영웅·조합·보상)은 길 옆으로
+  const Fm = g.F['m' + p.idx];
+  const inZone = g.units.filter((u) => u.owner === p.idx && u.field === Fm.id && Fm.zone.has(u.x + ',' + u.y));
+  if (inZone.length) g.command(p.id, { t: 'autoPlace', units: inZone.map((u) => u.id) });
   // 조합법 (높은 등급부터)
   const can = g.craftable(p).map((id) => D.RECIPE_MAP[id]).sort((a, b) => D.UNIT_MAP[b.out].tier - D.UNIT_MAP[a.out].tier);
   if (can.length) { g.command(p.id, { t: 'craft', recipe: can[0].id }); return; }
@@ -984,7 +1063,7 @@ function botAct(g, p) {
   for (const u of mine) cnt0[D.UNIT_MAP[u.type].cat] = (cnt0[D.UNIT_MAP[u.type].cat] || 0) + D.UNIT_MAP[u.type].tier;
   const main = Object.keys(D.CATS).sort((a, b) => (cnt0[b] || 0) - (cnt0[a] || 0))[0];
   if (mine.length >= 12 && g.upgradeCost(p, main) <= cost * (1 + g.wave / 8) && p.gold >= g.upgradeCost(p, main)) { g.command(p.id, { t: 'upgrade', cat: main }); return; }
-  if (p.gold >= cost && mine.length < D.ECON.maxUnits - 2) { g.command(p.id, { t: 'summon' }); return; }
+  if (p.gold >= cost && mine.length < D.ECON.maxUnits - 2) { const r = g.command(p.id, { t: 'summon' }); if (r && r.ok) g.command(p.id, { t: 'autoPlace', unit: r.ok }); return; }
   if (mine.length >= D.ECON.maxUnits - 2) {
     const weak = mine.find((u) => D.UNIT_MAP[u.type].tier === 1 && byType[u.type].length === 1);
     if (weak) g.command(p.id, { t: 'sell', unit: weak.id });

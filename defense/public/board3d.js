@@ -462,6 +462,24 @@ function buildWorld(map, cat) {
     world.add(g);
     S.portals.push({ g, ring, disc });
   }
+  // 소환진 (본 전장만): 빛나는 마법진
+  S.summonFx = null;
+  if (map.summon && map.kindName !== '보스방' && map.kindName !== '이벤트') {
+    const [sx, sz] = tileToWorld(map.summon[0], map.summon[1]);
+    const g = new THREE.Group();
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.45, 48), new THREE.MeshBasicMaterial({ color: '#ffd870', transparent: true, opacity: 0.16, depthWrite: false }));
+    disc.rotation.x = -Math.PI / 2;
+    const ring1 = new THREE.Mesh(new THREE.RingGeometry(1.36, 1.46, 48), new THREE.MeshBasicMaterial({ color: '#ffe8a0', transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    ring1.rotation.x = -Math.PI / 2;
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(0.9, 0.96, 6), new THREE.MeshBasicMaterial({ color: '#ffd060', transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring2.rotation.x = -Math.PI / 2;
+    const ring3 = new THREE.Mesh(new THREE.RingGeometry(0.9, 0.96, 3), new THREE.MeshBasicMaterial({ color: '#ffd060', transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+    ring3.rotation.x = -Math.PI / 2;
+    g.add(disc, ring1, ring2, ring3);
+    g.position.set(sx, 0.025, sz);
+    world.add(g);
+    S.summonFx = { g, ring2, ring3, disc };
+  }
   const gates = [];
   if (map.base) for (const b of map.base) gates.push(b);
   else if (map.kind !== 'loop') for (const p of map.paths) gates.push(clampTile(p.pts[p.pts.length - 1]));
@@ -939,7 +957,7 @@ function render(app, now) {
   const h = app.hover;
   const free = h && app.freeTile(h.x, h.y);
   S.hoverMesh.visible = !!free && !app.aiming;
-  if (free) { const [wx, wz] = tileToWorld(h.x, h.y); S.hoverMesh.position.set(wx, 0.02, wz); S.hoverMesh.material.color.set(app.sel ? '#80ff80' : '#ffffff'); }
+  if (free) { const [wx, wz] = tileToWorld(h.x, h.y); S.hoverMesh.position.set(wx, 0.02, wz); S.hoverMesh.material.color.set(app.sel || (app.multi && app.multi.length) ? '#80ff80' : '#ffffff'); }
   S.selTileMesh.visible = !!app.selTile;
   if (app.selTile) { const [wx, wz] = tileToWorld(app.selTile[0], app.selTile[1]); S.selTileMesh.position.set(wx, 0.03, wz); S.selTileMesh.rotation.z = T * 2; }
   const selU = app.sel && v.units.find((u) => u[0] === app.sel);
@@ -953,8 +971,17 @@ function render(app, now) {
     const [wx, wz] = tileToWorld(showU[3], showU[4]);
     S.rangeMesh.position.set(wx, 0.03, wz); S.rangeMesh.scale.setScalar(range);
   }
-  S.selRing.visible = !!selU;
-  if (selU) { const o = S.units.get(selU[0]); if (o) { S.selRing.position.set(o.root.position.x, 0.12, o.root.position.z); S.selRing.scale.setScalar(1 + Math.sin(T * 6) * 0.06); } }
+  S.selRing.visible = false;
+  S.selRings ||= [];
+  const selIds = (app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []).filter((id) => S.units.has(id));
+  while (S.selRings.length < selIds.length) { const m = S.selRing.clone(); S.scene.add(m); S.selRings.push(m); }
+  S.selRings.forEach((m, i) => {
+    m.visible = i < selIds.length;
+    if (!m.visible) return;
+    const o = S.units.get(selIds[i]);
+    m.position.set(o.root.position.x, 0.12, o.root.position.z); m.scale.setScalar(1 + Math.sin(T * 6) * 0.06);
+  });
+  if (S.summonFx) { S.summonFx.ring2.rotation.z = T * 0.6; S.summonFx.ring3.rotation.z = -T * 0.8; S.summonFx.disc.material.opacity = 0.13 + Math.sin(T * 2) * 0.05; }
   S.aimMesh.visible = !!(app.aiming && h);
   if (S.aimMesh.visible) { S.aimMesh.position.set(worldX(h.fx), 0.05, worldZ(h.fy)); S.aimMesh.scale.setScalar(app.info.players[app.myIdx].leader === 'sword' ? 2.6 : 2.3); }
   // ── 카메라 흔들림 ──
@@ -1024,6 +1051,14 @@ function drawOverlay(app, now, dt) {
     g.globalAlpha = 1;
     return true;
   });
+  // 드래그 선택 상자
+  if (app.drag && app.drag.on) {
+    const r = S.overlay.getBoundingClientRect();
+    const x1 = (Math.min(app.drag.x0, app.drag.x1) - r.left) * k, y1 = (Math.min(app.drag.y0, app.drag.y1) - r.top) * k;
+    const w = Math.abs(app.drag.x1 - app.drag.x0) * k, hh = Math.abs(app.drag.y1 - app.drag.y0) * k;
+    g.fillStyle = '#80ff8022'; g.fillRect(x1, y1, w, hh);
+    g.strokeStyle = '#80ff80'; g.lineWidth = 2 * k; g.strokeRect(x1, y1, w, hh);
+  }
   // 화면 색
   S.tints = S.tints.filter((t) => { t.t += dt; if (t.t >= t.life) return false; g.globalAlpha = (1 - t.t / t.life) * 0.28; g.fillStyle = t.color; g.fillRect(0, 0, W, H); g.globalAlpha = 1; return true; });
   if (v.sealed) { g.fillStyle = '#a080ff14'; g.fillRect(0, 0, W, H); }
@@ -1039,6 +1074,8 @@ window.Board3D = {
   get ok() { return S.ok; },
   get lowQuality() { return !!S.lowQ; },
   setQuality,
+  /** 유닛의 화면 좌표 (드래그 선택용) */
+  unitScreen(id) { const o = S.units.get(id); if (!o) return null; const p = o.root.position.clone().setY(0.4).project(S.camera); const r = S.renderer.domElement.getBoundingClientRect(); return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height]; },
   /** 칸 중심의 화면 좌표 (자동 테스트용) */
   toScreen(x, y) { const [wx, wz] = tileToWorld(x, y); const p = new THREE.Vector3(wx, 0.3, wz).project(S.camera); const r = S.renderer.domElement.getBoundingClientRect(); return [r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height]; },
   resize: fitCamera,

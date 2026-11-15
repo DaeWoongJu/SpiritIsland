@@ -377,6 +377,7 @@ function onTick(v) {
     const f = f0.slice(1);
     if (f[0] === 'story') { onStoryFx(f); continue; }
     if (f[0] === 'hidden') { rememberHidden(f[1]); continue; }
+    if (f[0] === 'reveal') { rememberReveal(f[1], f[2]); continue; }
     if (where !== '*' && where !== app.viewField) { if (f[0] === 'leak' && where === 'm' + app.myIdx) { Sound.play('leak'); toast('💔 내 전장에서 요괴가 빠져나갔어요!'); } continue; }
     if (app.use3d) Board3D.fx(f, app); else addFx(f, now);
   }
@@ -490,11 +491,11 @@ function renderControls() {
   const cdPct = p.skillCd > 0 ? (p.skillCd / p.skillMax) * 100 : 0;
   $('#controls').innerHTML = `
     <div class="gold">💰 ${p.gold}</div>
-    <button class="btn-summon" data-a="summon" ${p.gold < p.cost ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · ${app.selTile ? '고른 칸에' : '자동 배치'}</small></button>
+    <button class="btn-summon" data-a="summon" ${p.gold < p.cost ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 소환진에</small></button>
     <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · 희귀 이상</small></button>
     <div class="grp">${Object.entries(cats).map(([id, c], i) => `<button data-a="up" data-c="${id}" ${p.gold < p.ucost[id] ? 'disabled' : ''} title="${c.name} 유닛 피해 +12%">${c.icon} ${c.name} +${p.upg[id]} <kbd>${i + 1}</kbd><small>${p.ucost[id]}G</small></button>`).join('')}</div>
     <div class="grp"><button class="btn-skill ${app.aiming ? 'aim' : ''}" data-a="skill" ${p.skillCd > 0 ? 'disabled' : ''} title="${esc(L.skill.desc)}">${L.icon} ${esc(L.skill.name)} <kbd>E</kbd><small>${p.skillCd > 0 ? `${p.skillCd}초` : L.skill.target ? '위치 선택' : '바로 사용'}</small><span class="cdv" style="height:${cdPct}%"></span></button></div>
-    <div class="grp"><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
+    <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
     <div class="hint" style="align-self:center">유닛 ${p.units}/${app.cat.econ.maxUnits}</div>`;
 }
 onPress($('#controls'), (b) => action(b.dataset.a, b.dataset.c));
@@ -502,8 +503,8 @@ function action(a, c) {
   const p = me();
   if (!p) return;
   if (a === 'summon' || a === 'premium') {
-    cmd({ t: 'summon', premium: a === 'premium', tile: app.selTile || undefined, field: app.selTile ? app.viewField : undefined });
-    app.selTile = null;
+    cmd({ t: 'summon', premium: a === 'premium' });
+    if (app.viewField !== 'm' + app.myIdx) toast('소환한 유닛은 내 전장의 소환진에 나와요.');
     Sound.play(a === 'premium' ? 'rare' : 'summon');
   } else if (a === 'up') { cmd({ t: 'upgrade', cat: c }); Sound.play('upgrade'); }
   else if (a === 'skill') {
@@ -513,6 +514,10 @@ function action(a, c) {
     else cmd({ t: 'skill' });
   } else if (a === 'gift') { const amt = Math.min(100, p.gold); if (amt > 0) { cmd({ t: 'gift', amount: amt }); Sound.play('sell'); } }
   else if (a === 'merge' && app.sel) { cmd({ t: 'merge', unit: app.sel }); Sound.play('merge'); }
+  else if (a === 'clearZone') { cmd({ t: 'clearZone' }); Sound.play('click'); }
+  else if (a === 'autoPlace') { const ids = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []; if (ids.length) { cmd({ t: 'autoPlace', units: ids }); clearSel(); Sound.play('click'); } }
+  else if (a === 'gather') { const id = app.sel || (app.multi && app.multi[0]); if (id) { cmd({ t: 'gather', unit: id }); Sound.play('click'); } }
+  else if (a === 'clearSel') { clearSel(); renderSelected(); }
   else if (a === 'sell' && app.sel) { cmd({ t: 'sell', unit: app.sel }); app.sel = null; Sound.play('sell'); }
 }
 
@@ -539,13 +544,24 @@ function unitCounts(owner) {
 }
 function renderSelected() {
   const el = $('#selected');
+  if (app.multi && app.multi.length) {
+    app.multi = app.multi.filter((id) => app.v.units.some((u) => u[0] === id));
+    const list = app.v.units.filter((u) => app.multi.includes(u[0]));
+    const cnt = {};
+    for (const u of list) cnt[u[2]] = (cnt[u[2]] || 0) + 1;
+    setHTML(el, `<div class="un">🖱 ${list.length}명 선택</div>
+      <div>${Object.entries(cnt).map(([id, n]) => `${app.unitMap[id].icon} ${esc(app.unitMap[id].name)} ×${n}`).join(' · ')}</div>
+      <div class="hint">빈칸을 클릭하면 그 주변으로 한꺼번에 이동해요.</div>
+      <div class="acts"><button class="small" data-a="autoPlace">🛡 길 옆으로 자동 배치 <kbd>A</kbd></button><button class="small" data-a="clearSel">선택 해제</button></div>`);
+    return;
+  }
   const u = app.sel && app.v.units.find((x) => x[0] === app.sel);
   const hu = !u && app.hover && (app.fu || []).find((x) => x[3] === app.hover.x && x[4] === app.hover.y);
   const show = u || hu;
   if (!show) {
     const cnt = unitCounts(app.myIdx);
     const ready = Object.entries(cnt).filter(([id, n]) => app.cat.mergeNeed[app.unitMap[id].tier] && n >= app.cat.mergeNeed[app.unitMap[id].tier]);
-    setHTML(el, `<div class="hint">유닛을 누르면 정보가 보여요.<br>빈칸을 누르고 <b>Q</b>로 그 자리에 소환 · 유닛 선택 후 빈칸 클릭 = 이동 (위 탭으로 다른 전장을 연 뒤 빈칸을 누르면 그 전장으로 보내요) · <b>G</b> = 동료에게 위치 알림</div>
+    setHTML(el, `<div class="hint">유닛을 누르면 정보가 보여요.<br><b>Q</b> 소환 → 유닛은 <b>소환진</b>(노란 마법진)에 나와요 · 유닛 클릭 후 빈칸 클릭 = 이동 · <b>드래그</b>로 여러 명 선택 · <b>더블클릭</b>으로 같은 유닛 모두 선택 · <b>Z</b> 소환진 비우기 · <b>G</b> 위치 알림</div>
       ${ready.length ? `<div style="margin-top:6px">✨ 합성 가능: ${ready.map(([id, n]) => `<button class="small" data-merge="${id}">${app.unitMap[id].icon} ${esc(app.unitMap[id].name)} ×${n}</button>`).join(' ')}</div>` : ''}`);
     return;
   }
@@ -561,6 +577,7 @@ function renderSelected() {
     <div>${esc(t.desc)}</div>
     <div class="hint">누적 피해 ${fmt(dmg)} · ${mine ? '내 유닛' : `${esc(app.info.players[owner].name)}의 유닛`} · 📍${esc(fieldName(ufield || 'm0'))}${need ? ` · 같은 유닛 ${have}/${need}` : ''}</div>
     ${mine && u ? `<div class="acts">${ufield !== 'm' + app.myIdx ? '<button class="small" data-send="home">↩ 내 전장으로</button>' : ''}${ufield !== 'room' ? '<button class="small" data-send="room" title="보스방에는 한 사람당 한 명 (있으면 교대)">📖 이 유닛을 보스방으로</button>' : ''}${app.v.event && ufield !== 'ev' ? '<button class="small" data-send="ev">⚔ 이벤트로</button>' : ''}</div>` : ''}
+    ${mine && u ? `<div class="acts"><button class="small" data-a="gather" ${(unitCounts(app.myIdx)[type] || 0) < 2 ? 'disabled' : ''}>🧲 같은 유닛 모으기 (${unitCounts(app.myIdx)[type] || 0}) <kbd>D</kbd></button><button class="small" data-a="autoPlace">🛡 길 옆으로 <kbd>A</kbd></button></div>` : ''}
     ${mine && u ? recipeHints(type) : ''}
     ${t.hero ? `<div style="color:#8ff0e0"><b>Lv.${lvl}</b> / 10 · 처치 ${kills} · 피해 +${(lvl - 1) * 12}% (요괴를 잡을수록 성장)</div>` : ''}
     ${mine && u && t.hero ? '<div class="acts"><span class="hint">영웅은 합성·판매하지 않아요 · 빈칸 클릭 = 이동</span></div>' : ''}
@@ -605,10 +622,10 @@ function renderHeroPick() {
   const key = p.heroChoice.join() + '|' + (app.selTile || '');
   if (key === renderHeroPick.key) return;
   renderHeroPick.key = key;
-  el.innerHTML = `<b>🦸 영웅 영입권!</b> <span class="hint">데려올 영웅을 고르세요 ${app.selTile ? '(고른 칸에 배치)' : '(빈칸을 먼저 누르면 그 자리에)'} · 남은 영입권 ${p.tickets}</span><div class="opts">${p.heroChoice.map((id) => { const h = app.unitMap[id]; return `<button data-h="${id}"><b>${h.icon}</b>${esc(h.name)}<small>${esc(h.desc)}</small></button>`; }).join('')}</div>`;
+  el.innerHTML = `<b>🦸 영웅 영입권!</b> <span class="hint">데려올 영웅을 고르세요 (소환진에 나와요) · 남은 영입권 ${p.tickets}</span><div class="opts">${p.heroChoice.map((id) => { const h = app.unitMap[id]; return `<button data-h="${id}"><b>${h.icon}</b>${esc(h.name)}<small>${esc(h.desc)}</small></button>`; }).join('')}</div>`;
   el.classList.remove('hidden');
 }
-onPress($('#herochoice'), (b) => { if (b.dataset.h) { cmd({ t: 'hero', id: b.dataset.h, tile: app.selTile || undefined, field: app.viewField }); app.selTile = null; } });
+onPress($('#herochoice'), (b) => { if (b.dataset.h) { cmd({ t: 'hero', id: b.dataset.h }); } });
 
 
 // ───────────── 오른쪽 서랍: 조합법 · 미션 · 보스 스토리 ─────────────
@@ -623,6 +640,22 @@ function rememberHidden(id) {
   k.add(id);
   try { localStorage.setItem('defense-hidden', JSON.stringify([...k])); } catch { /* 무시 */ }
   if (first) { banner('🔮 히든 조합 발견!'); Sound.play('myth'); }
+}
+/** 히든 조합 족보 힌트 (5웨이브마다 · 게임 승리 시) — 이 컴퓨터에 기억 */
+function revealMap() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('defense-reveal') || '{}'); } catch { /* 무시 */ }
+  const live = (app.v && app.v.revealed) || {};
+  for (const [k, n] of Object.entries(live)) saved[k] = Math.max(saved[k] || 0, n);
+  return saved;
+}
+function rememberReveal(id, n) {
+  const m = revealMap();
+  m[id] = Math.max(m[id] || 0, n);
+  try { localStorage.setItem('defense-reveal', JSON.stringify(m)); } catch { /* 무시 */ }
+  const r = app.cat.recipes.find((x) => x.id === id);
+  if (r && n >= r.need.length) banner('📜 히든 족보 공개!'); else toast('📜 히든 조합 족보 힌트가 하나 공개됐어요! (📜 조합법)');
+  Sound.play('bless');
 }
 function haveCounts() {
   const c = {};
@@ -666,11 +699,18 @@ function renderDrawer() {
   if (app.drawer === 'recipe') {
     const have = haveCounts();
     const known = hiddenKnown();
+    const rev = revealMap();
     const row = (r) => {
       const o = app.unitMap[r.out];
       const ok = p.craftable.includes(r.id);
       const tier = app.cat.tiers[o.tier - 1];
-      if (r.hidden && !known.has(r.id)) return `<div class="rc hid"><span class="out">❓ ???</span><span class="ing"><span class="hint">${esc(r.hint)}</span></span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+      if (r.hidden && !known.has(r.id)) {
+        const n = rev[r.id] || 0;
+        const full = n >= r.need.length;
+        const shown = { ...r, need: r.need.slice(0, n) };
+        const chips = (n ? ingChips(shown, have, p.items) : '') + r.need.slice(n).map(() => '<span class="chip">❓</span>').join('');
+        return `<div class="rc hid"><span class="out">${full ? `${o.icon} ${esc(o.name)}` : '❓ ???'}</span><span class="ing">${chips}<span class="hint" style="width:100%">${esc(r.hint)}${n && !full ? ` · 족보 ${n}/${r.need.length}` : ''}</span></span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+      }
       return `<div class="rc ${ok ? 'ok' : ''} ${r.hidden ? 'hid' : ''}" style="--c:${tier.color}" title="${esc(o.desc)}"><span class="out">${o.icon} ${esc(o.name)}</span><span class="ing">${ingChips(r, have, p.items)}</span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
     };
     const groups = [[2, '희귀'], [3, '에픽'], [4, '전설'], [5, '신화']];
@@ -680,7 +720,7 @@ function renderDrawer() {
       ${itemsHtml ? `<div class="sec">🎒 재료 아이템</div><div class="items">${itemsHtml}</div>` : ''}
       ${groups.map(([t, n]) => `<div class="sec" style="color:${app.cat.tiers[t - 1].color}">${n}</div>${app.cat.recipes.filter((r) => !r.hidden && app.unitMap[r.out].tier === t).map(row).join('')}`).join('')}
       <div class="sec" style="color:#ff5ad8">🔮 히든 조합 (${app.cat.recipes.filter((r) => r.hidden && known.has(r.id)).length}/${app.cat.recipes.filter((r) => r.hidden).length} 발견)</div>
-      <div class="hint">처음엔 ???로 가려져 있어요. 힌트를 보고 재료를 맞히면 공개돼요 (한 번 찾으면 이 컴퓨터에 기억돼요).</div>
+      <div class="hint">처음엔 ???로 가려져 있어요. <b>5웨이브를 깰 때마다</b> 재료가 하나씩, <b>게임을 이기면</b> 족보 2개가 통째로 공개돼요. 직접 맞혀 만들어도 공개돼요 (모두 이 컴퓨터에 기억돼요).</div>
       ${app.cat.recipes.filter((r) => r.hidden).map(row).join('')}`;
   } else if (app.drawer === 'mission') {
     const done = p.missions.filter((m) => m[2]).length;
@@ -742,9 +782,48 @@ function freeTile(x, y) {
 }
 canvas.addEventListener('mousemove', (e) => { if (!app.info) return; app.hover = tileAt(e); });
 canvas.addEventListener('mouseleave', () => { app.hover = null; });
-canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); app.sel = null; app.selTile = null; app.aiming = false; renderControls.key = null; });
-canvas.addEventListener('click', (e) => {
+canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); clearSel(); app.aiming = false; renderControls.key = null; });
+function clearSel() { app.sel = null; app.multi = []; app.selTile = null; }
+/** 유닛의 화면 위치 (드래그 선택) */
+function unitScreenPos(u) {
+  if (app.use3d) return Board3D.unitScreen(u[0]);
+  const r = canvas.getBoundingClientRect();
+  return [r.left + ((u[3] + 0.5) * T / canvas.width) * r.width, r.top + ((u[4] + 0.5) * T / canvas.height) * r.height];
+}
+// 드래그로 여러 유닛 고르기
+canvas.addEventListener('pointerdown', (e) => { if (e.button !== 0 || !app.v || app.aiming) return; app.drag = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, on: false }; });
+window.addEventListener('pointermove', (e) => {
+  if (!app.drag) return;
+  app.drag.x1 = e.clientX; app.drag.y1 = e.clientY;
+  if (!app.drag.on && Math.hypot(app.drag.x1 - app.drag.x0, app.drag.y1 - app.drag.y0) > 10) app.drag.on = true;
+});
+window.addEventListener('pointerup', () => {
+  const d = app.drag;
+  app.drag = null;
+  if (!d || !d.on || !app.v) return;
+  const [xa, xb] = [Math.min(d.x0, d.x1), Math.max(d.x0, d.x1)], [ya, yb] = [Math.min(d.y0, d.y1), Math.max(d.y0, d.y1)];
+  const ids = (app.fu || []).filter((u) => u[1] === app.myIdx).filter((u) => { const p = unitScreenPos(u); return p && p[0] >= xa && p[0] <= xb && p[1] >= ya && p[1] <= yb; }).map((u) => u[0]);
+  clearSel();
+  if (ids.length === 1) app.sel = ids[0];
+  else if (ids.length) app.multi = ids;
+  app.justDragged = true;
+  setTimeout(() => { app.justDragged = false; }, 50);
+  if (ids.length) Sound.play('click');
+  renderSelected();
+});
+canvas.addEventListener('dblclick', (e) => {
+  // 더블클릭: 보이는 전장의 같은 유닛 모두 선택
   if (!app.v) return;
+  const t = tileAt(e);
+  const u = (app.fu || []).find((x) => x[3] === t.x && x[4] === t.y && x[1] === app.myIdx);
+  if (!u) return;
+  const ids = app.fu.filter((x) => x[1] === app.myIdx && x[2] === u[2]).map((x) => x[0]);
+  clearSel();
+  if (ids.length > 1) app.multi = ids; else app.sel = u[0];
+  renderSelected();
+});
+canvas.addEventListener('click', (e) => {
+  if (!app.v || app.justDragged) return;
   const t = tileAt(e);
   app.hover = t;
   if (app.aiming) { cmd({ t: 'skill', x: t.fx, y: t.fy, field: app.viewField }); app.aiming = false; renderControls.key = null; return; }
@@ -752,14 +831,14 @@ canvas.addEventListener('click', (e) => {
   if (u) {
     if (u[1] === app.myIdx) {
       if (app.sel && app.sel !== u[0] && e.shiftKey) { cmd({ t: 'swap', unit: app.sel, other: u[0] }); app.sel = null; return; }
-      app.sel = app.sel === u[0] ? null : u[0];
-    } else { app.sel = null; toast(`${app.info.players[u[1]].name}의 유닛이에요.`); }
-    app.selTile = null;
+      if (e.ctrlKey || e.metaKey) { const cur = new Set(app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []); if (cur.has(u[0])) cur.delete(u[0]); else cur.add(u[0]); clearSel(); if (cur.size === 1) app.sel = [...cur][0]; else app.multi = [...cur]; }
+      else { const was = app.sel; clearSel(); app.sel = was === u[0] ? null : u[0]; }
+    } else { clearSel(); toast(`${app.info.players[u[1]].name}의 유닛이에요.`); }
     Sound.play('click');
   } else if (freeTile(t.x, t.y)) {
-    if (app.sel) { cmd({ t: 'move', unit: app.sel, tile: [t.x, t.y], field: app.viewField }); app.sel = null; Sound.play('click'); }
-    else { app.selTile = app.selTile && app.selTile[0] === t.x && app.selTile[1] === t.y ? null : [t.x, t.y]; }
-  } else { app.sel = null; app.selTile = null; }
+    if (app.multi && app.multi.length) { cmd({ t: 'moveMany', units: app.multi, tile: [t.x, t.y], field: app.viewField }); clearSel(); Sound.play('click'); }
+    else if (app.sel) { cmd({ t: 'move', unit: app.sel, tile: [t.x, t.y], field: app.viewField }); app.sel = null; Sound.play('click'); }
+  } else clearSel();
   renderSelected();
   renderControls.key = null; renderControls();
 });
@@ -769,17 +848,18 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'enter') { app.tab = 'chat'; document.querySelector('.tabs [data-tab=chat]').click(); $('#chat input').focus(); e.preventDefault(); return; }
   const map = { q: 'summon', w: 'premium', e: 'skill', f: 'merge', s: 'sell' };
-  const ko = { ㅂ: 'q', ㅈ: 'w', ㄷ: 'e', ㄹ: 'f', ㄴ: 's', ㅔ: 'p', ㅎ: 'g', ㄱ: 'r' }; // 한글 자판
+  const ko = { ㅂ: 'q', ㅈ: 'w', ㄷ: 'e', ㄹ: 'f', ㄴ: 's', ㅔ: 'p', ㅎ: 'g', ㄱ: 'r', ㅁ: 'a', ㅇ: 'd', ㅋ: 'z' }; // 한글 자판
   const key = ko[k] || k;
-  if (key === 'q' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('summon'); return; }
-  if (key === 'w' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', premium: true, tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('rare'); return; }
+  if (key === 'a') { action('autoPlace'); return; }
+  if (key === 'd') { action('gather'); return; }
+  if (key === 'z') { action('clearZone'); return; }
   if (key === 'r') { toggleDrawer('recipe'); return; }
   if (key === 'tab') { e.preventDefault(); const order = ['m' + app.myIdx, 'room', ...(app.v.event ? ['ev'] : []), ...app.info.players.map((_, i) => 'm' + i).filter((f) => f !== 'm' + app.myIdx)]; switchField(order[(order.indexOf(app.viewField) + 1) % order.length]); return; }
   if (map[key]) { action(map[key]); return; }
   if (['1', '2', '3'].includes(key)) { action('up', Object.keys(app.cat.cats)[Number(key) - 1]); return; }
   if (key === 'p' || key === ' ') { send({ t: 'pause' }); e.preventDefault(); return; }
   if (key === 'g' && app.hover) { cmd({ t: 'ping', x: app.hover.fx, y: app.hover.fy, field: app.viewField }); return; }
-  if (key === 'escape') { app.sel = null; app.selTile = null; app.aiming = false; renderControls.key = null; closeModal(); closeDrawer(); $('#storybox').classList.add('hidden'); }
+  if (key === 'escape') { clearSel(); app.aiming = false; renderControls.key = null; closeModal(); closeDrawer(); $('#storybox').classList.add('hidden'); }
 });
 
 // ───────────── 효과 ─────────────
@@ -952,6 +1032,7 @@ function showResult() {
   openModal(`<div class="result-box">
     <h1>${r.win ? '🎉 승리!' : '💀 패배…'}</h1>
     <p>${esc(r.reason)}</p>
+    ${r.revealed && r.revealed.length ? `<p>📜 <b>히든 족보 공개!</b> ${r.revealed.map((id) => { const rc = app.cat.recipes.find((x) => x.id === id); return `${app.unitMap[rc.out].icon} ${esc(app.unitMap[rc.out].name)} = ${rc.need.map((n) => (n[0] === '#' ? app.cat.items[n.slice(1)].name : app.unitMap[n].name)).join(' + ')}`; }).join('<br>')}</p>` : ''}
     <p>도달 웨이브 <b>${r.wave}</b> · 플레이 시간 ${Math.floor(r.time / 60)}분 ${r.time % 60}초 · 맵 「${esc(app.info.map.name)}」 · ${esc(app.info.diff.name)}</p>
     <table class="result-table"><tr><th>퇴마사</th><th>대장</th><th>처치</th><th>피해</th><th>남은 유닛</th></tr>
     ${v.players.map((p, i) => `<tr><td style="color:${app.cat.colors[i]}"><b>${esc(app.info.players[i].name)}</b></td><td>${app.leaderMap[app.info.players[i].leader].icon} ${esc(app.leaderMap[app.info.players[i].leader].name)}</td><td>${p.kills}</td><td>${fmt(p.damage)}</td><td>${p.units}</td></tr>`).join('')}</table>
@@ -1005,7 +1086,8 @@ function openGuide() {
     </ul>
     <p><b>요괴 특징</b>: 🐦‍⬛ 까마귀는 날아다녀서 검술 유닛이 못 때려요 · 💀 갑옷 망령은 방어가 높아 강한 한 방이나 방어 깎기가 좋아요 · 🟢 점액은 죽으면 분열 · 🐸 보물 두꺼비를 잡으면 보상!</p>
     <p><b>웨이브 변이</b>: 질풍(빠름)·거구(체력)·재생·강철(방어)·떼거리(수가 많음)·유령(회피). 오른쪽 '다음 웨이브'에서 미리 확인하세요.</p>
-    <p><b>단축키</b>: Q 소환 · W 고급 소환 · E 필살기 · F 랜덤 합성 · R 조합법 · Tab 전장 바꾸기 · S 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소 · 마우스 휠 확대</p>
+    <p><b>단축키</b>: Q 소환(소환진에) · W 고급 소환 · E 필살기 · F 랜덤 합성 · R 조합법 · A 길 옆으로 자동 배치 · D 같은 유닛 모으기 · Z 소환진 비우기 · Tab 전장 바꾸기 · S 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소 · 마우스 휠 확대</p>
+    <p><b>마우스</b>: 드래그 = 여러 명 선택 · 더블클릭 = 같은 유닛 모두 선택 · Ctrl+클릭 = 선택에 더하기 · 우클릭 = 선택 해제</p>
   </div>`);
 }
 
