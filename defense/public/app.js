@@ -618,7 +618,7 @@ function renderNext() {
   const v = app.v;
   const n = v.next;
   const c = v.cur;
-  const line = (w, label) => w ? `<div><b>${label} ${w.wave}웨이브</b>: ${w.boss ? `${w.boss.icon} <b style="color:#f8a">${esc(w.boss.name)}</b> <span class="hint">${esc(w.boss.desc)}</span>` : `${w.mainIcon} ${esc(w.main)}${w.second ? ` + ${esc(w.second)}` : ''} ×${w.count}${w.mini ? ' + 👿우두머리' : ''}`}${w.mod ? ` <span title="${esc(w.mod.desc)}">· ${w.mod.icon}${esc(w.mod.name)}(${esc(w.mod.desc)})</span>` : ''}${w.flying ? ' <span class="hint">· 🐦‍⬛ 하늘을 날아 검술 유닛이 못 때려요</span>' : ''}</div>` : '';
+  const line = (w, label) => w ? `<div><b>${label} ${w.wave}웨이브</b>: ${w.boss ? `${w.boss.icon} <b style="color:#f8a">${esc(w.boss.name)}</b> <span class="hint">${esc(w.boss.desc)}</span>` : `${w.mainIcon} ${esc(w.main)}${w.second ? ` + ${esc(w.second)}` : ''} ×${w.count}${w.mini ? ' + 👿우두머리' : ''}`}${w.mod ? ` <span title="${esc(w.mod.desc)}">· ${w.mod.icon}${esc(w.mod.name)}(${esc(w.mod.desc)})</span>` : ''}${w.flying ? ' <span class="hint">· 🐦‍⬛ 하늘을 날아 검술 유닛이 못 때려요</span>' : ''}${w.story ? `<div style="color:#ffd070">📖 보스 스토리 ${w.story.ch}장 「${esc(w.story.title)}」 — 보스방에 ${w.story.icon} ${esc(w.story.boss)}</div>` : ''}${w.event ? `<div style="color:#ff9070">⚔ 스토리 이벤트 — ${w.event.icon} ${esc(w.event.boss)}</div>` : ''}</div>` : '';
   const html = line(c, '지금') + (n ? line(n, '다음') : '<div class="hint">마지막 웨이브예요! 남은 요괴를 모두 물리치세요.</div>');
   if (html !== renderNext.html) { $('#nextwave').innerHTML = html; renderNext.html = html; }
 }
@@ -794,6 +794,8 @@ function storyBox(face, title, text) {
 $('#storybox').addEventListener('click', (e) => { if (e.target.closest('[data-x]')) $('#storybox').classList.add('hidden'); });
 function onStoryFx(f) {
   const [, kind, id, who] = f;
+  if (kind === 'soon') { const st = app.cat.story.find((x) => x.id === id); banner(`📢 다음 라운드: 보스 스토리 ${st.ch}장!`); storyBox('📢', `다음 라운드 — 보스 스토리 ${st.ch}장 「${st.title}」`, `${st.wave}웨이브에 보스방에 「${st.boss}」 ${st.icon}이(가) 나타나요. 보스는 가운데에 고정돼 있고 ${app.cat.storyTime}초 안에 잡아야 해요. 보스방에 보낼 가장 센 유닛을 미리 골라 두세요!`); Sound.play('wave'); return; }
+  if (kind === 'eventSoon') { const ev = app.cat.events[id]; banner('📢 다음 라운드: 스토리 이벤트!'); storyBox('📢', `다음 라운드 — 스토리 이벤트 「${ev.boss}」`, `${ev.wave}웨이브에 이벤트 전장이 열려요 (${app.cat.eventTime}초). 내 전장을 지키면서 이벤트 전장에 보낼 정예를 준비하세요!`); Sound.play('wave'); return; }
   if (kind === 'event') { const ev = app.cat.events[id]; storyBox(ev.icon, `스토리 이벤트 — ${ev.boss}`, ev.intro); banner('⚔ 스토리 이벤트!'); Sound.play('boss'); return; }
   const st = app.cat.story.find((x) => x.id === id);
   if (!st) return;

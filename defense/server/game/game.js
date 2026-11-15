@@ -163,6 +163,7 @@ class Game {
       wave: p.wave, main: D.ENEMIES[p.main].name, mainIcon: D.ENEMIES[p.main].icon, second: p.second && p.second !== p.main ? D.ENEMIES[p.second].name : null,
       mod: p.mod ? D.MODIFIERS.find((m) => m.id === p.mod) : null, boss: boss ? { name: boss.name, icon: boss.icon, desc: boss.desc } : null, mini: p.mini, count: p.count,
       flying: p.main === 'crow' || p.second === 'crow', event: ev ? { boss: ev.boss, icon: ev.icon } : null,
+      story: (() => { const st = D.STORY.find((x) => x.wave === p.wave); return st ? { ch: st.ch, title: st.title, boss: st.boss, icon: st.icon } : null; })(),
     };
   }
 
@@ -191,6 +192,11 @@ class Game {
     }
     // 5웨이브를 깰 때마다 히든 조합 족보 힌트 (재료 하나씩 공개)
     if (this.wave > 1 && (this.wave - 1) % 5 === 0) this.revealHint(1);
+    // 다음 라운드 예고: 보스 스토리 · 스토리 이벤트
+    const soon = D.STORY.find((x) => x.wave === this.wave + 1);
+    if (soon) { this.msg(`📢 다음 라운드(${soon.wave}웨이브)에 보스 스토리 ${soon.ch}장 「${soon.title}」 — 「${soon.boss}」 등장! 보스방에 보낼 유닛을 준비하세요`, 'event'); this.fxp('*', ['story', 'soon', soon.id, -1]); }
+    const evSoon = D.EVENTS.findIndex((e) => e.wave === this.wave + 1);
+    if (evSoon >= 0) { const e = D.EVENTS[evSoon]; this.msg(`📢 다음 라운드(${e.wave}웨이브)에 스토리 이벤트 「${e.boss}」 — 이벤트 전장에 보낼 정예를 준비하세요`, 'event'); this.fxp('*', ['story', 'eventSoon', evSoon, -1]); }
     // 보스 스토리 (정해진 웨이브에 저절로)
     const st = D.STORY.find((x) => x.wave === this.wave);
     if (st) this.startStory(st);
