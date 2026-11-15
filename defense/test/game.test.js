@@ -208,7 +208,7 @@ test('요괴는 한쪽 입구에서만 나온다', () => {
   assert.ok(g.enemies.every((e) => e.path === 0));
 });
 
-test('조합법 · 히든 조합 (재료 아이템 필요)', () => {
+test('조합법 · 히든 조합', () => {
   const g = new Game(roster(1), { mapId: 'h-ring', seed: 11 });
   const p = g.players[0];
   p.gold = 1e5;
@@ -222,11 +222,11 @@ test('조합법 · 히든 조합 (재료 아이템 필요)', () => {
   // 히든: 그림자 + 화염 + 붉은 달 조각
   for (let i = 0; i < 4; i++) g.command('a', { t: 'summon' });
   ['shadow', 'shadow', 'flame', 'wave', 'wave'].forEach((t, i) => { g.units[i].type = t; });
-  assert.strictEqual(typeof g.command('a', { t: 'craft', recipe: 'h_crimson' }), 'string', '재료 아이템이 없으면 안 됨');
-  p.items.moonshard = 1;
+  assert.strictEqual(typeof g.command('a', { t: 'craft', recipe: 'h_crimson' }), 'string', '재료가 모자라면 안 됨');
+  g.command('a', { t: 'summon' });
+  g.units[5].type = 'flame';
   const h = g.command('a', { t: 'craft', recipe: 'h_crimson' });
   assert.strictEqual(g.units.find((u) => u.id === h.ok).type, 'x_crimson');
-  assert.strictEqual(p.items.moonshard, 0);
   assert.deepStrictEqual(g.discovered, ['h_crimson']);
 });
 
@@ -242,13 +242,12 @@ test('각자 전장 · 보스 스토리 · 스토리 이벤트', () => {
   // 남의 전장에는 못 둠 (옮기기)
   const s1 = g.autoSpot(1, 'm1');
   assert.strictEqual(typeof g.command('a', { t: 'move', unit: g.units[0].id, tile: [s1.x, s1.y], field: 'm1' }), 'string');
-  // 스토리: 웨이브가 모자라면 잠김
-  assert.strictEqual(typeof g.command('a', { t: 'story', id: 's1' }), 'string');
-  g.wave = 4;
-  assert.strictEqual(g.command('a', { t: 'story', id: 's1' }), null);
+  // 스토리: 정해진 웨이브(6)가 되면 보스방에 저절로 등장
+  assert.ok(!g.enemies.some((e) => e.storyBoss));
+  g.nextPlan = g.planWave(D.STORY[0].wave);
+  g.startWave();
   assert.ok(g.enemies.some((e) => e.field === 'room' && e.storyBoss === 's1'));
-  // 보스방은 둘이 함께: 동료도 시작 중복 불가, 유닛은 둘 다 보낼 수 있음
-  assert.strictEqual(typeof g.command('b', { t: 'story', id: 's1' }), 'string');
+  assert.strictEqual(typeof g.command('a', { t: 'story', id: 's1' }), 'string', '직접 시작하지 않음');
   g.command('a', { t: 'dispatch', field: 'room', n: 3 });
   assert.strictEqual(g.units.filter((u) => u.field === 'room').length, 1, '보스방에는 한 사람당 한 명');
   // 다른 유닛을 보내면 교대
@@ -269,17 +268,24 @@ test('각자 전장 · 보스 스토리 · 스토리 이벤트', () => {
   const boss = g.enemies.find((e) => e.storyBoss);
   g.hurt(boss, boss.hp + 1, g.units.find((u) => u.field === 'room'), { pierce: true });
   assert.deepStrictEqual(g.story.cleared, ['s1']);
-  assert.ok(g.players.every((x) => x.items.moonshard === 1), '보상은 둘 다');
+  assert.ok(g.players.every((x) => x.picks[3] === 1 && !Object.keys(x.items).length), '보상은 둘 다 선택권 (조각 없음)');
   assert.ok(g.units.every((u) => u.field[0] === 'm'), '끝나면 유닛이 돌아옴');
-  // 이벤트: 12웨이브에 열림
-  g.nextPlan = g.planWave(12);
+  // 다음 장은 실패하면 그대로 실패로 남음
+  g.nextPlan = g.planWave(D.STORY[1].wave);
+  g.startWave();
+  g.story.deadline = g.time;
+  g.tick();
+  assert.deepStrictEqual(g.story.failed, ['s2']);
+  assert.ok(!g.enemies.some((e) => e.storyBoss));
+  // 이벤트: 정해진 웨이브에 열림
+  g.nextPlan = g.planWave(D.EVENTS[0].wave);
   g.startWave();
   assert.ok(g.event);
   assert.strictEqual(g.command('a', { t: 'dispatch', field: 'ev', n: 1 }), null);
   const eb = g.enemies.find((e) => e.eventBoss);
   g.hurt(eb, eb.hp + 1, null, { by: 0, pierce: true });
   assert.strictEqual(g.event, null);
-  assert.ok(g.players.every((x) => x.items.star === 1));
+  assert.ok(g.players.every((x) => x.picks[4] === 1 && !x.items.star));
 });
 
 test('화면용 상태는 JSON으로 보낼 수 있다', () => {

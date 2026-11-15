@@ -137,7 +137,7 @@ function renderRoom() {
   const s = r.settings;
   $('#room-settings').innerHTML = `
     <label>난이도 <select id="set-diff" ${host ? '' : 'disabled'}>${app.cat.difficulties.map((d) => `<option value="${d.id}" ${d.id === s.difficulty ? 'selected' : ''}>${d.name}</option>`).join('')}</select></label>
-    <label><input type="checkbox" id="set-endless" ${s.endless ? 'checked' : ''} ${host ? '' : 'disabled'}> ♾ 무한 모드 (40웨이브 뒤에도 계속)</label>
+    <label><input type="checkbox" id="set-endless" ${s.endless ? 'checked' : ''} ${host ? '' : 'disabled'}> ♾ 무한 모드 (60웨이브 뒤에도 계속)</label>
     ${host ? '' : '<span class="hint">설정은 방장이 정해요</span>'}`;
   if (host) {
     $('#set-diff').onchange = (e) => send({ t: 'setSettings', settings: { difficulty: e.target.value } });
@@ -762,15 +762,15 @@ function renderDrawer() {
       ${p.tickets ? `<div class="sec">🦸 남은 영입권 ${p.tickets}장</div>` : ''}
       ${p.missions.map(([id, cur, ok]) => { const m = app.missionMap[id]; return `<div class="st ${ok ? 'cleared' : 'open'}"><div class="t">${ok ? '✅' : m.icon} ${esc(m.name)}</div><div>${esc(m.desc)} — <b>${ok ? '완료' : `${cur}/${m.goal}`}</b></div></div>`; }).join('')}`;
   } else if (app.drawer === 'story') {
-    const names = { open: '도전 가능', active: '도전 중', cleared: '클리어', locked: '잠김' };
+    const names = { upcoming: '예정', active: '진행 중', cleared: '클리어', failed: '실패' };
     const sv = app.v.story;
-    html += `<h3>📖 보스 스토리 (함께)</h3><div class="hint">보스방은 <b>둘이 같이</b> 써요. 누가 도전을 누르든 장마다 보스가 <b>가운데에 고정</b>되어 나오고 (${app.cat.storyTime}초 제한), 둘이 <b>각자 한 명씩</b> 보내 함께 잡아요. 가장 센 유닛을 자동으로 보내거나, 유닛을 골라 「이 유닛을 보스방으로」를 누르세요 (다시 보내면 교대). 끝나면 자동으로 돌아와요. 클리어하면 <b>둘 다</b> 히든 조합 재료를 얻어요.</div>
-      ${app.cat.story.map((st, i) => { const state = sv.states[i]; const it = app.cat.items[st.item]; return `<div class="st ${state}"><div class="t">${st.ch}장 「${esc(st.title)}」 ${st.icon} <span class="hint">${names[state]}${state === 'locked' ? ` · ${st.wave}웨이브부터` : ''}</span></div>
-        <div class="hint">보스: ${esc(st.boss)} · 보상 ${it.icon} ${esc(it.name)} + 골드 ${st.gold}${st.ch % 2 === 0 ? ' + 영웅 영입권' : ''}</div>
+    html += `<h3>📖 보스 스토리 (함께)</h3><div class="hint">정해진 웨이브가 되면 보스방에 <b>저절로</b> 보스가 나와요 (가운데 고정, ${app.cat.storyTime}초). 둘이 <b>각자 한 명씩</b> 보내 함께 잡아요 — 가장 센 유닛을 보내거나 유닛을 골라 「이 유닛을 보스방으로」. 못 잡으면 그 장은 <b>실패로 끝나요</b> (다시 도전 없음).</div>
+      ${app.cat.story.map((st, i) => { const state = sv.states[i]; return `<div class="st ${state === 'upcoming' ? 'locked' : state === 'failed' ? 'locked' : state === 'active' ? 'active' : 'cleared'}"><div class="t">${st.ch}장 「${esc(st.title)}」 ${st.icon} <span class="hint">${st.wave}웨이브 · ${state === 'failed' ? '❌ ' : state === 'cleared' ? '✅ ' : ''}${names[state]}</span></div>
+        <div class="hint">보스: ${esc(st.boss)} · 보상: 골드 ${st.gold} + ${st.ch <= 3 ? 'Lv3' : 'H'} 선택권${st.ch % 2 === 0 ? ' + 영웅 영입권' : ''} (둘 다)</div>
         ${state === 'cleared' ? `<div class="hint">“${esc(st.outro)}”</div>` : ''}
-        <div class="acts">${state === 'open' ? `<button class="primary" data-story="${st.id}" ${sv.active || sv.cd ? 'disabled' : ''}>⚔ 도전 + 가장 센 유닛 보내기${sv.cd ? ` (${sv.cd}초)` : ''}</button>` : ''}${state === 'active' ? `<button data-view="room">📖 보스방 보기 (⏳${sv.left}초)</button> <button data-join="1">⚔ 나도 가장 센 유닛 보내기</button>` : ''}</div></div>`; }).join('')}
+        ${state === 'active' ? `<div class="acts"><button data-view="room">📖 보스방 보기 (⏳${sv.left}초)</button> <button class="primary" data-join="1">⚔ 가장 센 유닛 보내기</button></div>` : ''}</div>`; }).join('')}
       <div class="sec">⚔ 스토리 이벤트 (함께)</div>
-      <div class="hint">${app.cat.events.map((e) => `${e.wave}웨이브: ${e.icon} ${esc(e.boss)}`).join(' · ')} — 열리면 둘 다 이벤트 전장에 유닛을 보내 ${app.cat.eventTime}초 안에 함께 잡아요. 성공하면 모두 영웅 영입권 + 🌠 별의 파편.</div>`;
+      <div class="hint">${app.cat.events.map((e) => `${e.wave}웨이브: ${e.icon} ${esc(e.boss)}`).join(' · ')} — 열리면 둘 다 이벤트 전장에 유닛을 보내 ${app.cat.eventTime}초 안에 함께 잡아요. 성공하면 모두 영웅 영입권 + H 선택권.</div>`;
   }
   setHTML($('#drawer'), html);
 }
@@ -797,7 +797,7 @@ function onStoryFx(f) {
   if (kind === 'event') { const ev = app.cat.events[id]; storyBox(ev.icon, `스토리 이벤트 — ${ev.boss}`, ev.intro); banner('⚔ 스토리 이벤트!'); Sound.play('boss'); return; }
   const st = app.cat.story.find((x) => x.id === id);
   if (!st) return;
-  if (kind === 'start') { storyBox(st.icon, `${st.ch}장 「${st.title}」`, st.intro + (who !== app.myIdx ? `\n— ${app.info.players[who].name}님이 도전을 시작했어요. 보스방에 가장 센 유닛을 보내 도와주세요!` : '')); Sound.play('boss'); }
+  if (kind === 'start') { storyBox(st.icon, `${st.ch}장 「${st.title}」`, st.intro + ' — 보스방에 가장 센 유닛을 한 명씩 보내세요!'); Sound.play('boss'); }
   if (kind === 'clear') { storyBox('📜', `${st.ch}장 클리어!`, st.outro); banner(`📖 ${st.ch}장 클리어!`); Sound.play('win'); }
 }
 
@@ -1108,7 +1108,7 @@ function openCodex() {
 
 function openGuide() {
   openModal(`<h2>📖 게임 방법</h2><div class="guide-body">
-    <p><b>목표</b>: 둘이 힘을 합쳐 <b>40웨이브</b>를 버티고 마지막 보스 「요괴왕 흑염」을 쓰러뜨리세요.</p>
+    <p><b>목표</b>: 둘이 힘을 합쳐 <b>60웨이브</b>를 버티고 마지막 보스 「요괴왕 흑염」을 쓰러뜨리세요.</p>
     <ul>
       <li>🎲 <b>소환 (Q)</b>: 50골드로 무작위 퇴마사를 불러요. 빈칸을 먼저 누르면 그 자리에, 아니면 길 가까운 곳에 자동으로 놓여요. 마우스를 빈칸에 올리고 Q를 눌러도 돼요.</li>
       <li>💎 <b>고급 소환 (W)</b>: 비싸지만 희귀 등급 이상이 확정!</li>
@@ -1117,7 +1117,7 @@ function openGuide() {
       <li>🧲 <b>자동 모으기</b>: 켜 두면 유닛 하나를 옮길 때 같은 유닛이 모두 따라와 한 칸에 겹쳐요 (×n).</li>
       <li>🏯 <b>각자 전장</b>: 둘이 <b>각자 자기 전장</b>을 막아요. 위쪽 탭으로 동료 전장을 볼 수 있고(Tab 키), 어느 한쪽이라도 무너지면 패배!</li>
       <li>📜 <b>조합법 (R)</b>: 정해진 재료를 모으면 원하는 유닛을 만들 수 있어요. <b>히든 조합</b>은 ???로 가려져 있고, 보스 스토리 보상 재료가 필요해요.</li>
-      <li>📖 <b>보스 스토리</b>: <b>보스방은 둘이 함께</b> 써요 — 가운데 고정된 스토리 보스(6장)를 각자 한 명씩 보내 잡아요. ⚔ <b>스토리 이벤트</b>(12·24·36웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>
+      <li>📖 <b>보스 스토리</b>: <b>보스방은 둘이 함께</b> 써요 — 6·15·24·33·42·51웨이브에 스토리 보스가 저절로 나오고, 각자 한 명씩 보내 잡아요 (못 잡으면 실패로 끝). ⚔ <b>스토리 이벤트</b>(18·36·54웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>
       <li>🦸 <b>영웅</b>: 오른쪽 <b>🎖 미션</b>(처치 수, 전설 만들기, 보스 잡기 등)을 달성하면 <b>영웅 영입권</b>을 받아요. 영웅 8명 중 3명이 제시되고 하나를 골라 데려와요. 영웅은 요괴를 잡을수록 레벨이 올라 강해져요 (최대 Lv.10).</li>
       <li>🖱 유닛을 누르고 빈칸을 누르면 <b>이동</b>, Shift+클릭이면 내 유닛 둘의 자리 <b>바꾸기</b>. 오른쪽 클릭은 선택 취소.</li>
       <li>⚔🏹🔮 <b>강화 (1·2·3)</b>: 검술·궁술·술법 유닛 피해를 각각 올려요. 내 유닛 구성에 맞춰 강화하세요.</li>

@@ -9,7 +9,7 @@ const TIERS = [
   { id: 4, name: 'H', color: '#e8b820' }, // 족보로만 (Lv1~Lv3 재료)
   { id: 5, name: 'LVX', color: '#e86818' }, // 족보로만 (Lv3 여럿 필요)
   { id: 6, name: '영웅', color: '#48f0d8' }, // 미션으로만 얻는 고유 유닛
-  { id: 7, name: 'LVZ', color: '#ff3a4a' }, // 히든 족보 (스토리 재료 필요)
+  { id: 7, name: 'LVZ', color: '#ff3a4a' }, // 히든 족보 (처음엔 ???)
 ];
 
 /**
@@ -130,47 +130,46 @@ const RECIPES = [
   { id: 'r_frostlord', out: 'frostlord', need: ['petal', 'spear', 'spear', 'spark', 'spark', 'needle', 'needle'] },
   { id: 'r_galestorm', out: 'galestorm', need: ['moon', 'shadow', 'shadow', 'wind', 'wind', 'novice', 'novice'] },
   { id: 'h_allstar', out: 'x_allstar', hidden: true, need: ['novice', 'hunter', 'talisman', 'powder', 'needle'], hint: '다섯 갈래 수련의 길이 하나로 모이면…' },
-  { id: 'h_crimson', out: 'x_crimson', hidden: true, need: ['shadow', 'shadow', 'flame', 'wave', 'wave', '#moonshard'], hint: '그림자와 불꽃, 그리고 붉은 달의 밤 (보스 스토리 1장)' },
-  { id: 'h_spider', out: 'x_spider', hidden: true, need: ['petal', 'petal', 'frost', 'frost', 'needle', 'needle', '#silk'], hint: '꽃잎과 독침을 거미줄로 엮으면… (2장)' },
-  { id: 'h_snow', out: 'x_snow', hidden: true, need: ['petal', 'moon', 'moon', 'frost', 'frost', '#ice'], hint: '꽃과 달빛이 만년설을 만나면 (3장)' },
-  { id: 'h_inferno', out: 'x_inferno', hidden: true, need: ['flame', 'flame', 'flame', 'monk', 'monk', 'powder', 'powder', '#ember'], hint: '세 불꽃에 꺼지지 않는 불씨를 더하면 (4장)' },
-  { id: 'h_abyss', out: 'x_abyss', hidden: true, need: ['moon', 'moon', 'shadow', 'wave', 'wave', '#pearl'], hint: '달과 그림자가 심연에 닿으면 (5장)' },
-  { id: 'h_shadowlord', out: 'x_shadowlord', hidden: true, need: ['shadow', 'shadow', 'shadow', 'spear', 'wave', 'wave', '#shade'], hint: '그림자 셋과 그림자의 조각 (6장)' },
-  { id: 'h_dawn', out: 'x_dawn', hidden: true, need: ['flame', 'flame', 'moon', 'moon', 'petal', 'wind', 'wind', 'novice', 'novice', '#star'], hint: '해·달·꽃이 모이고 하늘의 별 조각이 떨어지면 (스토리 이벤트)' },
+  { id: 'h_crimson', out: 'x_crimson', hidden: true, need: ['shadow', 'shadow', 'flame', 'flame', 'wave', 'wave'], hint: '그림자 둘과 불꽃 둘, 그리고 물결 둘' },
+  { id: 'h_spider', out: 'x_spider', hidden: true, need: ['petal', 'petal', 'frost', 'frost', 'needle', 'needle', 'needle'], hint: '꽃잎과 서리를 독침 셋으로 엮으면…' },
+  { id: 'h_snow', out: 'x_snow', hidden: true, need: ['petal', 'petal', 'moon', 'moon', 'frost', 'frost'], hint: '꽃과 달빛과 서리가 둘씩 모이면' },
+  { id: 'h_inferno', out: 'x_inferno', hidden: true, need: ['flame', 'flame', 'flame', 'monk', 'monk', 'powder', 'powder'], hint: '세 불꽃에 승병과 화약을 더하면' },
+  { id: 'h_abyss', out: 'x_abyss', hidden: true, need: ['moon', 'moon', 'shadow', 'shadow', 'wave', 'wave'], hint: '달과 그림자가 물결 아래로 가라앉으면' },
+  { id: 'h_shadowlord', out: 'x_shadowlord', hidden: true, need: ['shadow', 'shadow', 'shadow', 'spear', 'wave', 'wave'], hint: '그림자 셋과 번개 창 하나' },
+  { id: 'h_dawn', out: 'x_dawn', hidden: true, need: ['flame', 'flame', 'moon', 'moon', 'petal', 'petal', 'wind', 'wind', 'novice', 'novice'], hint: '해·달·꽃·바람이 둘씩, 그리고 처음의 검사 둘' },
 ];
 const RECIPE_MAP = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
 
 /** 보스 스토리 — 각자 자기 보스방에서 도전 (이전 장을 깨야 다음 장) */
 const STORY = [
-  { id: 's1', ch: 1, wave: 4, title: '붉은 달의 밤', boss: '도깨비 장군 적귀', icon: '👹', model: 'b_ogre', hp: 390, armor: 3, item: 'moonshard', gold: 100,
+  { id: 's1', ch: 1, wave: 6, title: '붉은 달의 밤', boss: '도깨비 장군 적귀', icon: '👹', model: 'b_ogre', hp: 210, armor: 3, gold: 100,
     intro: '붉은 달이 뜬 밤, 마을 어귀 대숲에서 북소리가 울린다. "인간 따위가 내 길을 막느냐!" 도깨비 장군 적귀가 철퇴를 치켜든다.',
-    outro: '적귀가 쓰러지며 손에 쥐고 있던 붉은 달 조각을 떨어뜨렸다. 조각은 아직도 희미하게 빛난다…' },
-  { id: 's2', ch: 2, wave: 9, title: '안개 속 거미굴', boss: '거미 여왕 사라', icon: '🕷️', model: 'spider', hp: 600, armor: 5, item: 'silk', gold: 150,
+    outro: '적귀가 쓰러지자 붉은 달이 구름 뒤로 숨었다. 대숲에 다시 고요가 찾아왔다.' },
+  { id: 's2', ch: 2, wave: 15, title: '안개 속 거미굴', boss: '거미 여왕 사라', icon: '🕷️', model: 'spider', hp: 175, armor: 5, gold: 150,
     intro: '실종된 나무꾼들을 찾아 들어간 안개 숲. 사방에 하얀 실이 늘어져 있다. "어서 오렴… 내 인형이 되어 주겠니?"',
-    outro: '거미 여왕이 사라진 자리에 질긴 은빛 실타래가 남았다. 나무꾼들은 무사히 마을로 돌아갔다.' },
-  { id: 's3', ch: 3, wave: 14, title: '얼어붙은 사당', boss: '설녀 빙화', icon: '🧊', model: 'wisp', hp: 250, armor: 6, item: 'ice', gold: 200,
+    outro: '거미 여왕이 사라지자 안개가 걷혔다. 나무꾼들은 무사히 마을로 돌아갔다.' },
+  { id: 's3', ch: 3, wave: 24, title: '얼어붙은 사당', boss: '설녀 빙화', icon: '🧊', model: 'wisp', hp: 36, armor: 6, gold: 200,
     intro: '한여름에 눈이 내리는 산사. 종소리 대신 차가운 웃음소리가 들린다. "이 겨울을 끝내고 싶다면 나를 녹여 보아라."',
-    outro: '빙화가 녹아내리자 산사에 봄바람이 불었다. 제단 위에 녹지 않는 만년설 결정 하나가 남았다.' },
-  { id: 's4', ch: 4, wave: 19, title: '불타는 다리', boss: '화염 귀신 염라귀', icon: '🔥', model: 'b_king', hp: 180, armor: 8, item: 'ember', gold: 250,
+    outro: '빙화가 녹아내리자 산사에 봄바람이 불고, 멈췄던 종이 다시 울렸다.' },
+  { id: 's4', ch: 4, wave: 33, title: '불타는 다리', boss: '화염 귀신 염라귀', icon: '🔥', model: 'b_king', hp: 19, armor: 8, gold: 250,
     intro: '강 건너 마을로 가는 유일한 다리가 불길에 휩싸였다. 불꽃 속에서 거대한 그림자가 걸어 나온다. "재가 되어라!"',
-    outro: '불길이 잦아든 다리 위, 꺼지지 않는 작은 불씨가 반짝인다. 따뜻하지만 결코 꺼지지 않는다.' },
-  { id: 's5', ch: 5, wave: 24, title: '심연의 늪', boss: '늪의 주인 흑린', icon: '🐉', model: 'b_serpent', hp: 90, armor: 10, item: 'pearl', gold: 325,
+    outro: '불길이 잦아들고, 그을린 다리 위로 사람들이 다시 건너기 시작했다.' },
+  { id: 's5', ch: 5, wave: 42, title: '심연의 늪', boss: '늪의 주인 흑린', icon: '🐉', model: 'b_serpent', hp: 8, armor: 10, gold: 325,
     intro: '검은 늪의 수면이 갈라지며 비늘 덮인 거대한 몸이 솟아오른다. "천 년을 잠들어 있었다. 너희가 나를 깨웠구나."',
-    outro: '흑린이 늪 깊이 가라앉고, 물 위로 어둡게 빛나는 심연의 진주가 떠올랐다.' },
-  { id: 's6', ch: 6, wave: 29, title: '그림자 무사', boss: '상현의 그림자 무사', icon: '🥷', model: 'armor', hp: 85, armor: 12, item: 'shade', gold: 400,
+    outro: '흑린이 늪 깊이 가라앉고, 검던 물빛이 조금씩 맑아졌다.' },
+  { id: 's6', ch: 6, wave: 51, title: '그림자 무사', boss: '상현의 그림자 무사', icon: '🥷', model: 'armor', hp: 8, armor: 12, gold: 400,
     intro: '달 없는 밤, 발소리 없이 다가오는 검사가 있다. "요괴왕님의 명이다. 퇴마사의 목을 거두러 왔다."',
-    outro: '그림자 무사가 무릎을 꿇고 사라진다. "요괴왕의 성은… 새벽이 오기 전에…" 검은 조각 하나가 남았다.' },
+    outro: '그림자 무사가 무릎을 꿇고 사라진다. "요괴왕의 성은… 새벽이 오기 전에…"' },
 ];
 const STORY_TIME = 90; // 보스방 제한 시간(초)
-const STORY_COOLDOWN = 20; // 실패 뒤 다시 도전까지(초)
 
 /** 스토리 이벤트 — 일정 웨이브에 열리는 공동 전장. 둘이 유닛을 보내 함께 잡음 */
 const EVENTS = [
-  { wave: 12, boss: '요괴 대장군 철귀', icon: '👺', model: 'mini', hp: 120, armor: 8,
+  { wave: 18, boss: '요괴 대장군 철귀', icon: '👺', model: 'mini', hp: 35, armor: 8,
     intro: '요괴들의 진군을 이끄는 대장군 철귀가 나타났다! 각자의 전장을 지키면서, 정예를 이벤트 전장으로 보내 함께 쓰러뜨리자!' },
-  { wave: 24, boss: '하늘을 가르는 천둥지네', icon: '🐛', model: 'b_centi', hp: 150, armor: 12,
+  { wave: 36, boss: '하늘을 가르는 천둥지네', icon: '🐛', model: 'b_centi', hp: 17, armor: 12,
     intro: '하늘이 갈라지며 천둥을 두른 거대 지네가 내려온다. 둘의 힘을 모아야 한다!' },
-  { wave: 36, boss: '요괴왕의 분신 흑염영', icon: '😈', model: 'b_king', hp: 180, armor: 16,
+  { wave: 54, boss: '요괴왕의 분신 흑염영', icon: '😈', model: 'b_king', hp: 36, armor: 16,
     intro: '요괴왕이 자신의 분신을 보냈다. 이 분신을 쓰러뜨리면 요괴왕의 힘이 약해진다!' },
 ];
 const EVENT_TIME = 100;
@@ -230,7 +229,9 @@ const BOSSES = [
   { wave: 10, id: 'b_ogre', name: '도깨비 대장', icon: '👹', speed: 0.7, armor: 4, hpMul: 26, ability: 'rage', desc: '체력이 절반 이하면 빨라집니다' },
   { wave: 20, id: 'b_centi', name: '거대 지네', icon: '🐛', speed: 0.65, armor: 8, hpMul: 24, ability: 'brood', desc: '주기적으로 새끼를 낳습니다' },
   { wave: 30, id: 'b_serpent', name: '구렁이 여왕', icon: '🐉', speed: 0.6, armor: 12, hpMul: 22, ability: 'heal', desc: '주기적으로 체력을 회복합니다' },
-  { wave: 40, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 16, hpMul: 8, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
+  { wave: 40, id: 'b_ogre2', model: 'b_ogre', name: '도깨비 왕 적룡', icon: '👹', speed: 0.7, armor: 16, hpMul: 10, ability: 'rage', desc: '도깨비들의 왕. 체력이 절반 이하면 빨라집니다' },
+  { wave: 50, id: 'b_centi2', model: 'b_centi', name: '천년 지네 대왕', icon: '🐛', speed: 0.6, armor: 18, hpMul: 9, ability: 'brood', desc: '새끼를 쏟아냅니다' },
+  { wave: 60, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 20, hpMul: 7, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
 ];
 const MINIBOSS = { name: '요괴 우두머리', icon: '👿', speed: 0.8, armor: 3, hpMul: 18 };
 
@@ -297,13 +298,13 @@ const ECON = {
 const SUMMON_ODDS = [0.86, 0.12, 0.02];
 const PREMIUM_ODDS = [0, 0.8, 0.2];
 
-const WAVES = 40;
+const WAVES = 60;
 const WAVE_TIME = 28; // 웨이브 간격(초)
 const BOSS_TIME = 100; // 순환 맵에서 보스를 잡아야 하는 시간(초)
 
 module.exports = {
   TIERS, UNITS, UNIT_MAP, BY_TIER, MERGE_NEED, CATS, ENEMIES, ENEMY_POOL, BOSSES, MINIBOSS, MODIFIERS,
-  HIDDEN_UNITS, ITEMS, RECIPES, RECIPE_MAP, STORY, STORY_TIME, STORY_COOLDOWN, EVENTS, EVENT_TIME,
+  HIDDEN_UNITS, ITEMS, RECIPES, RECIPE_MAP, STORY, STORY_TIME, EVENTS, EVENT_TIME,
   HEROES, HERO_MAX_LV, heroLevel, HERO_LV_DMG, MISSIONS,
   LEADERS, LEADER_MAP, BLESSINGS, BLESS_MAP, DIFFICULTIES, ECON, SUMMON_ODDS, PREMIUM_ODDS, WAVES, WAVE_TIME, BOSS_TIME,
 };
