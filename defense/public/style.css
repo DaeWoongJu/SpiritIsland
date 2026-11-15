@@ -192,3 +192,12 @@ kbd { display: inline-block; font-size: .72em; padding: 0 4px; border-radius: 4p
 
 .sellmenu { flex-basis: 100%; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 6px; border-top: 1px dashed #fff3; }
 .sellmenu button { border-width: 2px; background: linear-gradient(180deg, #4a3040, #2a1a24) !important; }
+
+.rc .ing { align-items: center; }
+.ing1 { font-size: .84em; color: #a898a8; white-space: nowrap; }
+.ing1 b { font-weight: 900; margin-right: 2px; }
+.ing1.ok { color: #fff; }
+.ing1 i { color: #f8c868; font-style: normal; }
+.plus { color: #8a7a8a; margin: 0 3px; font-weight: 800; }
+.rc .out b { font-weight: 900; margin-right: 3px; }
+.selected { max-height: 40vh; overflow-y: auto; }

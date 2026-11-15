@@ -222,7 +222,7 @@ function startView(msg) {
   if (fresh) {
     addFeed(`🗺 맵 「${m.name}」 (${m.kindName}) · 난이도 ${msg.info.diff.name}`, 'wave');
     addFeed(msg.info.loopMode ? `🔁 순환 맵: 입구에서 나온 요괴가 빙글빙글 돌아요. 살아 있는 요괴가 ${msg.info.diff.limit}마리가 되면 패배! 보스는 ${app.cat.bossTime}초 안에 잡아야 해요.` : `⚔ 요괴가 입구(보라색 소용돌이)에서 몰려와요! 끝(⛩️)에 닿으면 생명이 줄어요 (보스는 -10). 둘은 각자 자기 전장을 막고, 📖 보스방에서는 함께 싸워요.`, 'info');
-    addFeed('💡 빈칸을 누르고 Q(소환) — 같은 유닛 3개면 F(합성)! 유닛 클릭 후 빈칸 클릭으로 이동.', 'info');
+    addFeed('💡 Q 소환 → 같은 유닛 3개면 F(랜덤 합성, Lv3까지) · H·LVX는 📜 족보(R)로! 유닛 클릭 후 빈칸 클릭으로 이동.', 'info');
   }
 }
 
@@ -485,17 +485,17 @@ function renderControls() {
   if (!p) return;
   const L = app.leaderMap[app.info.players[app.myIdx].leader];
   const cats = app.cat.cats;
-  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
+  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, p.autoGather, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
   if (key === renderControls.key) return;
   renderControls.key = key;
   const cdPct = p.skillCd > 0 ? (p.skillCd / p.skillMax) * 100 : 0;
   $('#controls').innerHTML = `
     <div class="gold">💰 ${p.gold}</div>
     <button class="btn-summon" data-a="summon" ${p.gold < p.cost ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 소환진에</small></button>
-    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · 희귀 이상</small></button>
+    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · Lv2 이상</small></button>
     <div class="grp">${Object.entries(cats).map(([id, c], i) => `<button data-a="up" data-c="${id}" ${p.gold < p.ucost[id] ? 'disabled' : ''} title="${c.name} 유닛 피해 +12%">${c.icon} ${c.name} +${p.upg[id]} <kbd>${i + 1}</kbd><small>${p.ucost[id]}G</small></button>`).join('')}</div>
     <div class="grp"><button class="btn-skill ${app.aiming ? 'aim' : ''}" data-a="skill" ${p.skillCd > 0 ? 'disabled' : ''} title="${esc(L.skill.desc)}">${L.icon} ${esc(L.skill.name)} <kbd>E</kbd><small>${p.skillCd > 0 ? `${p.skillCd}초` : L.skill.target ? '위치 선택' : '바로 사용'}</small><span class="cdv" style="height:${cdPct}%"></span></button></div>
-    <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="sellMenu" class="${app.sellMenu ? 'on' : ''}">💰 일괄 판매<small>등급별로 한꺼번에</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
+    <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="autoGather" class="${p.autoGather ? 'on' : ''}" title="켜 두면 유닛 하나를 옮길 때 내 전장의 같은 유닛이 모두 따라와요">🧲 자동 모으기<small>${p.autoGather ? '켬 · 같은 유닛 따라옴' : '끔'}</small></button><button data-a="sellMenu" class="${app.sellMenu ? 'on' : ''}">💰 일괄 판매<small>등급별로 한꺼번에</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
     ${app.sellMenu ? `<div class="sellmenu">${[1, 2, 3, 4, 5].map((tr) => { const list = app.v.units.filter((u) => u[1] === app.myIdx && app.unitMap[u[2]].tier === tr && !app.unitMap[u[2]].hero && !app.unitMap[u[2]].hidden); const tt = app.cat.tiers[tr - 1]; return `<button data-a="sellTier" data-c="${tr}" ${list.length ? '' : 'disabled'} style="border-color:${tt.color}"><b style="color:${tt.color}">${tt.name} 전부</b><small>${list.length}개 · +${sellTotal(list)}G</small></button>`; }).join('')}<span class="hint">영웅·히든은 팔지 않아요</span></div>` : ''}
     <div class="hint" style="align-self:center">유닛 ${p.units}/${app.cat.econ.maxUnits}</div>`;
 }
@@ -518,6 +518,7 @@ function action(a, c) {
   } else if (a === 'gift') { const amt = Math.min(100, p.gold); if (amt > 0) { cmd({ t: 'gift', amount: amt }); Sound.play('sell'); } }
   else if (a === 'merge' && app.sel) { cmd({ t: 'merge', unit: app.sel }); Sound.play('merge'); }
   else if (a === 'clearZone') { cmd({ t: 'clearZone' }); Sound.play('click'); }
+  else if (a === 'autoGather') { cmd({ t: 'setAuto', on: !p.autoGather }); Sound.play('click'); }
   else if (a === 'sellSel') {
     const ids = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : [];
     if (ids.length) { cmd({ t: 'sellMany', units: ids }); clearSel(); Sound.play('sell'); renderSelected(); }
@@ -679,13 +680,18 @@ function haveCounts() {
   return c;
 }
 function ingChips(r, have, items) {
-  const used = {};
-  return r.need.map((n) => {
-    used[n] = (used[n] || 0) + 1;
-    if (n[0] === '#') { const it = app.cat.items[n.slice(1)]; const ok = (items[n.slice(1)] || 0) >= used[n]; return `<span class="chip ${ok ? 'have' : ''}" title="보스 스토리·이벤트 보상">${it.icon} ${esc(it.name)}</span>`; }
+  // 같은 재료는 묶어서 x2, x3 (보내 준 족보표 형식)
+  const order = [];
+  const cnt = {};
+  for (const n of r.need) { if (!cnt[n]) order.push(n); cnt[n] = (cnt[n] || 0) + 1; }
+  return order.map((n) => {
+    const k = cnt[n];
+    if (n[0] === '#') { const it = app.cat.items[n.slice(1)]; const ok = (items[n.slice(1)] || 0) >= k; return `<span class="ing1 ${ok ? 'ok' : ''}" title="보스 스토리·이벤트 보상"><b style="color:#ff6a8a">재료</b> ${it.icon} ${esc(it.name)}${k > 1 ? ` x${k}` : ''}</span>`; }
     const t = app.unitMap[n];
-    return `<span class="chip ${(have[n] || 0) >= used[n] ? 'have' : ''}">${t.icon} ${esc(t.name)}</span>`;
-  }).join('');
+    const tier = app.cat.tiers[t.tier - 1];
+    const h = have[n] || 0;
+    return `<span class="ing1 ${h >= k ? 'ok' : ''}" title="가진 수 ${h}/${k}"><b style="color:${tier.color}">${tier.name}</b> ${esc(t.name)}${k > 1 ? ` x${k}` : ''}${h && h < k ? ` <i>(${h})</i>` : ''}</span>`;
+  }).join('<span class="plus">+</span>');
 }
 /** 선택한 유닛이 재료로 들어가는 조합 */
 function recipeHints(type) {
@@ -724,18 +730,18 @@ function renderDrawer() {
         const n = rev[r.id] || 0;
         const full = n >= r.need.length;
         const shown = { ...r, need: r.need.slice(0, n) };
-        const chips = (n ? ingChips(shown, have, p.items) : '') + r.need.slice(n).map(() => '<span class="chip">❓</span>').join('');
-        return `<div class="rc hid"><span class="out">${full ? `${o.icon} ${esc(o.name)}` : '❓ ???'}</span><span class="ing">${chips}<span class="hint" style="width:100%">${esc(r.hint)}${n && !full ? ` · 족보 ${n}/${r.need.length}` : ''}</span></span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+        const chips = (n ? ingChips(shown, have, p.items) : '') + (n < r.need.length ? `${n ? '<span class="plus">+</span>' : ''}<span class="ing1">❓ 재료 ${r.need.length - n}개</span>` : '');
+        return `<div class="rc hid"><span class="out"><b style="color:#ff3a4a">LVZ</b> ${full ? esc(o.name) : '???'}</span><span class="ing">${chips}<span class="hint" style="width:100%">${esc(r.hint)}${n && !full ? ` · 족보 ${n}/${r.need.length}` : ''}</span></span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
       }
-      return `<div class="rc ${ok ? 'ok' : ''} ${r.hidden ? 'hid' : ''}" style="--c:${tier.color}" title="${esc(o.desc)}"><span class="out">${o.icon} ${esc(o.name)}</span><span class="ing">${ingChips(r, have, p.items)}</span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+      return `<div class="rc ${ok ? 'ok' : ''} ${r.hidden ? 'hid' : ''}" style="--c:${tier.color}" title="${esc(o.desc)}"><span class="out"><b style="color:${tier.color}">${tier.name}</b> ${esc(o.name)}</span><span class="ing">${ingChips(r, have, p.items)}</span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
     };
-    const groups = [[2, '희귀'], [3, '에픽'], [4, '전설'], [5, '신화']];
+    const groups = [[2, 'Lv2'], [3, 'Lv3'], [4, 'H'], [5, 'LVX']];
     const itemsHtml = Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => `<span class="chip have">${app.cat.items[k].icon} ${esc(app.cat.items[k].name)} ×${n}</span>`).join('');
     html += `<h3>📜 조합법 <span class="hint">R</span></h3>
-      <div class="hint">재료 유닛(내 전장·보스방 어디든)이 모이면 <b>조합</b> 버튼이 켜져요. 초록 칩 = 가진 재료. 같은 유닛 3개를 모으는 <b>랜덤 합성(F)</b>도 그대로 있어요.</div>
+      <div class="hint">재료가 다 모이면 <b>조합</b> 버튼이 켜져요 (밝은 글자 = 개수만큼 가짐, 괄호 = 지금 가진 수). <b>H·LVX·LVZ는 족보로만</b> 만들어요. 같은 유닛 3개 랜덤 합성(F)은 Lv1→Lv2→Lv3까지만.</div>
       ${itemsHtml ? `<div class="sec">🎒 재료 아이템</div><div class="items">${itemsHtml}</div>` : ''}
       ${groups.map(([t, n]) => `<div class="sec" style="color:${app.cat.tiers[t - 1].color}">${n}</div>${app.cat.recipes.filter((r) => !r.hidden && app.unitMap[r.out].tier === t).map(row).join('')}`).join('')}
-      <div class="sec" style="color:#ff5ad8">🔮 히든 조합 (${app.cat.recipes.filter((r) => r.hidden && known.has(r.id)).length}/${app.cat.recipes.filter((r) => r.hidden).length} 발견)</div>
+      <div class="sec" style="color:#ff3a4a">🔮 LVZ 히든 족보 (${app.cat.recipes.filter((r) => r.hidden && known.has(r.id)).length}/${app.cat.recipes.filter((r) => r.hidden).length} 발견)</div>
       <div class="hint">처음엔 ???로 가려져 있어요. <b>5웨이브를 깰 때마다</b> 재료가 하나씩, <b>게임을 이기면</b> 족보 2개가 통째로 공개돼요. 직접 맞혀 만들어도 공개돼요 (모두 이 컴퓨터에 기억돼요).</div>
       ${app.cat.recipes.filter((r) => r.hidden).map(row).join('')}`;
   } else if (app.drawer === 'mission') {
@@ -1075,7 +1081,7 @@ function openCodex() {
   const effect = (u) => [u.splash && `광역 ${u.splash}`, u.slow && `감속 ${Math.round(u.slow.pct * 100)}%`, u.poison && `독 ${u.poison.dps}/초`, u.burn && `화상 ${u.burn.dps}/초`, u.chain && `연쇄 ${u.chain}`, u.shred && `방어 깎기 ${u.shred}`, u.crit && `치명 ${Math.round(u.crit.chance * 100)}%`, u.execute && `처형 ${Math.round(u.execute * 100)}%`, u.multi && `동시 ${u.multi}발`, u.aura && '오라', u.stun && '기절', u.pierceArmor && '방어 무시'].filter(Boolean).join(' · ');
   openModal(`<h2>📚 유닛 도감</h2>
     <p class="hint">소환 확률 — 일반 소환: ${c.summonOdds.map((o, i) => `${c.tiers[i].name} ${(o * 100).toFixed(1)}%`).join(' / ')} · 고급 소환: ${c.premiumOdds.map((o, i) => o ? `${c.tiers[i].name} ${(o * 100).toFixed(0)}%` : '').filter(Boolean).join(' / ')}</p>
-    <p class="hint">합성: <b>같은 유닛 3개</b> → 한 등급 위 무작위 유닛 (전설은 <b>2개</b> → 신화). 검술 유닛은 날아다니는 요괴를 못 때려요.</p>
+    <p class="hint">랜덤 합성: <b>같은 유닛 3개</b> → 한 등급 위 무작위 유닛 (Lv1→Lv2→Lv3까지). <b>H·LVX·LVZ는 족보로만</b> (📜 조합법). 검술 유닛은 날아다니는 요괴를 못 때려요.</p>
     ${c.tiers.filter((t) => t.id <= 5).map((t) => `<div class="codex-tier"><h3 style="color:${t.color}">${t.name}${c.mergeNeed[t.id] ? ` <span class="hint">— ${c.mergeNeed[t.id]}개 합성 → ${c.tiers[t.id]?.name}</span>` : ''}</h3><div class="codex-grid">
       ${c.units.filter((u) => u.tier === t.id).map((u) => `<div class="cx" style="--c:${t.color}"><div class="n">${u.icon} ${esc(u.name)} <span class="hint">${c.cats[u.cat].icon}</span></div><div class="s">피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}회/초 · 사거리 ${u.range}</div><div class="s">${esc(effect(u))}</div><div>${esc(u.desc)}</div></div>`).join('')}
     </div></div>`).join('')}
@@ -1093,7 +1099,9 @@ function openGuide() {
     <ul>
       <li>🎲 <b>소환 (Q)</b>: 50골드로 무작위 퇴마사를 불러요. 빈칸을 먼저 누르면 그 자리에, 아니면 길 가까운 곳에 자동으로 놓여요. 마우스를 빈칸에 올리고 Q를 눌러도 돼요.</li>
       <li>💎 <b>고급 소환 (W)</b>: 비싸지만 희귀 등급 이상이 확정!</li>
-      <li>✨ <b>합성 (F)</b>: 같은 유닛 <b>3개</b>(전설은 2개)를 모으면 한 등급 위 <b>무작위</b> 유닛이 돼요. 일반 → 희귀 → 에픽 → 전설 → 신화. 합성할 수 있는 유닛에는 ✦ 표시가 떠요.</li>
+      <li>✨ <b>랜덤 합성 (F)</b>: 같은 유닛 <b>3개</b>를 모으면 한 등급 위 <b>무작위</b> 유닛 (Lv1 → Lv2 → Lv3까지). 합성할 수 있는 유닛에는 ✦ 표시가 떠요.</li>
+      <li>📜 <b>족보 (R)</b>: <b>H · LVX</b>는 "Lv2 ○○ x2 + Lv1 ○○ x2 …"처럼 정해진 Lv1~Lv3 재료를 모아서만 만들어요. <b>LVZ 히든</b>은 ???로 가려져 있고 스토리 재료가 필요해요.</li>
+      <li>🧲 <b>자동 모으기</b>: 켜 두면 유닛 하나를 옮길 때 같은 유닛이 모두 따라와 한 칸에 겹쳐요 (×n).</li>
       <li>🏯 <b>각자 전장</b>: 둘이 <b>각자 자기 전장</b>을 막아요. 위쪽 탭으로 동료 전장을 볼 수 있고(Tab 키), 어느 한쪽이라도 무너지면 패배!</li>
       <li>📜 <b>조합법 (R)</b>: 정해진 재료를 모으면 원하는 유닛을 만들 수 있어요. <b>히든 조합</b>은 ???로 가려져 있고, 보스 스토리 보상 재료가 필요해요.</li>
       <li>📖 <b>보스 스토리</b>: <b>보스방은 둘이 함께</b> 써요 — 가운데 고정된 스토리 보스(6장)를 각자 한 명씩 보내 잡아요. ⚔ <b>스토리 이벤트</b>(12·24·36웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>

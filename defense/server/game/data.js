@@ -3,13 +3,13 @@
 
 /** 등급 */
 const TIERS = [
-  { id: 1, name: '일반', color: '#b8b8c8' },
-  { id: 2, name: '희귀', color: '#58a8f8' },
-  { id: 3, name: '에픽', color: '#b878f8' },
-  { id: 4, name: '전설', color: '#f8a838' },
-  { id: 5, name: '신화', color: '#f85878' },
+  { id: 1, name: 'Lv1', color: '#c8c8d0' },
+  { id: 2, name: 'Lv2', color: '#58c858' },
+  { id: 3, name: 'Lv3', color: '#4a98f0' },
+  { id: 4, name: 'H', color: '#e8b820' }, // 족보로만 (Lv1~Lv3 재료)
+  { id: 5, name: 'LVX', color: '#e86818' }, // 족보로만 (Lv3 여럿 필요)
   { id: 6, name: '영웅', color: '#48f0d8' }, // 미션으로만 얻는 고유 유닛
-  { id: 7, name: '히든', color: '#ff5ad8' }, // 히든 조합으로만 만드는 유닛
+  { id: 7, name: 'LVZ', color: '#ff3a4a' }, // 히든 족보 (스토리 재료 필요)
 ];
 
 /**
@@ -43,10 +43,17 @@ const UNITS = [
   { id: 'storm', tier: 4, name: '폭풍 대궁', icon: '🌪️', cat: 'bow', dmg: 150, cd: 0.32, range: 5.0, multi: 3, desc: '한 번에 3마리 동시 사격' },
   { id: 'queen', tier: 4, name: '서리 여왕', icon: '🧊', cat: 'magic', dmg: 210, cd: 1.2, range: 3.6, splash: 1.5, slow: { pct: 0.55, dur: 2 }, stun: { chance: 0.1, dur: 1 }, desc: '넓게 얼리고 가끔 꽁꽁 묶습니다' },
   { id: 'thunder', tier: 4, name: '뇌신', icon: '⛈️', cat: 'magic', dmg: 260, cd: 1.0, range: 3.6, chain: 6, desc: '번개가 6번 튕깁니다' },
+  { id: 'blossom', tier: 4, name: '꽃의 호흡 검희', icon: '🌺', cat: 'blade', dmg: 230, cd: 0.6, range: 1.9, splash: 1.3, slow: { pct: 0.4, dur: 1.5 }, desc: '꽃잎처럼 흩날리는 베기, 맞으면 느려집니다', look: { robe: '#f8e8f0', haori: '#f878a8', hair: '#3a1020', fx: '#ff98c8' } },
+  { id: 'serpent', tier: 4, name: '뱀의 호흡 검사', icon: '🐍', cat: 'blade', dmg: 260, cd: 0.55, range: 2.0, multi: 2, crit: { chance: 0.25, mult: 2.5 }, desc: '휘어지는 검으로 둘을 동시에, 치명타', look: { robe: '#202838', haori: '#a8d0a8', hair: '#101818', fx: '#b8ffb0' } },
+  { id: 'beast', tier: 4, name: '짐승의 호흡 쌍검', icon: '🐗', cat: 'blade', dmg: 170, cd: 0.3, range: 1.7, chain: 2, desc: '거친 쌍검 연타, 옆으로 튑니다', look: { robe: '#3a2a18', haori: '#8a6a48', hair: '#1a1410', fx: '#ffd0a0' } },
+  { id: 'dusk', tier: 4, name: '노을의 호흡 궁수', icon: '🌇', cat: 'bow', dmg: 240, cd: 0.55, range: 4.8, multi: 2, burn: { dps: 80, dur: 3 }, desc: '불붙은 화살을 둘에게', look: { robe: '#401818', haori: '#f88838', hair: '#f8d0a0', fx: '#ffa040' } },
   // ── 신화 ──
   { id: 'emperor', tier: 5, name: '일월의 호흡 검제', icon: '🗡️', cat: 'blade', dmg: 1150, cd: 0.6, range: 2.2, splash: 1.6, pierceArmor: true, desc: '해와 달의 검. 방어를 무시하는 광역 베기' },
   { id: 'fox', tier: 5, name: '구미호 무녀', icon: '🦊', cat: 'magic', dmg: 720, cd: 0.8, range: 4.0, chain: 5, burn: { dps: 200, dur: 3 }, aura: { dmg: 0.2, r: 3 }, desc: '여우불 연쇄 + 주변 아군 피해 +20%' },
   { id: 'bird', tier: 5, name: '천둥새', icon: '🦅', cat: 'bow', dmg: 620, cd: 0.26, range: 5.6, multi: 4, desc: '하늘의 왕. 4마리 동시 사격' },
+  { id: 'sunlord', tier: 5, name: '일출의 호흡 검사', icon: '🌄', cat: 'blade', dmg: 1300, cd: 0.75, range: 2.0, splash: 2.0, burn: { dps: 260, dur: 3 }, desc: '떠오르는 해처럼 넓게 태우는 검', look: { robe: '#601818', haori: '#f8a020', hair: '#2a0808', fx: '#ffb030' } },
+  { id: 'frostlord', tier: 5, name: '서리의 호흡 무녀', icon: '🌨️', cat: 'magic', dmg: 760, cd: 0.9, range: 4.0, chain: 4, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.15, dur: 1 }, desc: '얼음 연쇄로 묶어 버립니다', look: { robe: '#e0f0ff', haori: '#4898e8', hair: '#f0f8ff', fx: '#b0e8ff' } },
+  { id: 'galestorm', tier: 5, name: '질풍의 호흡 대검', icon: '💨', cat: 'blade', dmg: 900, cd: 0.6, range: 2.3, multi: 3, splash: 1.0, desc: '바람을 가르는 대검, 셋을 동시에', look: { robe: '#1a3a2a', haori: '#d8f8e8', hair: '#a8b8b0', fx: '#c8fff0' } },
 ];
 
 /**
@@ -93,37 +100,43 @@ const ITEMS = {
  * 조합법 — 재료(내 유닛·재료 아이템)를 모으면 정해진 유닛이 나옴.
  * hidden: 처음엔 ??? 로 가려져 있고 누군가 만들면 공개 (hint만 보임)
  */
+/**
+ * 족보 — Lv1~Lv3 유닛(과 스토리 재료)을 개수만큼 모으면 정해진 유닛이 나옴.
+ * H·LVX·LVZ 는 족보로만 만들 수 있음. hidden: 처음엔 ??? (힌트만)
+ */
 const RECIPES = [
-  // 희귀
   { id: 'r_wave', out: 'wave', need: ['novice', 'novice', 'talisman'] },
   { id: 'r_wind', out: 'wind', need: ['hunter', 'hunter', 'needle'] },
   { id: 'r_frost', out: 'frost', need: ['talisman', 'talisman', 'hunter'] },
   { id: 'r_spark', out: 'spark', need: ['powder', 'talisman', 'needle'] },
   { id: 'r_monk', out: 'monk', need: ['novice', 'powder', 'powder'] },
-  // 에픽
   { id: 'r_flame', out: 'flame', need: ['wave', 'monk', 'powder'] },
   { id: 'r_spear', out: 'spear', need: ['spark', 'monk', 'novice'] },
   { id: 'r_moon', out: 'moon', need: ['wind', 'wind', 'hunter'] },
   { id: 'r_petal', out: 'petal', need: ['frost', 'wind', 'talisman'] },
   { id: 'r_shadow', out: 'shadow', need: ['wave', 'needle', 'needle'] },
-  // 전설
-  { id: 'r_sun', out: 'sun', need: ['flame', 'flame', 'monk'] },
-  { id: 'r_storm', out: 'storm', need: ['moon', 'wind', 'spear'] },
-  { id: 'r_queen', out: 'queen', need: ['petal', 'frost', 'frost'] },
-  { id: 'r_thunder', out: 'thunder', need: ['spear', 'spark', 'spark'] },
-  // 신화
-  { id: 'r_emperor', out: 'emperor', need: ['sun', 'shadow', 'moon'] },
-  { id: 'r_fox', out: 'fox', need: ['queen', 'petal', 'flame'] },
-  { id: 'r_bird', out: 'bird', need: ['storm', 'thunder', 'moon'] },
-  // 히든
+  { id: 'r_sun', out: 'sun', need: ['wave', 'wave', 'novice', 'novice', 'powder', 'powder'] },
+  { id: 'r_storm', out: 'storm', need: ['wind', 'wind', 'hunter', 'hunter', 'needle', 'needle'] },
+  { id: 'r_queen', out: 'queen', need: ['frost', 'frost', 'talisman', 'talisman', 'hunter', 'hunter'] },
+  { id: 'r_thunder', out: 'thunder', need: ['spear', 'spark', 'powder', 'powder'] },
+  { id: 'r_blossom', out: 'blossom', need: ['petal', 'frost', 'talisman', 'talisman'] },
+  { id: 'r_serpent', out: 'serpent', need: ['shadow', 'wave', 'needle', 'needle'] },
+  { id: 'r_beast', out: 'beast', need: ['flame', 'monk', 'novice', 'novice'] },
+  { id: 'r_dusk', out: 'dusk', need: ['moon', 'wind', 'hunter', 'hunter'] },
+  { id: 'r_emperor', out: 'emperor', need: ['flame', 'flame', 'shadow', 'wave', 'wave', 'novice', 'novice'] },
+  { id: 'r_fox', out: 'fox', need: ['petal', 'petal', 'flame', 'frost', 'frost', 'talisman', 'talisman'] },
+  { id: 'r_bird', out: 'bird', need: ['moon', 'moon', 'spear', 'wind', 'wind', 'hunter', 'hunter'] },
+  { id: 'r_sunlord', out: 'sunlord', need: ['flame', 'flame', 'spear', 'monk', 'monk', 'powder', 'powder'] },
+  { id: 'r_frostlord', out: 'frostlord', need: ['petal', 'spear', 'spear', 'spark', 'spark', 'needle', 'needle'] },
+  { id: 'r_galestorm', out: 'galestorm', need: ['moon', 'shadow', 'shadow', 'wind', 'wind', 'novice', 'novice'] },
   { id: 'h_allstar', out: 'x_allstar', hidden: true, need: ['novice', 'hunter', 'talisman', 'powder', 'needle'], hint: '다섯 갈래 수련의 길이 하나로 모이면…' },
-  { id: 'h_crimson', out: 'x_crimson', hidden: true, need: ['shadow', 'flame', '#moonshard'], hint: '그림자와 불꽃, 그리고 붉은 달의 밤 (보스 스토리 1장)' },
-  { id: 'h_spider', out: 'x_spider', hidden: true, need: ['petal', 'needle', 'needle', '#silk'], hint: '꽃잎과 독침을 거미줄로 엮으면… (2장)' },
-  { id: 'h_snow', out: 'x_snow', hidden: true, need: ['queen', 'wave', '#ice'], hint: '얼음의 여왕이 물결과 만년설을 만나면 (3장)' },
-  { id: 'h_inferno', out: 'x_inferno', hidden: true, need: ['sun', 'flame', '#ember'], hint: '태양에 꺼지지 않는 불씨를 더하면 (4장)' },
-  { id: 'h_abyss', out: 'x_abyss', hidden: true, need: ['storm', 'wave', '#pearl'], hint: '폭풍과 물결이 심연에 닿으면 (5장)' },
-  { id: 'h_shadowlord', out: 'x_shadowlord', hidden: true, need: ['shadow', 'shadow', 'shadow', '#shade'], hint: '그림자 셋과 그림자의 조각 (6장)' },
-  { id: 'h_dawn', out: 'x_dawn', hidden: true, need: ['emperor', 'fox', 'bird', '#star'], hint: '세 신화와 하늘의 별 조각 (스토리 이벤트)' },
+  { id: 'h_crimson', out: 'x_crimson', hidden: true, need: ['shadow', 'shadow', 'flame', 'wave', 'wave', '#moonshard'], hint: '그림자와 불꽃, 그리고 붉은 달의 밤 (보스 스토리 1장)' },
+  { id: 'h_spider', out: 'x_spider', hidden: true, need: ['petal', 'petal', 'frost', 'frost', 'needle', 'needle', '#silk'], hint: '꽃잎과 독침을 거미줄로 엮으면… (2장)' },
+  { id: 'h_snow', out: 'x_snow', hidden: true, need: ['petal', 'moon', 'moon', 'frost', 'frost', '#ice'], hint: '꽃과 달빛이 만년설을 만나면 (3장)' },
+  { id: 'h_inferno', out: 'x_inferno', hidden: true, need: ['flame', 'flame', 'flame', 'monk', 'monk', 'powder', 'powder', '#ember'], hint: '세 불꽃에 꺼지지 않는 불씨를 더하면 (4장)' },
+  { id: 'h_abyss', out: 'x_abyss', hidden: true, need: ['moon', 'moon', 'shadow', 'wave', 'wave', '#pearl'], hint: '달과 그림자가 심연에 닿으면 (5장)' },
+  { id: 'h_shadowlord', out: 'x_shadowlord', hidden: true, need: ['shadow', 'shadow', 'shadow', 'spear', 'wave', 'wave', '#shade'], hint: '그림자 셋과 그림자의 조각 (6장)' },
+  { id: 'h_dawn', out: 'x_dawn', hidden: true, need: ['flame', 'flame', 'moon', 'moon', 'petal', 'wind', 'wind', 'novice', 'novice', '#star'], hint: '해·달·꽃이 모이고 하늘의 별 조각이 떨어지면 (스토리 이벤트)' },
 ];
 const RECIPE_MAP = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
 
@@ -173,19 +186,20 @@ const HERO_LV_DMG = 0.12; // 레벨당 피해 +15%
 const MISSIONS = [
   { id: 'kill1', name: '첫 사냥', icon: '🗡️', desc: '요괴 200마리 처치', stat: 'kills', goal: 200 },
   { id: 'boss', name: '보스 사냥꾼', icon: '👹', desc: '내 전장에서 보스 2마리 처치', stat: 'bosses', goal: 2 },
-  { id: 'legend', name: '전설의 시작', icon: '🌟', desc: '전설 등급 유닛 만들기', stat: 'bestTier', goal: 4 },
+  { id: 'legend', name: 'H 등급', icon: '🌟', desc: 'H 등급 유닛 만들기 (족보)', stat: 'bestTier', goal: 4 },
   { id: 'upg', name: '수련', icon: '⚒️', desc: '강화 합계 15단계', stat: 'upgSum', goal: 15 },
   { id: 'toad', name: '보물 사냥', icon: '🐸', desc: '내 전장에서 보물 두꺼비 잡기', stat: 'toads', goal: 1 },
   { id: 'kill2', name: '백전노장', icon: '⚔️', desc: '요괴 700마리 처치', stat: 'kills', goal: 700 },
   { id: 'wave', name: '버텨라', icon: '🏯', desc: '25웨이브 도달 (함께)', stat: 'wave', goal: 25, team: true },
-  { id: 'myth', name: '신화 탄생', icon: '🌈', desc: '신화 등급 유닛 만들기', stat: 'bestTier', goal: 5 },
+  { id: 'myth', name: 'LVX 등급', icon: '🌈', desc: 'LVX 등급 유닛 만들기 (족보)', stat: 'bestTier', goal: 5 },
 ];
 const UNIT_MAP = Object.fromEntries(UNITS.map((u) => [u.id, u]));
 const BY_TIER = {};
 for (const u of UNITS) if (!u.hero && !u.hidden) (BY_TIER[u.tier] ||= []).push(u.id);
 
 /** 같은 유닛 몇 개로 합성하는지 (등급별) */
-const MERGE_NEED = { 1: 3, 2: 3, 3: 3, 4: 2 };
+/** 같은 유닛 3개 랜덤 합성은 Lv1→Lv2, Lv2→Lv3 까지만 (H 부터는 족보로) */
+const MERGE_NEED = { 1: 3, 2: 3 };
 
 const CATS = {
   blade: { name: '검술', icon: '⚔️', color: '#f87858' },
@@ -216,7 +230,7 @@ const BOSSES = [
   { wave: 10, id: 'b_ogre', name: '도깨비 대장', icon: '👹', speed: 0.7, armor: 4, hpMul: 26, ability: 'rage', desc: '체력이 절반 이하면 빨라집니다' },
   { wave: 20, id: 'b_centi', name: '거대 지네', icon: '🐛', speed: 0.65, armor: 8, hpMul: 24, ability: 'brood', desc: '주기적으로 새끼를 낳습니다' },
   { wave: 30, id: 'b_serpent', name: '구렁이 여왕', icon: '🐉', speed: 0.6, armor: 12, hpMul: 22, ability: 'heal', desc: '주기적으로 체력을 회복합니다' },
-  { wave: 40, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 16, hpMul: 15, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
+  { wave: 40, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 16, hpMul: 8, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
 ];
 const MINIBOSS = { name: '요괴 우두머리', icon: '👿', speed: 0.8, armor: 3, hpMul: 18 };
 
@@ -278,8 +292,8 @@ const ECON = {
 };
 
 /** 일반 소환 확률 [일반, 희귀, 에픽, 전설] */
-const SUMMON_ODDS = [0.86, 0.12, 0.018, 0.002];
-const PREMIUM_ODDS = [0, 0.82, 0.16, 0.02];
+const SUMMON_ODDS = [0.86, 0.12, 0.02];
+const PREMIUM_ODDS = [0, 0.8, 0.2];
 
 const WAVES = 40;
 const WAVE_TIME = 28; // 웨이브 간격(초)

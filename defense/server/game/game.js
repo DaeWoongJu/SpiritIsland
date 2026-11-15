@@ -6,7 +6,7 @@ const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
 const ROOM_CENTER = [11, 7]; // 보스방 보스 자리 (고정)
-const FIELD_HP = 1.38; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
+const FIELD_HP = 1.12; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
 function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
@@ -56,7 +56,7 @@ class Game {
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
       bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
-      items: {},
+      items: {}, autoGather: true,
     }));
     // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
     this.fields = [];
@@ -584,6 +584,8 @@ class Game {
           this.fxp(f, ['tele', c.tile[0], c.tile[1]]);
         } else u.cdLeft = Math.max(u.cdLeft, 0.5);
         u.x = c.tile[0]; u.y = c.tile[1];
+        // 자동 모으기: 내 전장의 같은 유닛이 모두 따라옴
+        if (p.autoGather && f === 'm' + p.idx && !c.noFollow) for (const o of this.units) if (o !== u && o.owner === p.idx && o.type === u.type && o.field === f && (o.x !== u.x || o.y !== u.y)) { o.x = u.x; o.y = u.y; o.cdLeft = Math.max(o.cdLeft, 0.4); }
         return null;
       }
       case 'dispatch': {
@@ -622,9 +624,14 @@ class Game {
         const u = unit(c.unit);
         if (!u || u.field === 'room') return null;
         // 같은 종류를 모두 고른 유닛 칸으로 모아 한 무리로 (내 전장·이벤트 전장 안)
-        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type && x.field === u.field && (x.x !== u.x || x.y !== u.y));
+        // 내 전장·이벤트 전장에 흩어진 같은 유닛을 모두 (보스방은 한 명이라 제외)
+        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type && x.field !== 'room' && (x.field !== u.field || x.x !== u.x || x.y !== u.y));
         if (!same.length) return '모을 같은 유닛이 없어요.';
-        for (const x of same) { this.fxp(x.field, ['tele', x.x, x.y]); x.x = u.x; x.y = u.y; x.cdLeft = Math.max(x.cdLeft, 0.4); }
+        for (const x of same) {
+          this.fxp(x.field, ['tele', x.x, x.y]);
+          if (x.field !== u.field) { x.home = u.field === 'm' + p.idx ? null : x.home || (x.field === 'm' + p.idx ? { field: x.field, x: x.x, y: x.y } : null); x.field = u.field; }
+          x.x = u.x; x.y = u.y; x.cdLeft = Math.max(x.cdLeft, 0.4);
+        }
         this.fxp(u.field, ['tele', u.x, u.y]);
         return null;
       }
@@ -686,6 +693,7 @@ class Game {
         this.units = this.units.filter((x) => x !== u);
         return null;
       }
+      case 'setAuto': { p.autoGather = !!c.on; return null; }
       case 'sellMany': case 'sellTier': {
         // 여러 개 한꺼번에 팔기: 고른 유닛들 / 등급 전체 (영웅·히든은 빼고)
         let list;
@@ -710,7 +718,7 @@ class Game {
         const t = D.UNIT_MAP[u.type];
         const need = D.MERGE_NEED[t.tier];
         if (t.hero) return '영웅은 합성하지 않아요. 요괴를 처치할수록 레벨이 올라요!';
-        if (t.hidden || !need) return '이 유닛은 더 합성할 수 없어요.';
+        if (t.hidden || !need) return 'Lv3부터는 랜덤 합성이 없어요. 📜 족보로 H·LVX를 만드세요.';
         const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type).sort((a, b) => (a.field === u.field ? 0 : 1) - (b.field === u.field ? 0 : 1) || Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
         if (same.length < need - 1) return `같은 유닛이 ${need}개 있어야 합성할 수 있어요.`;
         const gone = new Set(same.slice(0, need - 1));
@@ -1049,7 +1057,7 @@ class Game {
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
-        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, units: this.units.filter((u) => u.owner === p.idx).length,
+        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
         items: p.items, craftable: this.craftable(p),
       })),

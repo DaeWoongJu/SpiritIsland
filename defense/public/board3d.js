@@ -91,6 +91,8 @@ const LOOK = {
   h_flame: { wep: 'katana', extra: 'spiky' }, h_water: { wep: 'katana', extra: 'tail' }, h_thunder: { wep: 'katana', extra: 'spiky' },
   h_wind: { wep: 'katana', extra: 'spiky' }, h_moth: { wep: 'staff', extra: 'ears' }, h_stone: { wep: 'hammer', extra: 'bald' },
   h_sound: { wep: 'katana', extra: 'band' }, h_moon: { wep: 'bow', extra: 'tail' },
+  blossom: { wep: 'katana', extra: 'tail' }, serpent: { wep: 'katana', extra: 'mask' }, beast: { wep: 'katana', extra: 'spiky' }, dusk: { wep: 'bow', extra: 'band' },
+  sunlord: { wep: 'katana', extra: 'spiky' }, frostlord: { wep: 'staff', extra: 'crown' }, galestorm: { wep: 'katana', extra: 'hood' },
   x_allstar: { wep: 'katana', extra: 'band' }, x_crimson: { wep: 'katana', extra: 'horns' }, x_spider: { wep: 'staff', extra: 'tail' }, x_snow: { wep: 'katana', extra: 'crown' },
   x_inferno: { wep: 'katana', extra: 'spiky' }, x_abyss: { wep: 'bow', extra: 'hat' }, x_shadowlord: { wep: 'katana', extra: 'mask' }, x_dawn: { wep: 'staff', extra: 'crown' },
 };
@@ -1119,7 +1121,7 @@ function drawOverlay(app, now, dt) {
   if (v.sealed) { g.fillStyle = '#a080ff14'; g.fillRect(0, 0, W, H); }
   g.font = `${30 * k}px Jua, sans-serif`; g.lineWidth = 6 * k; g.strokeStyle = '#000';
   if (v.paused) { g.fillStyle = '#0008'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.strokeText('⏸ 일시정지', W / 2, H / 2); g.fillText('⏸ 일시정지', W / 2, H / 2); }
-  else if (!v.wave) { const s = `${v.nextIn}초 뒤 요괴가 양쪽에서 몰려와요! 빈칸을 누르고 Q로 소환!`; g.font = `${22 * k}px Jua, sans-serif`; g.fillStyle = '#fff'; g.strokeText(s, W / 2, 34 * k); g.fillText(s, W / 2, 34 * k); }
+  else if (!v.wave) { const s = `${v.nextIn}초 뒤 요괴가 몰려와요! Q로 소환하고 유닛을 길 옆으로 옮기세요!`; g.font = `${22 * k}px Jua, sans-serif`; g.fillStyle = '#fff'; g.strokeText(s, W / 2, 34 * k); g.fillText(s, W / 2, 34 * k); }
 }
 function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 

@@ -105,13 +105,18 @@ test('판매: 하나 · 여러 개 · 등급 전체 (영웅·히든 제외)', ()
   assert.strictEqual(g.units.length, 3, '영웅·히든은 남음');
 });
 
-test('전설 2개 → 신화', () => {
+test('Lv3부터는 랜덤 합성 없음 · H 족보 (Lv2 x2 + Lv1 x2 + Lv1 x2)', () => {
   const g = new Game(roster(1), { mapId: 'h-ring', seed: 2 });
-  g.players[0].gold = 1000;
-  g.command('a', { t: 'summon' }); g.command('a', { t: 'summon' });
-  for (const u of g.units) u.type = 'sun';
-  const r = g.command('a', { t: 'merge', unit: g.units[0].id });
-  assert.strictEqual(D.UNIT_MAP[g.units.find((u) => u.id === r.ok).type].tier, 5);
+  const p = g.players[0];
+  p.gold = 1e5;
+  for (let i = 0; i < 6; i++) g.command('a', { t: 'summon' });
+  ['flame', 'flame', 'flame'].forEach((t, i) => { g.units[i].type = t; });
+  assert.strictEqual(typeof g.command('a', { t: 'merge', unit: g.units[0].id }), 'string');
+  for (const [i, t] of ['wave', 'wave', 'novice', 'novice', 'powder', 'powder'].entries()) g.units[i].type = t;
+  assert.ok(g.craftable(p).includes('r_sun'));
+  const r = g.command('a', { t: 'craft', recipe: 'r_sun' });
+  assert.strictEqual(g.units.find((u) => u.id === r.ok).type, 'sun');
+  assert.strictEqual(g.units.length, 1);
 });
 
 test('필살기와 축복', () => {
@@ -193,8 +198,8 @@ test('조합법 · 히든 조합 (재료 아이템 필요)', () => {
   assert.strictEqual(g.units.find((u) => u.id === r.ok).type, 'wave');
   assert.strictEqual(g.units.length, 1);
   // 히든: 그림자 + 화염 + 붉은 달 조각
-  g.command('a', { t: 'summon' });
-  g.units[0].type = 'shadow'; g.units[1].type = 'flame';
+  for (let i = 0; i < 4; i++) g.command('a', { t: 'summon' });
+  ['shadow', 'shadow', 'flame', 'wave', 'wave'].forEach((t, i) => { g.units[i].type = t; });
   assert.strictEqual(typeof g.command('a', { t: 'craft', recipe: 'h_crimson' }), 'string', '재료 아이템이 없으면 안 됨');
   p.items.moonshard = 1;
   const h = g.command('a', { t: 'craft', recipe: 'h_crimson' });
