@@ -86,6 +86,25 @@ test('같은 유닛은 한 칸에 겹쳐 쌓임', () => {
   assert.ok(!g.F.m0.zone.has(ua.x + ',' + ua.y));
 });
 
+test('판매: 하나 · 여러 개 · 등급 전체 (영웅·히든 제외)', () => {
+  const g = new Game(roster(1), { mapId: 'g1', seed: 22 });
+  const p = g.players[0];
+  p.gold = 1e5;
+  for (let i = 0; i < 6; i++) g.command('a', { t: 'summon' });
+  for (const u of g.units) u.type = 'novice';
+  g.units[5].type = 'wave';
+  g.giveUnit(p, 6, false, null, 'h_flame');
+  g.giveUnit(p, 7, false, null, 'x_allstar');
+  const gold0 = p.gold;
+  g.command('a', { t: 'sellMany', units: g.units.slice(0, 2).map((u) => u.id) });
+  assert.strictEqual(p.gold - gold0, 2 * D.ECON.sellRate[1]);
+  g.command('a', { t: 'sellTier', tier: 1 });
+  assert.ok(!g.units.some((u) => u.type === 'novice'));
+  assert.ok(g.units.some((u) => u.type === 'wave'));
+  assert.strictEqual(typeof g.command('a', { t: 'sellMany', units: g.units.filter((u) => u.type[0] === 'h' || u.type[0] === 'x').map((u) => u.id) }), 'string');
+  assert.strictEqual(g.units.length, 3, '영웅·히든은 남음');
+});
+
 test('전설 2개 → 신화', () => {
   const g = new Game(roster(1), { mapId: 'h-ring', seed: 2 });
   g.players[0].gold = 1000;

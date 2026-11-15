@@ -485,7 +485,7 @@ function renderControls() {
   if (!p) return;
   const L = app.leaderMap[app.info.players[app.myIdx].leader];
   const cats = app.cat.cats;
-  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile]);
+  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
   if (key === renderControls.key) return;
   renderControls.key = key;
   const cdPct = p.skillCd > 0 ? (p.skillCd / p.skillMax) * 100 : 0;
@@ -495,10 +495,13 @@ function renderControls() {
     <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · 희귀 이상</small></button>
     <div class="grp">${Object.entries(cats).map(([id, c], i) => `<button data-a="up" data-c="${id}" ${p.gold < p.ucost[id] ? 'disabled' : ''} title="${c.name} 유닛 피해 +12%">${c.icon} ${c.name} +${p.upg[id]} <kbd>${i + 1}</kbd><small>${p.ucost[id]}G</small></button>`).join('')}</div>
     <div class="grp"><button class="btn-skill ${app.aiming ? 'aim' : ''}" data-a="skill" ${p.skillCd > 0 ? 'disabled' : ''} title="${esc(L.skill.desc)}">${L.icon} ${esc(L.skill.name)} <kbd>E</kbd><small>${p.skillCd > 0 ? `${p.skillCd}초` : L.skill.target ? '위치 선택' : '바로 사용'}</small><span class="cdv" style="height:${cdPct}%"></span></button></div>
-    <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
+    <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="sellMenu" class="${app.sellMenu ? 'on' : ''}">💰 일괄 판매<small>등급별로 한꺼번에</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
+    ${app.sellMenu ? `<div class="sellmenu">${[1, 2, 3, 4, 5].map((tr) => { const list = app.v.units.filter((u) => u[1] === app.myIdx && app.unitMap[u[2]].tier === tr && !app.unitMap[u[2]].hero && !app.unitMap[u[2]].hidden); const tt = app.cat.tiers[tr - 1]; return `<button data-a="sellTier" data-c="${tr}" ${list.length ? '' : 'disabled'} style="border-color:${tt.color}"><b style="color:${tt.color}">${tt.name} 전부</b><small>${list.length}개 · +${sellTotal(list)}G</small></button>`; }).join('')}<span class="hint">영웅·히든은 팔지 않아요</span></div>` : ''}
     <div class="hint" style="align-self:center">유닛 ${p.units}/${app.cat.econ.maxUnits}</div>`;
 }
 onPress($('#controls'), (b) => action(b.dataset.a, b.dataset.c));
+function sellOne(t) { return Math.round(app.cat.econ.sellRate[t.tier] * (app.info.players[app.myIdx].leader === 'merchant' ? 1.2 : 1)); }
+function sellTotal(list) { return list.reduce((s, u) => { const t = app.unitMap[u[2]]; return s + (t.hero || t.hidden ? 0 : sellOne(t)); }, 0); }
 function action(a, c) {
   const p = me();
   if (!p) return;
@@ -515,6 +518,14 @@ function action(a, c) {
   } else if (a === 'gift') { const amt = Math.min(100, p.gold); if (amt > 0) { cmd({ t: 'gift', amount: amt }); Sound.play('sell'); } }
   else if (a === 'merge' && app.sel) { cmd({ t: 'merge', unit: app.sel }); Sound.play('merge'); }
   else if (a === 'clearZone') { cmd({ t: 'clearZone' }); Sound.play('click'); }
+  else if (a === 'sellSel') {
+    const ids = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : [];
+    if (ids.length) { cmd({ t: 'sellMany', units: ids }); clearSel(); Sound.play('sell'); renderSelected(); }
+  } else if (a === 'sellMenu') { app.sellMenu = !app.sellMenu; renderControls.key = null; renderControls(); }
+  else if (a === 'sellTier') {
+    const tt = app.cat.tiers[Number(c) - 1];
+    setTimeout(() => { if (confirm(`${tt.name} 등급 유닛을 전부 팔까요? (영웅·히든 제외)`)) { cmd({ t: 'sellTier', tier: Number(c) }); Sound.play('sell'); } }, 0);
+  }
   else if (a === 'autoPlace') { const ids = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []; if (ids.length) { cmd({ t: 'autoPlace', units: ids }); clearSel(); Sound.play('click'); } }
   else if (a === 'gather') { const id = app.sel || (app.multi && app.multi[0]); if (id) { cmd({ t: 'gather', unit: id }); Sound.play('click'); } }
   else if (a === 'clearSel') { clearSel(); renderSelected(); }
@@ -555,7 +566,8 @@ function renderSelected() {
     setHTML(el, `<div class="un">🖱 ${list.length}명 선택</div>
       <div>${Object.entries(cnt).map(([id, n]) => `${app.unitMap[id].icon} ${esc(app.unitMap[id].name)} ×${n}`).join(' · ')}</div>
       <div class="hint">빈칸을 클릭하면 그 주변으로 한꺼번에 이동해요.</div>
-      <div class="acts"><button class="small" data-a="autoPlace">🛡 길 옆으로 자동 배치 <kbd>A</kbd></button><button class="small" data-a="clearSel">선택 해제</button></div>`);
+      <div class="acts"><button class="small" data-a="autoPlace">🛡 길 옆으로 자동 배치 <kbd>A</kbd></button><button class="small danger" data-a="sellSel">💰 선택 전부 팔기 +${sellTotal(list)}G <kbd>⇧S</kbd></button><button class="small" data-a="clearSel">선택 해제</button></div>
+      ${list.some((u) => app.unitMap[u[2]].hero || app.unitMap[u[2]].hidden) ? '<div class="hint">영웅·히든 유닛은 팔지 않아요.</div>' : ''}`);
     return;
   }
   const u = app.sel && app.v.units.find((x) => x[0] === app.sel);
@@ -586,7 +598,8 @@ function renderSelected() {
     ${mine && u && t.hero ? '<div class="acts"><span class="hint">영웅은 합성·판매하지 않아요 · 빈칸 클릭 = 이동</span></div>' : ''}
     ${mine && u && !t.hero ? `<div class="acts">
       ${need ? `<button class="small primary" data-a="merge" ${have < need ? 'disabled' : ''}>✨ 합성 <kbd>F</kbd></button>` : '<span class="hint">최고 등급!</span>'}
-      <button class="small" data-a="sell">💰 판매 ${app.cat.econ.sellRate[t.tier]}G <kbd>S</kbd></button>
+      <button class="small" data-a="sell">💰 ${isStack ? '한 마리 ' : ''}판매 ${sellOne(t)}G <kbd>S</kbd></button>
+      ${isStack ? `<button class="small danger" data-a="sellSel">💰 무리 전부 팔기 (${mlist.length}) +${sellOne(t) * mlist.length}G <kbd>⇧S</kbd></button>` : ''}
       <span class="hint">빈칸 클릭 = 이동</span></div>` : ''}`);
 }
 onPress($('#selected'), (b) => {
@@ -866,6 +879,7 @@ document.addEventListener('keydown', (e) => {
   if (key === 'z') { action('clearZone'); return; }
   if (key === 'r') { toggleDrawer('recipe'); return; }
   if (key === 'tab') { e.preventDefault(); const order = ['m' + app.myIdx, 'room', ...(app.v.event ? ['ev'] : []), ...app.info.players.map((_, i) => 'm' + i).filter((f) => f !== 'm' + app.myIdx)]; switchField(order[(order.indexOf(app.viewField) + 1) % order.length]); return; }
+  if (key === 's' && e.shiftKey) { action('sellSel'); return; }
   if (map[key]) { action(map[key]); return; }
   if (['1', '2', '3'].includes(key)) { action('up', Object.keys(app.cat.cats)[Number(key) - 1]); return; }
   if (key === 'p' || key === ' ') { send({ t: 'pause' }); e.preventDefault(); return; }
@@ -1097,7 +1111,7 @@ function openGuide() {
     </ul>
     <p><b>요괴 특징</b>: 🐦‍⬛ 까마귀는 날아다녀서 검술 유닛이 못 때려요 · 💀 갑옷 망령은 방어가 높아 강한 한 방이나 방어 깎기가 좋아요 · 🟢 점액은 죽으면 분열 · 🐸 보물 두꺼비를 잡으면 보상!</p>
     <p><b>웨이브 변이</b>: 질풍(빠름)·거구(체력)·재생·강철(방어)·떼거리(수가 많음)·유령(회피). 오른쪽 '다음 웨이브'에서 미리 확인하세요.</p>
-    <p><b>단축키</b>: Q 소환(소환진에) · W 고급 소환 · E 필살기 · F 랜덤 합성 · R 조합법 · A 길 옆으로 자동 배치 · D 같은 유닛 모으기 · Z 소환진 비우기 · Tab 전장 바꾸기 · S 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소 · 마우스 휠 확대</p>
+    <p><b>단축키</b>: Q 소환(소환진에) · W 고급 소환 · E 필살기 · F 랜덤 합성 · R 조합법 · A 길 옆으로 자동 배치 · D 같은 유닛 모으기 · Z 소환진 비우기 · Tab 전장 바꾸기 · S 한 마리 판매 · Shift+S 선택·무리 전부 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소 · 마우스 휠 확대</p>
     <p><b>마우스</b>: 드래그 = 여러 명 선택 · 더블클릭 = 같은 유닛 모두 선택 · Ctrl+클릭 = 선택에 더하기 · 우클릭 = 선택 해제</p>
   </div>`);
 }

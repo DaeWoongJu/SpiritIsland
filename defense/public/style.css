@@ -189,3 +189,6 @@ kbd { display: inline-block; font-size: .72em; padding: 0 4px; border-radius: 4p
 .storybox .tt { font-family: var(--title); font-size: 1.25em; color: var(--gold2); }
 .storybox p { margin: 4px 0 8px; line-height: 1.55; }
 .fieldbar { display: inline-flex; gap: 8px; align-items: center; }
+
+.sellmenu { flex-basis: 100%; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 6px; border-top: 1px dashed #fff3; }
+.sellmenu button { border-width: 2px; background: linear-gradient(180deg, #4a3040, #2a1a24) !important; }

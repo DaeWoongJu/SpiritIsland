@@ -791,6 +791,7 @@ function fx(f, app) {
     case 'heal': floatText(wp(f[1], f[2], 1.4), '💚 회복', '#80ff80', 20, 1); spark(wp(f[1], f[2], 0.5), '#60ff80', 14, 1, 0.3, 0.8, 2, -1); break;
     case 'brood': floatText(wp(f[1], f[2], 1.4), '새끼 소환!', '#ffa080', 18, 1); break;
     case 'mission': S.tints.push({ color: '#fff0a0', t: 0, life: 0.6 }); break;
+    case 'sold': { const [wx, wz] = tileToWorld(f[1], f[2]); const pos = new THREE.Vector3(wx, 0.4, wz); spark(pos, '#ffd040', 10, 1.5, 0.18, 0.5, 2.5, 4); floatText(pos.clone().setY(0.9), '💰', '#ffd040', 20, 0.8); break; }
     case 'tele': {
       const [wx, wz] = tileToWorld(f[1], f[2]);
       const pos = new THREE.Vector3(wx, 0.1, wz);

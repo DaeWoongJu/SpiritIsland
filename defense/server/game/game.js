@@ -118,6 +118,7 @@ class Game {
     return best ? { x: best.x, y: best.y, field: F.id } : null;
   }
 
+  sellPrice(p, u) { return Math.round(D.ECON.sellRate[D.UNIT_MAP[u.type].tier] * (p.leader === 'merchant' ? 1.2 : 1)); }
   /** 소환진의 빈칸 (내 전장) */
   summonSpot(pidx, type = null) {
     // 같은 유닛이 이미 있으면 그 무리에 합류 (한 칸에 겹쳐 쌓임)
@@ -680,8 +681,26 @@ class Game {
         if (!u) return null;
         const t = D.UNIT_MAP[u.type];
         if (t.hero || t.hidden) return '영웅·히든 유닛은 팔 수 없어요.';
-        p.gold += Math.round(D.ECON.sellRate[t.tier] * (p.leader === 'merchant' ? 1.2 : 1));
+        p.gold += this.sellPrice(p, u);
+        this.fxp(u.field, ['sold', u.x, u.y]);
         this.units = this.units.filter((x) => x !== u);
+        return null;
+      }
+      case 'sellMany': case 'sellTier': {
+        // 여러 개 한꺼번에 팔기: 고른 유닛들 / 등급 전체 (영웅·히든은 빼고)
+        let list;
+        if (c.t === 'sellTier') {
+          const tier = Number(c.tier);
+          list = this.units.filter((u) => u.owner === p.idx && D.UNIT_MAP[u.type].tier === tier && (c.field ? u.field === c.field : true));
+        } else list = (Array.isArray(c.units) ? c.units : []).map(unit).filter(Boolean);
+        list = list.filter((u) => !D.UNIT_MAP[u.type].hero && !D.UNIT_MAP[u.type].hidden);
+        if (!list.length) return '팔 유닛이 없어요.';
+        const gold = list.reduce((sum, u) => sum + this.sellPrice(p, u), 0);
+        const gone = new Set(list);
+        for (const u of list) this.fxp(u.field, ['sold', u.x, u.y]);
+        this.units = this.units.filter((x) => !gone.has(x));
+        p.gold += gold;
+        this.msg(`💰 ${p.name}: 유닛 ${list.length}개 판매 · 골드 +${gold}`, 'info');
         return null;
       }
       case 'merge': {
