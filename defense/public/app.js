@@ -756,6 +756,16 @@ function renderDrawer() {
       ${!total ? '<div class="sec">아직 선택권이 없어요.</div>' : ''}
       ${[2, 3, 4].map((tr) => { const n = p.picks[tr] || 0; const tt = app.cat.tiers[tr - 1]; const list = app.cat.units.filter((u) => u.tier === tr && !u.hero && !u.hidden); const have = haveCounts();
         return `<div class="sec" style="color:${tt.color}">${tt.name} 선택권 ${n}장</div><div class="pickgrid">${list.map((u) => `<button class="pickcard" data-pick="${tr}" data-type="${u.id}" ${n ? '' : 'disabled'} style="--c:${tt.color}" title="${esc(u.desc)}"><b>${u.icon} ${esc(u.name)}</b><small>${app.cat.cats[u.cat].icon} 피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}/초 · 사거리 ${u.range}</small><small>${esc(u.desc)}</small>${have[u.id] ? `<i>보유 ${have[u.id]}</i>` : ''}</button>`).join('')}</div>`; }).join('')}`;
+  } else if (app.drawer === 'rank') {
+    const sortBy = app.rankSort || 'dps';
+    const rows = (p.ranking || []).slice().sort((a, b) => (sortBy === 'dps' ? b[2] - a[2] : b[3] - a[3]));
+    const maxV = Math.max(1, ...rows.map((r) => (sortBy === 'dps' ? r[2] * r[1] : r[3])));
+    html += `<h3>📊 내 유닛 순위</h3>
+      <div class="hint">강화·대장·축복·오라·영웅 레벨까지 넣어 계산한 값이에요 (1초마다 갱신). 줄을 누르면 그 유닛으로 가요.</div>
+      <div class="acts" style="margin:6px 0"><button class="small ${sortBy === 'dps' ? 'on' : ''}" data-rsort="dps">⚡ 지금 센 순 (초당 피해)</button><button class="small ${sortBy === 'dealt' ? 'on' : ''}" data-rsort="dealt">🗡 누적 피해 순</button></div>
+      ${!rows.length ? '<div class="sec">아직 유닛이 없어요.</div>' : ''}
+      ${rows.map((r, i) => { const [type, n, dps, dealt, field, , , lvl, uid] = r; const t = app.unitMap[type]; const tier = app.cat.tiers[t.tier - 1]; const v = sortBy === 'dps' ? dps * n : dealt;
+        return `<button class="rankrow" data-rank="${uid}" data-field="${field}" style="--c:${tier.color}"><span class="rk">${i + 1}</span><span class="nm"><b style="color:${tier.color}">${tier.name}</b> ${t.icon} ${esc(t.name)}${n > 1 ? ` <i>×${n}</i>` : ''}${lvl ? ` <i>Lv.${lvl}</i>` : ''}<small>${sortBy === 'dps' ? `한 마리 ${fmt(dps)}/초${n > 1 ? ` · 무리 ${fmt(dps * n)}/초` : ''}` : `누적 ${fmt(dealt)} · 지금 ${fmt(dps)}/초`} · 📍${esc(fieldName(field))}</small></span><span class="bar2"><i style="width:${Math.max(3, (v / maxV) * 100)}%"></i></span></button>`; }).join('')}`;
   } else if (app.drawer === 'mission') {
     const done = p.missions.filter((m) => m[2]).length;
     html += `<h3>🎖 미션 (${done}/${p.missions.length})</h3><div class="hint">미션을 달성할 때마다 <b>영웅 영입권</b> 1장 → 영웅 3명 중 1명을 데려와요. 보스 스토리 2·4·6장과 스토리 이벤트도 영입권을 줘요.</div>
@@ -777,6 +787,13 @@ function renderDrawer() {
 onPress($('#drawer'), (b) => {
   if (b.dataset.close) closeDrawer();
   else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft }); Sound.play('merge'); }
+  else if (b.dataset.rsort) { app.rankSort = b.dataset.rsort; renderDrawer(); }
+  else if (b.dataset.rank) {
+    const id = Number(b.dataset.rank);
+    if (b.dataset.field !== app.viewField) switchField(b.dataset.field);
+    const u = app.v.units.find((x) => x[0] === id);
+    if (u) { const stack = app.v.units.filter((x) => x[1] === app.myIdx && x[2] === u[2] && x[3] === u[3] && x[4] === u[4] && x[8] === u[8]).map((x) => x[0]); clearSel(); app.sel = stack[0]; if (stack.length > 1) app.multi = stack; renderSelected(); Sound.play('click'); }
+  }
   else if (b.dataset.pick) { cmd({ t: 'pick', tier: Number(b.dataset.pick), type: b.dataset.type }); Sound.play('rare'); }
   else if (b.dataset.story) { cmd({ t: 'story', id: b.dataset.story }); setTimeout(() => { cmd({ t: 'dispatch', field: 'room', n: 1 }); switchField('room'); }, 150); }
   else if (b.dataset.join) { cmd({ t: 'dispatch', field: 'room', n: 1 }); switchField('room'); }

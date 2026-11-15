@@ -293,6 +293,21 @@ class Game {
     return e;
   }
 
+  /** 내 유닛 순위 (같은 칸·같은 종류는 한 줄로): [type, 수, 한 마리 초당 피해, 누적 피해 합, 전장, x, y, 영웅 레벨, 대표 id] */
+  updateRanking() {
+    for (const p of this.players) {
+      const groups = new Map();
+      for (const u of this.units) {
+        if (u.owner !== p.idx) continue;
+        const k = `${u.field}|${u.x},${u.y}|${u.type}`;
+        let g = groups.get(k);
+        if (!g) { g = [u.type, 0, Math.round(this.bossDps(u)), 0, u.field, u.x, u.y, D.UNIT_MAP[u.type].hero ? D.heroLevel(u.kills || 0) : 0, u.id]; groups.set(k, g); }
+        g[1]++; g[3] += Math.round(u.dmg || 0);
+      }
+      p.ranking = [...groups.values()].sort((a, b) => b[2] - a[2]).slice(0, 40);
+    }
+  }
+
   /** 보스 한 마리를 칠 때의 초당 피해 (보스방에 보낼 '가장 센 유닛' 고르기) */
   bossDps(u) {
     const st = this.unitStats(u);
@@ -980,7 +995,7 @@ class Game {
     }
     if (!this.result && !this.endless && this.wave >= D.WAVES && !this.spawnQueue.length && !this.enemies.some((e) => this.F[e.field].kind === 'main')) this.end(true, `${D.WAVES}웨이브를 모두 막아냈어요!`);
     const tickNo = Math.round(this.time / dt);
-    if (tickNo % 20 === 0) this.checkMissions();
+    if (tickNo % 20 === 0) { this.checkMissions(); this.updateRanking(); }
     if (tickNo % 10 === 0) for (const p of this.players) if (p.bot) botAct(this, p);
   }
 
@@ -1075,7 +1090,7 @@ class Game {
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
-        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, picks: p.picks, income: Math.round((D.ECON.waveBonus(Math.max(1, this.wave + 1)) * (p.leader === 'merchant' ? 1.5 : 1) + 25 * p.bless.filter((b) => b === 'income').length) * this.diff.gold), units: this.units.filter((u) => u.owner === p.idx).length,
+        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, picks: p.picks, ranking: p.ranking || [], income: Math.round((D.ECON.waveBonus(Math.max(1, this.wave + 1)) * (p.leader === 'merchant' ? 1.5 : 1) + 25 * p.bless.filter((b) => b === 'income').length) * this.diff.gold), units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
         items: p.items, craftable: this.craftable(p),
       })),

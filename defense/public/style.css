@@ -207,3 +207,10 @@ kbd { display: inline-block; font-size: .72em; padding: 0 4px; border-radius: 4p
 .pickcard small { font-weight: 500; color: var(--muted); font-size: .86em; }
 .pickcard i { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: .78em; color: #ffd060; }
 .pickcard:not(:disabled):hover { box-shadow: 0 0 12px var(--c); }
+
+.rankrow { width: 100%; display: grid; grid-template-columns: 26px 1fr; gap: 2px 6px; text-align: left; padding: 5px 8px; margin-bottom: 4px; border-left: 4px solid var(--c) !important; background: linear-gradient(180deg, #2a1e30, #1c1420) !important; font-size: .88em; }
+.rankrow .rk { font-family: var(--title); font-size: 1.25em; color: var(--gold2); grid-row: span 2; align-self: center; text-align: center; }
+.rankrow .nm i { font-style: normal; color: #ffd060; font-weight: 900; }
+.rankrow .nm small { display: block; font-weight: 500; color: var(--muted); font-size: .85em; }
+.rankrow .bar2 { height: 6px; border-radius: 3px; background: #0006; overflow: hidden; }
+.rankrow .bar2 i { display: block; height: 100%; background: var(--c); }
