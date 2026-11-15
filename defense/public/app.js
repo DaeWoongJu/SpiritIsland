@@ -518,7 +518,7 @@ function action(a, c) {
   else if (a === 'autoPlace') { const ids = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []; if (ids.length) { cmd({ t: 'autoPlace', units: ids }); clearSel(); Sound.play('click'); } }
   else if (a === 'gather') { const id = app.sel || (app.multi && app.multi[0]); if (id) { cmd({ t: 'gather', unit: id }); Sound.play('click'); } }
   else if (a === 'clearSel') { clearSel(); renderSelected(); }
-  else if (a === 'sell' && app.sel) { cmd({ t: 'sell', unit: app.sel }); app.sel = null; Sound.play('sell'); }
+  else if (a === 'sell' && app.sel) { cmd({ t: 'sell', unit: app.sel }); const rest = (app.multi || []).filter((id) => id !== app.sel); clearSel(); if (rest.length) { app.sel = rest[0]; if (rest.length > 1) app.multi = rest; } Sound.play('sell'); }
 }
 
 // ───────────── 오른쪽: 팀 / 선택 / 다음 웨이브 / 축복 ─────────────
@@ -544,9 +544,12 @@ function unitCounts(owner) {
 }
 function renderSelected() {
   const el = $('#selected');
-  if (app.multi && app.multi.length) {
-    app.multi = app.multi.filter((id) => app.v.units.some((u) => u[0] === id));
-    const list = app.v.units.filter((u) => app.multi.includes(u[0]));
+  if (app.multi && app.multi.length) app.multi = app.multi.filter((id) => app.v.units.some((u) => u[0] === id));
+  const mlist = app.multi && app.multi.length ? app.v.units.filter((u) => app.multi.includes(u[0])) : [];
+  const isStack = mlist.length > 1 && mlist.every((u) => u[2] === mlist[0][2] && u[3] === mlist[0][3] && u[4] === mlist[0][4] && u[8] === mlist[0][8]);
+  if (isStack && !mlist.some((u) => u[0] === app.sel)) app.sel = mlist[0][0];
+  if (mlist.length > 1 && !isStack) {
+    const list = mlist;
     const cnt = {};
     for (const u of list) cnt[u[2]] = (cnt[u[2]] || 0) + 1;
     setHTML(el, `<div class="un">🖱 ${list.length}명 선택</div>
@@ -572,7 +575,7 @@ function renderSelected() {
   const need = app.cat.mergeNeed[t.tier];
   const have = unitCounts(owner)[type] || 0;
   const cat = app.cat.cats[t.cat];
-  setHTML(el, `<div class="un">${t.icon} ${esc(t.name)} <span class="tier-tag" style="background:${tier.color}">${tier.name}</span></div>
+  setHTML(el, `<div class="un">${t.icon} ${esc(t.name)} <span class="tier-tag" style="background:${tier.color}">${tier.name}</span>${isStack ? ` <span class="tier-tag" style="background:#ffd040">×${mlist.length} 무리</span>` : ''}</div>
     <div class="hint">${cat.icon} ${cat.name} · 피해 ${t.dmg} · ${(1 / t.cd).toFixed(1)}회/초 · 사거리 ${t.range}${t.cat === 'blade' ? ' · 날아다니는 적 공격 불가' : ''}</div>
     <div>${esc(t.desc)}</div>
     <div class="hint">누적 피해 ${fmt(dmg)} · ${mine ? '내 유닛' : `${esc(app.info.players[owner].name)}의 유닛`} · 📍${esc(fieldName(ufield || 'm0'))}${need ? ` · 같은 유닛 ${have}/${need}` : ''}</div>
@@ -830,9 +833,17 @@ canvas.addEventListener('click', (e) => {
   const u = (app.fu || []).find((x) => x[3] === t.x && x[4] === t.y);
   if (u) {
     if (u[1] === app.myIdx) {
+      const stack = app.fu.filter((x) => x[1] === app.myIdx && x[3] === t.x && x[4] === t.y).map((x) => x[0]);
+      const cur = app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : [];
+      const curUnits = app.v.units.filter((x) => cur.includes(x[0]));
+      // 같은 유닛을 고른 상태에서 같은 유닛 무리를 누르면 그 무리에 합류
+      if (curUnits.length && curUnits.every((x) => x[2] === u[2]) && !curUnits.some((x) => stack.includes(x[0])) && !e.ctrlKey && !e.metaKey) {
+        cmd({ t: 'moveMany', units: cur, tile: [t.x, t.y], field: app.viewField }); clearSel(); Sound.play('click');
+        renderSelected(); return;
+      }
       if (app.sel && app.sel !== u[0] && e.shiftKey) { cmd({ t: 'swap', unit: app.sel, other: u[0] }); app.sel = null; return; }
-      if (e.ctrlKey || e.metaKey) { const cur = new Set(app.multi && app.multi.length ? app.multi : app.sel ? [app.sel] : []); if (cur.has(u[0])) cur.delete(u[0]); else cur.add(u[0]); clearSel(); if (cur.size === 1) app.sel = [...cur][0]; else app.multi = [...cur]; }
-      else { const was = app.sel; clearSel(); app.sel = was === u[0] ? null : u[0]; }
+      if (e.ctrlKey || e.metaKey) { const set = new Set(cur); const has = stack.every((id) => set.has(id)); for (const id of stack) { if (has) set.delete(id); else set.add(id); } clearSel(); if (set.size === 1) app.sel = [...set][0]; else app.multi = [...set]; }
+      else { const was = cur.includes(u[0]) && cur.length === stack.length; clearSel(); if (!was) { app.sel = stack[0]; if (stack.length > 1) app.multi = stack; } }
     } else { clearSel(); toast(`${app.info.players[u[1]].name}의 유닛이에요.`); }
     Sound.play('click');
   } else if (freeTile(t.x, t.y)) {

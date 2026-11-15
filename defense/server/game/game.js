@@ -97,8 +97,11 @@ class Game {
   /** 효과 이벤트 (전장 id 를 앞에 붙임. '*' = 모든 전장) */
   fxp(field, arr) { this.fx.push([field, ...arr]); }
   mainOf(p) { return this.F['m' + p.idx]; }
-  occupied(f, x, y) { return this.units.some((u) => u.field === f && u.x === x && u.y === y); }
-  free(f, x, y) { const F = this.F[f]; return !!F && Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !F.blocked.has(x + ',' + y) && !this.occupied(f, x, y); }
+  /** 그 칸에 다른 유닛이 있는가 (type·owner 를 주면 같은 유닛 무리는 함께 설 수 있음) */
+  occupied(f, x, y, type = null, owner = null) { return this.units.some((u) => u.field === f && u.x === x && u.y === y && !(type && u.type === type && u.owner === owner)); }
+  free(f, x, y, type = null, owner = null) { const F = this.F[f]; return !!F && Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !F.blocked.has(x + ',' + y) && !this.occupied(f, x, y, type, owner); }
+  /** 같은 유닛 무리 위치 (내 전장) */
+  stackOf(pidx, type, fieldId) { const u = this.units.find((x) => x.owner === pidx && x.type === type && x.field === (fieldId || 'm' + pidx)); return u ? { x: u.x, y: u.y, field: u.field } : null; }
   /** 내가 유닛을 둘 수 있는 전장인가 */
   canUse(p, f) { return f === 'm' + p.idx || f === 'room' || (f === 'ev' && !!this.event); }
   autoSpot(owner, fieldId) {
@@ -116,16 +119,18 @@ class Game {
   }
 
   /** 소환진의 빈칸 (내 전장) */
-  summonSpot(pidx) {
+  summonSpot(pidx, type = null) {
+    // 같은 유닛이 이미 있으면 그 무리에 합류 (한 칸에 겹쳐 쌓임)
+    if (type) { const st = this.stackOf(pidx, type); if (st) return st; }
     const F = this.F['m' + pidx];
     for (const s of F.summonSpots) if (!this.occupied(F.id, s.x, s.y)) return { x: s.x, y: s.y, field: F.id };
     return null;
   }
   /** (x, y) 에서 가까운 빈칸 n개 (여럿을 한꺼번에 옮길 때) */
-  spotsNear(fid, x, y, n) {
+  spotsNear(fid, x, y, n, type = null, owner = null) {
     const F = this.F[fid];
     const out = [];
-    const cand = F.spots.filter((s) => !this.occupied(fid, s.x, s.y)).sort((a, b) => Math.max(Math.abs(a.x - x), Math.abs(a.y - y)) - Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) || Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
+    const cand = F.spots.filter((s) => !this.occupied(fid, s.x, s.y, type, owner)).sort((a, b) => Math.max(Math.abs(a.x - x), Math.abs(a.y - y)) - Math.max(Math.abs(b.x - x), Math.abs(b.y - y)) || Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
     for (const s of cand) { out.push(s); if (out.length >= n) break; }
     return out;
   }
@@ -295,7 +300,7 @@ class Game {
   }
 
   sendHome(u) {
-    const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
+    const home = u.home && this.free(u.home.field, u.home.x, u.home.y, u.type, u.owner) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
     if (!home) return;
     this.fxp(u.field, ['tele', u.x, u.y]);
     u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
@@ -306,7 +311,7 @@ class Game {
   returnUnits(fieldId) {
     for (const u of this.units) {
       if (u.field !== fieldId) continue;
-      const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
+      const home = u.home && this.free(u.home.field, u.home.x, u.home.y, u.type, u.owner) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
       if (!home) continue;
       this.fxp(u.field, ['tele', u.x, u.y]);
       u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
@@ -468,9 +473,10 @@ class Game {
     if (!type && this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return null;
     let t = tier;
     if (roll && tier === 2) t = this.rand() < 0.15 ? 3 : 2;
-    const s = spot || this.summonSpot(p.idx);
-    if (!s) return null;
     const ty = type || this.pick(D.BY_TIER[t]);
+    let s = spot && this.free(spot.field || 'm' + p.idx, spot.x, spot.y, ty, p.idx) ? spot : null;
+    if (!s) s = this.summonSpot(p.idx, ty);
+    if (!s) return null;
     const tt = D.UNIT_MAP[ty].tier;
     const u = { id: this.nextId++, owner: p.idx, type: ty, field: s.field || 'm' + p.idx, x: s.x, y: s.y, cdLeft: 0.3, dmg: 0, kills: 0, born: this.time, home: s.home || null };
     if (tt <= 5) p.bestTier = Math.max(p.bestTier, tt);
@@ -549,9 +555,9 @@ class Game {
         const cost = this.summonCost(p, premium);
         if (p.gold < cost) return '골드가 부족해요.';
         if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return `유닛은 한 사람당 ${D.ECON.maxUnits}개까지예요.`;
-        // 소환은 항상 내 전장의 소환진에서
-        const spot = this.summonSpot(p.idx);
-        if (!spot) return '빈자리가 없어요.';
+        // 소환은 내 전장의 소환진에서 (같은 유닛이 있으면 그 무리에 합류)
+        if (!this.summonSpot(p.idx)) return '빈자리가 없어요.';
+        const spot = null;
         p.gold -= cost;
         p.summons++;
         const u = this.giveUnit(p, this.rollTier(p, premium), false, spot);
@@ -562,7 +568,7 @@ class Game {
         if (!u || !c.tile) return null;
         const f = typeof c.field === 'string' ? c.field : u.field;
         if (!this.canUse(p, f)) return f === 'ev' ? '스토리 이벤트가 열려 있을 때만 보낼 수 있어요.' : '여기에는 내 유닛을 둘 수 없어요.';
-        if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
+        if (!this.free(f, c.tile[0], c.tile[1], u.type, u.owner)) return '거기에는 세울 수 없어요 (다른 유닛이 있어요).';
         if (f === 'room' && u.field !== 'room') {
           // 보스방에는 한 사람당 한 명: 이미 있으면 교대
           for (const o of this.units) if (o.owner === p.idx && o.field === 'room') this.sendHome(o);
@@ -597,31 +603,40 @@ class Game {
         const f = typeof c.field === 'string' ? c.field : list[0].field;
         if (f === 'room') { const u0 = list[0]; return this.command(pid, { t: 'send', unit: u0.id, field: 'room' }); }
         if (!this.canUse(p, f)) return '여기에는 내 유닛을 둘 수 없어요.';
-        const movers = list.filter((u) => !(u.field === f && u.x === c.tile[0] && u.y === c.tile[1]));
-        const spots = this.spotsNear(f, c.tile[0], c.tile[1], movers.length);
-        movers.sort((a, b) => Math.hypot(a.x - c.tile[0], a.y - c.tile[1]) - Math.hypot(b.x - c.tile[0], b.y - c.tile[1]));
-        movers.forEach((u, i) => { if (spots[i]) this.command(pid, { t: 'move', unit: u.id, tile: [spots[i].x, spots[i].y], field: f }); });
+        // 같은 종류끼리는 한 칸에 겹쳐서, 종류마다 목표 근처 칸 하나씩
+        const groups = {};
+        for (const u of list) (groups[u.type] ||= []).push(u);
+        const taken = new Set();
+        for (const [type, us] of Object.entries(groups)) {
+          const cand = this.spotsNear(f, c.tile[0], c.tile[1], 60, type, p.idx).filter((sp) => !taken.has(sp.x + ',' + sp.y));
+          const sp = cand[0];
+          if (!sp) continue;
+          taken.add(sp.x + ',' + sp.y);
+          for (const u of us) this.command(pid, { t: 'move', unit: u.id, tile: [sp.x, sp.y], field: f });
+        }
         return null;
       }
       case 'gather': {
         // 같은 유닛끼리 모으기: 고른 유닛 옆으로 같은 종류를 모음 (내 전장 안)
         const u = unit(c.unit);
         if (!u || u.field === 'room') return null;
-        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type && x.field === u.field);
-        if (!same.length) return '같은 유닛이 없어요.';
-        same.sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
-        // 이미 붙어 있는 건 그대로
-        const far = same.filter((x) => Math.max(Math.abs(x.x - u.x), Math.abs(x.y - u.y)) > 1);
-        const spots = this.spotsNear(u.field, u.x, u.y, far.length);
-        far.forEach((x, i) => { if (spots[i]) { x.x = spots[i].x; x.y = spots[i].y; x.cdLeft = Math.max(x.cdLeft, 0.4); this.fxp(x.field, ['tele', x.x, x.y]); } });
+        // 같은 종류를 모두 고른 유닛 칸으로 모아 한 무리로 (내 전장·이벤트 전장 안)
+        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type && x.field === u.field && (x.x !== u.x || x.y !== u.y));
+        if (!same.length) return '모을 같은 유닛이 없어요.';
+        for (const x of same) { this.fxp(x.field, ['tele', x.x, x.y]); x.x = u.x; x.y = u.y; x.cdLeft = Math.max(x.cdLeft, 0.4); }
+        this.fxp(u.field, ['tele', u.x, u.y]);
         return null;
       }
       case 'autoPlace': {
         // 길 옆 좋은 빈자리로 (여러 개 가능)
+        // 같은 칸의 같은 유닛 무리는 함께 옮김
         const list = (Array.isArray(c.units) ? c.units : [c.unit]).map(unit).filter(Boolean);
-        for (const u of list) {
-          const s = this.autoSpot(p.idx, u.field === 'room' ? 'm' + p.idx : u.field);
-          if (s) this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: s.field });
+        const groups = {};
+        for (const u of list) (groups[`${u.field}|${u.x},${u.y}|${u.type}`] ||= []).push(u);
+        for (const us of Object.values(groups)) {
+          const u0 = us[0];
+          const s = this.autoSpot(p.idx, u0.field === 'room' ? 'm' + p.idx : u0.field);
+          if (s) for (const u of us) this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: s.field });
         }
         return null;
       }
@@ -646,7 +661,7 @@ class Game {
         const f = c.field;
         if (f === 'm' + p.idx) return null;
         for (const u of this.units) if (u.owner === p.idx && u.field === f) {
-          const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(p.idx);
+          const home = u.home && this.free(u.home.field, u.home.x, u.home.y, u.type, u.owner) ? u.home : this.autoSpot(p.idx);
           if (!home) continue;
           this.fxp(u.field, ['tele', u.x, u.y]);
           u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
@@ -1063,7 +1078,7 @@ function botAct(g, p) {
   for (const u of mine) cnt0[D.UNIT_MAP[u.type].cat] = (cnt0[D.UNIT_MAP[u.type].cat] || 0) + D.UNIT_MAP[u.type].tier;
   const main = Object.keys(D.CATS).sort((a, b) => (cnt0[b] || 0) - (cnt0[a] || 0))[0];
   if (mine.length >= 12 && g.upgradeCost(p, main) <= cost * (1 + g.wave / 8) && p.gold >= g.upgradeCost(p, main)) { g.command(p.id, { t: 'upgrade', cat: main }); return; }
-  if (p.gold >= cost && mine.length < D.ECON.maxUnits - 2) { const r = g.command(p.id, { t: 'summon' }); if (r && r.ok) g.command(p.id, { t: 'autoPlace', unit: r.ok }); return; }
+  if (p.gold >= cost && mine.length < D.ECON.maxUnits - 2) { g.command(p.id, { t: 'summon' }); return; }
   if (mine.length >= D.ECON.maxUnits - 2) {
     const weak = mine.find((u) => D.UNIT_MAP[u.type].tier === 1 && byType[u.type].length === 1);
     if (weak) g.command(p.id, { t: 'sell', unit: weak.id });

@@ -32,6 +32,14 @@ const glowTex = (() => {
   g.fillStyle = r; g.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(c);
 })();
+/** 아래가 밝고 위로 갈수록 사라지는 세로 그라데이션 (등급 오라 기둥) */
+const auraTex = (() => {
+  const c = document.createElement('canvas'); c.width = 4; c.height = 64;
+  const g = c.getContext('2d'); const r = g.createLinearGradient(0, 64, 0, 0);
+  r.addColorStop(0, 'rgba(255,255,255,0.95)'); r.addColorStop(0.35, 'rgba(255,255,255,0.45)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, 4, 64);
+  return new THREE.CanvasTexture(c);
+})();
 const C = (hex) => new THREE.Color(hex);
 const shade = (hex, k) => { const c = C(hex); c.multiplyScalar(k); return '#' + c.getHexString(); };
 
@@ -205,6 +213,20 @@ function makeUnit(t, owner, cat) {
   if (L.wep === 'staff') { const orb = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: L.fx, blending: THREE.AdditiveBlending, depthWrite: false })); orb.position.y = 0.68; orb.scale.setScalar(0.28); pivot.add(orb); }
   if (L.wep === 'bow') { pivot.position.set(0.24, 0.42, 0.14); pivot.rotation.set(0, 0, 0.2); }
   body.add(pivot);
+  // 등급 오라: 등급 색 빛기둥 (높을수록 크고 진하게, 히든은 무지개 + 도는 고리)
+  const AURA = { 1: [0.2, 0.75], 2: [0.42, 0.95], 3: [0.55, 1.1], 4: [0.65, 1.3], 5: [0.75, 1.5], 6: [0.7, 1.45], 7: [0.85, 1.9] };
+  const [aOp, aH] = AURA[t.tier] || AURA[1];
+  const aura = new THREE.Mesh(Cyl(0.44, 0.48, aH, 24, true), new THREE.MeshBasicMaterial({ map: auraTex, color: t.hero ? L.fx : tierCol, transparent: true, opacity: aOp, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  aura.position.y = aH / 2 + 0.05;
+  root.add(aura);
+  const rings = [];
+  if (t.tier >= 5) {
+    for (let i = 0; i < (t.hidden ? 3 : 1); i++) {
+      const rg = new THREE.Mesh(Tor(0.5 + i * 0.08, 0.018, 6, 40), new THREE.MeshBasicMaterial({ color: tierCol, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+      rg.rotation.x = Math.PI / 2; rg.position.y = 0.2 + i * 0.35;
+      root.add(rg); rings.push(rg);
+    }
+  }
   // 높은 등급: 빛 + 후광
   let glow = null;
   if (t.tier >= 4 || t.hero) {
@@ -213,7 +235,7 @@ function makeUnit(t, owner, cat) {
     root.add(glow);
   }
   if (t.tier === 5) { const halo = new THREE.Mesh(Tor(0.14, 0.015, 6, 24), new THREE.MeshBasicMaterial({ color: '#fff3a0' })); halo.rotation.x = Math.PI / 2; halo.position.y = 1.08; body.add(halo); }
-  return { root, body, pivot, base, glow, t, L, wep: L.wep, atkT: -9, face: 0, faceTo: 0, lunge: new THREE.Vector3(), scale };
+  return { root, body, pivot, base, glow, aura, aOp, rings, t, L, wep: L.wep, atkT: -9, face: 0, faceTo: 0, lunge: new THREE.Vector3(), scale };
 }
 
 // ───────── 요괴 생김새 ─────────
@@ -706,7 +728,8 @@ function fx(f, app) {
   const wp = (x10, y10, y = 0.4) => new THREE.Vector3(worldX(x10 / 10), y, worldZ(y10 / 10));
   switch (kind) {
     case 'atk': {
-      const [, uid, eid, dmg, k, tier, crit, ex, ey] = f;
+      const [, uid0, eid, dmg, k, tier, crit, ex, ey] = f;
+      const uid = (S.leaderOf && S.leaderOf.get(uid0)) || uid0;
       const u = S.units.get(uid);
       const target = S.enemies.get(eid);
       const tpos = target ? target.root.position.clone().setY(0.4 * (target.sc || 1)) : wp(ex, ey);
@@ -827,8 +850,16 @@ function render(app, now) {
   if (!document.hidden && rawDt < 1) autoQuality(rawDt);
   const v = app.vf || app.v;
   const T = now / 1000;
-  // ── 유닛 ──
+  // ── 유닛 ── (같은 칸의 같은 유닛은 한 모델로, 머리 위에 ×n)
   const seen = new Set();
+  S.stacks = new Map();
+  S.leaderOf = new Map();
+  for (const u of v.units) {
+    const key = `${u[1]}|${u[2]}|${u[3]},${u[4]}`;
+    const st = S.stacks.get(key);
+    if (!st) S.stacks.set(key, { lead: u, n: 1, ids: [u[0]] }); else { st.n++; st.ids.push(u[0]); if (u[0] < st.lead[0]) st.lead = u; }
+  }
+  for (const st of S.stacks.values()) for (const id of st.ids) S.leaderOf.set(id, st.lead[0]);
   for (const u of v.units) {
     const [id, owner, type, x, y, , lvl] = u;
     seen.add(id);
@@ -854,6 +885,19 @@ function render(app, now) {
     else o.pivot.rotation.x = at < 0.25 ? -2.4 + swing * 3.6 : -0.7 + Math.sin(T * 1.5 + id) * 0.05;
     if (o.glow) { o.glow.material.opacity = 0.35 + Math.sin(T * 3 + id) * 0.15; }
     o.lvl = lvl;
+    o.root.visible = S.leaderOf.get(id) === id;
+    if (o.root.visible) {
+      // 오라 맥박 · 히든은 무지개로 바뀌고 고리가 돌고 반짝임
+      o.aura.material.opacity = o.aOp * (0.75 + Math.sin(T * 2.5 + id) * 0.25);
+      o.aura.rotation.y = T * 0.5;
+      if (o.t.hidden) {
+        const col = new THREE.Color().setHSL((T * 0.15 + id * 0.1) % 1, 0.9, 0.6);
+        o.aura.material.color.copy(col);
+        o.rings.forEach((rg, i) => { rg.material.color.setHSL((T * 0.15 + i * 0.33) % 1, 0.95, 0.65); rg.rotation.z = T * (i % 2 ? -2 : 2); rg.position.y = 0.2 + i * 0.35 + Math.sin(T * 2 + i) * 0.08; });
+        if (Math.random() < dt * 8) spark(o.root.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.3 + Math.random() * 1.2, (Math.random() - 0.5) * 0.8)), col.getStyle(), 1, 0.3, 0.2, 0.7, 0.8, -1);
+      } else o.rings.forEach((rg) => { rg.rotation.z = T * 1.5; rg.position.y = 0.25 + Math.sin(T * 2) * 0.1; });
+      if (o.t.tier >= 4 && !o.t.hidden && Math.random() < dt * 3) spark(o.root.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.2, (Math.random() - 0.5) * 0.7)), S.cat.tiers[o.t.tier - 1].color, 1, 0.1, 0.15, 0.9, 1.2, -1);
+    }
   }
   for (const [id, o] of S.units) if (!seen.has(id)) { S.dyn.remove(o.root); spark(o.root.position.clone().setY(0.4), '#ffffff', 8, 1.5, 0.2, 0.4); S.units.delete(id); }
   // ── 요괴 ──
@@ -1009,25 +1053,35 @@ function drawOverlay(app, now, dt) {
     g.fillRect(x - w / 2, y, (w * o.hp) / 100, hh);
     if (o.fl & 2) { g.font = `${14 * k}px sans-serif`; g.fillText('💫', x, y - 12 * k); }
   }
-  // 유닛 표시: 영웅 레벨, 합성 가능 ✦
+  // 유닛 머리 위: 이름표(등급 색) · 무리 수 ×n · 영웅 레벨 · 합성 가능 ✦
   const ready = new Set();
   const cnt = {};
   for (const u of app.v.units) if (u[1] === app.myIdx) cnt[u[2]] = (cnt[u[2]] || 0) + 1;
   for (const [id, n] of Object.entries(cnt)) { const need = app.cat.mergeNeed[app.unitMap[id].tier]; if (need && n >= need) ready.add(id); }
-  for (const u of v.units) {
-    const o = S.units.get(u[0]); if (!o) continue;
-    const isHero = o.t.hero;
-    const mergeable = u[1] === app.myIdx && ready.has(u[2]);
-    if (!isHero && !mergeable) continue;
-    const [x, y] = project(o.root.position.clone().setY(1.25 * o.scale));
-    if (isHero) {
-      g.font = `bold ${12 * k}px 'Noto Sans KR', sans-serif`;
-      const s = `Lv.${u[6]}`;
-      const w = g.measureText(s).width + 10 * k;
-      g.fillStyle = '#0a2a2acc'; g.strokeStyle = '#48f0d8'; g.lineWidth = 1.5 * k;
-      roundRect(g, x - w / 2, y - 9 * k, w, 18 * k, 8 * k); g.fill(); g.stroke();
-      g.fillStyle = '#b8fff0'; g.fillText(s, x, y);
-    } else { g.font = `bold ${12 * k}px sans-serif`; g.fillStyle = '#ffe060'; g.strokeStyle = '#000'; g.lineWidth = 2.5 * k; g.strokeText('✦', x, y); g.fillText('✦', x, y); }
+  const fsz = Math.max(9, Math.min(12, 11 * (S.zoom ? 1 / Math.sqrt(S.zoom) : 1)));
+  for (const st of (S.stacks || new Map()).values()) {
+    const u = st.lead;
+    const o = S.units.get(u[0]); if (!o || !o.root.visible) continue;
+    const t = o.t;
+    const col = t.hidden ? `hsl(${(now / 15) % 360},90%,70%)` : S.cat.tiers[t.tier - 1].color;
+    const [x, y] = project(o.root.position.clone().setY(1.12 * o.scale + 0.1));
+    let label = t.name + (t.hero ? ` Lv.${u[6]}` : '');
+    g.font = `800 ${fsz * k}px 'Noto Sans KR', sans-serif`;
+    const w = g.measureText(label).width + 10 * k;
+    g.fillStyle = 'rgba(12,8,16,0.72)';
+    roundRect(g, x - w / 2, y - 8 * k, w, 16 * k, 7 * k); g.fill();
+    g.strokeStyle = col; g.lineWidth = (t.tier >= 4 ? 1.8 : 1) * k; g.stroke();
+    g.fillStyle = col; g.fillText(label, x, y + 0.5 * k);
+    if (st.n > 1) {
+      // 무리 수
+      const bx = x + w / 2 + 2 * k, by = y - 9 * k;
+      g.font = `900 ${13 * k}px 'Jua', sans-serif`;
+      const s2 = `×${st.n}`;
+      const bw = g.measureText(s2).width + 10 * k;
+      g.fillStyle = '#ffd040'; roundRect(g, bx - 4 * k, by - 2 * k, bw, 18 * k, 9 * k); g.fill();
+      g.fillStyle = '#2a1408'; g.textAlign = 'left'; g.fillText(s2, bx + 1 * k, by + 7.5 * k); g.textAlign = 'center';
+    }
+    if (u[1] === app.myIdx && ready.has(u[2])) { g.font = `bold ${13 * k}px sans-serif`; g.fillStyle = '#ffe060'; g.strokeStyle = '#000'; g.lineWidth = 2.5 * k; g.strokeText('✦', x - w / 2 - 7 * k, y); g.fillText('✦', x - w / 2 - 7 * k, y); }
   }
   // 번개
   S.zaps = S.zaps.filter((z) => {

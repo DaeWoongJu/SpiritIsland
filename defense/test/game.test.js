@@ -66,6 +66,26 @@ test('소환 · 합성 · 판매 · 강화', () => {
   assert.strictEqual(g.command('b', { t: 'sell', unit: g.units[0].id }), null);
 });
 
+test('같은 유닛은 한 칸에 겹쳐 쌓임', () => {
+  const g = new Game(roster(1), { mapId: 'g1', seed: 21 });
+  const p = g.players[0];
+  p.gold = 1e5;
+  const a = g.command('a', { t: 'summon' });
+  const ua = g.units.find((u) => u.id === a.ok);
+  // 같은 종류를 하나 더 주면 그 무리에 합류
+  const ub = g.giveUnit(p, 1, false, null, ua.type);
+  assert.deepStrictEqual([ub.x, ub.y], [ua.x, ua.y]);
+  // 다른 종류는 그 칸에 못 섬
+  const other = D.UNITS.find((t) => t.tier === 1 && t.id !== ua.type).id;
+  const uc = g.giveUnit(p, 1, false, null, other);
+  assert.notDeepStrictEqual([uc.x, uc.y], [ua.x, ua.y]);
+  assert.strictEqual(typeof g.command('a', { t: 'move', unit: uc.id, tile: [ua.x, ua.y] }), 'string');
+  // 무리째 옮기기 (길 옆으로)
+  g.command('a', { t: 'autoPlace', units: [ua.id, ub.id] });
+  assert.deepStrictEqual([ua.x, ua.y], [ub.x, ub.y]);
+  assert.ok(!g.F.m0.zone.has(ua.x + ',' + ua.y));
+});
+
 test('전설 2개 → 신화', () => {
   const g = new Game(roster(1), { mapId: 'h-ring', seed: 2 });
   g.players[0].gold = 1000;
