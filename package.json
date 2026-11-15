@@ -10,7 +10,7 @@
     "dev": "node --watch server/index.js",
     "share": "npx -y cloudflared tunnel --url http://localhost:3000",
     "icons": "node scripts/make-icons.js",
-    "test": "node --test test/*.test.js arnak/test/*.test.js champions/test/*.test.js keepout/test/*.test.js lotr/test/*.test.js unlock/test/*.test.js",
+    "test": "node --test test/*.test.js arnak/test/*.test.js champions/test/*.test.js keepout/test/*.test.js lotr/test/*.test.js unlock/test/*.test.js defense/test/*.test.js",
     "test:e2e:save": "node test/e2e-save.js",
     "test:e2e": "node test/e2e.js",
     "arnak": "node arnak/server/index.js",
@@ -32,7 +32,10 @@
     "unlock": "node unlock/server/index.js",
     "unlock:play": "node unlock/server/index.js --open",
     "share:unlock": "npx -y cloudflared tunnel --url http://localhost:3500",
-    "test:e2e:unlock": "node unlock/test/e2e.js"
+    "test:e2e:unlock": "node unlock/test/e2e.js",
+    "defense": "node defense/server/index.js",
+    "defense:play": "node defense/server/index.js --open",
+    "share:defense": "npx -y cloudflared tunnel --url http://localhost:3600"
   },
   "engines": {
     "node": ">=18"

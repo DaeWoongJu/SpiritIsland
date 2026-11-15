@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs><radialGradient id="g" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#ffd86a"/><stop offset=".6" stop-color="#e8502a"/><stop offset="1" stop-color="#7a1a18"/></radialGradient></defs>
+  <rect x="58" y="6" width="12" height="14" rx="3" fill="#3a2418"/>
+  <ellipse cx="64" cy="66" rx="42" ry="46" fill="url(#g)" stroke="#3a1410" stroke-width="5"/>
+  <path d="M26 50h76M24 66h80M26 82h76" stroke="#7a1a18" stroke-width="3" opacity=".55"/>
+  <rect x="44" y="104" width="40" height="12" rx="4" fill="#3a2418"/>
+  <text x="64" y="80" font-size="40" text-anchor="middle" font-family="serif" font-weight="900" fill="#2a0a08">魔</text>
+</svg>
