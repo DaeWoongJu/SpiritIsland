@@ -150,7 +150,7 @@ function renderRoom() {
   $('#btn-bot').textContent = bot ? '🤖 AI 동료 빼기' : '🤖 AI 동료 넣기';
 }
 
-const KIND_FILTERS = [['all', '전체'], ['양쪽 돌격', '양쪽 돌격'], ['위아래 돌격', '위아래 돌격'], ['순환', '순환'], ['쌍둥이 길', '쌍둥이 길'], ['쌍둥이 순환', '쌍둥이 순환'], ['합류', '합류'], ['세 방향 돌격', '세 방향']];
+const KIND_FILTERS = [['all', '전체'], ['외길', '외길'], ['긴 외길', '긴 외길'], ['결계 돌격', '결계 돌격'], ['순환', '순환'], ['큰 순환', '큰 순환']];
 function renderMaps() {
   const r = app.room;
   const host = r.hostId === app.you;
@@ -221,7 +221,7 @@ function startView(msg) {
   if (!app.use3d) { canvas.width = m.W * T; canvas.height = m.H * T; }
   if (fresh) {
     addFeed(`🗺 맵 「${m.name}」 (${m.kindName}) · 난이도 ${msg.info.diff.name}`, 'wave');
-    addFeed(msg.info.loopMode ? `🔁 순환 맵: 양쪽 입구에서 나온 요괴가 빙글빙글 돌아요. 살아 있는 요괴가 ${msg.info.diff.limit}마리가 되면 패배! 보스는 ${app.cat.bossTime}초 안에 잡아야 해요.` : `⚔ 요괴가 양쪽에서 몰려와요! 결계(⛩️)에 닿으면 생명이 줄어요 (보스는 -10).`, 'info');
+    addFeed(msg.info.loopMode ? `🔁 순환 맵: 입구에서 나온 요괴가 빙글빙글 돌아요. 살아 있는 요괴가 ${msg.info.diff.limit}마리가 되면 패배! 보스는 ${app.cat.bossTime}초 안에 잡아야 해요.` : `⚔ 요괴가 입구(보라색 소용돌이)에서 몰려와요! 끝(⛩️)에 닿으면 생명이 줄어요 (보스는 -10). 둘은 각자 자기 전장을 막고, 📖 보스방에서는 함께 싸워요.`, 'info');
     addFeed('💡 빈칸을 누르고 Q(소환) — 같은 유닛 3개면 F(합성)! 유닛 클릭 후 빈칸 클릭으로 이동.', 'info');
   }
 }
@@ -240,10 +240,11 @@ function setup3d() {
 function fieldMap(fid) {
   const mp = app.info.maps;
   if (!mp) return app.info.map;
-  return fid[0] === 'm' ? mp.main : fid[0] === 'r' ? mp.room : mp.event;
+  return fid[0] === 'm' ? mp.main : fid === 'room' ? mp.room : mp.event;
 }
 function fieldName(fid) {
   if (fid === 'ev') return '스토리 이벤트 전장';
+  if (fid === 'room') return '보스방 (함께)';
   const i = Number(fid.slice(1));
   const who = i === app.myIdx ? '내' : `${app.info.players[i] ? app.info.players[i].name : '?'}의`;
   return fid[0] === 'm' ? `${who} 전장` : `${who} 보스방`;
@@ -281,12 +282,13 @@ function renderFieldTabs() {
     tabs.push(`<button data-f="m${p}" class="${app.viewField === 'm' + p ? 'cur' : ''} ${danger ? 'danger' : ''}">${p === me ? '🏯 내 전장' : `👀 ${esc(app.info.players[p].name)}`} <small>${lifeTxt(f)}</small></button>`);
   }
   const my = v.players[me];
-  const room = fst('r' + me);
-  tabs.push(`<button data-f="r${me}" class="${app.viewField === 'r' + me ? 'cur' : ''} ${my.story.active ? 'alert' : ''}">📖 내 보스방 <small>${my.story.active ? `⏳${my.story.left}초` : '대기'}</small></button>`);
+  const st = v.story;
+  tabs.push(`<button data-f="room" class="${app.viewField === 'room' ? 'cur' : ''} ${st.active ? 'alert' : ''}">📖 보스방 (함께) <small>${st.active ? `⏳${st.left}초` : '대기'}</small></button>`);
+  void my;
   if (v.event) tabs.push(`<button data-f="ev" class="${app.viewField === 'ev' ? 'cur' : ''} alert">⚔ 스토리 이벤트 <small>⏳${v.event.left}초</small></button>`);
   else tabs.push(`<button disabled title="정해진 웨이브에 열려요">⚔ 스토리 이벤트 <small>${v.nextEvent ? `${v.nextEvent}웨이브` : '끝'}</small></button>`);
   // 보스방·이벤트를 보고 있으면 보내기/돌려보내기
-  if (app.viewField !== 'm' + me && (app.viewField === 'ev' || app.viewField === 'r' + me)) {
+  if (app.viewField === 'ev' || app.viewField === 'room') {
     const n = v.units.filter((u) => u[1] === me && u[8] === app.viewField).length;
     tabs.push('<span style="flex:1"></span>');
     tabs.push(`<button data-act="dispatch">⚔ 정예 3명 보내기</button><button data-act="recall" ${n ? '' : 'disabled'}>↩ 돌려보내기 (${n})</button>`);
@@ -556,7 +558,7 @@ function renderSelected() {
     <div class="hint">${cat.icon} ${cat.name} · 피해 ${t.dmg} · ${(1 / t.cd).toFixed(1)}회/초 · 사거리 ${t.range}${t.cat === 'blade' ? ' · 날아다니는 적 공격 불가' : ''}</div>
     <div>${esc(t.desc)}</div>
     <div class="hint">누적 피해 ${fmt(dmg)} · ${mine ? '내 유닛' : `${esc(app.info.players[owner].name)}의 유닛`} · 📍${esc(fieldName(ufield || 'm0'))}${need ? ` · 같은 유닛 ${have}/${need}` : ''}</div>
-    ${mine && u ? `<div class="acts">${ufield !== 'm' + app.myIdx ? '<button class="small" data-send="home">↩ 내 전장으로</button>' : ''}${ufield !== 'r' + app.myIdx ? '<button class="small" data-send="room">📖 보스방으로</button>' : ''}${app.v.event && ufield !== 'ev' ? '<button class="small" data-send="ev">⚔ 이벤트로</button>' : ''}</div>` : ''}
+    ${mine && u ? `<div class="acts">${ufield !== 'm' + app.myIdx ? '<button class="small" data-send="home">↩ 내 전장으로</button>' : ''}${ufield !== 'room' ? '<button class="small" data-send="room">📖 보스방으로</button>' : ''}${app.v.event && ufield !== 'ev' ? '<button class="small" data-send="ev">⚔ 이벤트로</button>' : ''}</div>` : ''}
     ${mine && u ? recipeHints(type) : ''}
     ${t.hero ? `<div style="color:#8ff0e0"><b>Lv.${lvl}</b> / 10 · 처치 ${kills} · 피해 +${(lvl - 1) * 12}% (요괴를 잡을수록 성장)</div>` : ''}
     ${mine && u && t.hero ? '<div class="acts"><span class="hint">영웅은 합성·판매하지 않아요 · 빈칸 클릭 = 이동</span></div>' : ''}
@@ -567,7 +569,7 @@ function renderSelected() {
 }
 onPress($('#selected'), (b) => {
   if (b.dataset.merge) { const x = app.v.units.find((q) => q[1] === app.myIdx && q[2] === b.dataset.merge); if (x) { cmd({ t: 'merge', unit: x[0] }); Sound.play('merge'); } }
-  else if (b.dataset.send) { const f = b.dataset.send === 'home' ? 'm' + app.myIdx : b.dataset.send === 'room' ? 'r' + app.myIdx : 'ev'; cmd({ t: 'send', unit: app.sel, field: f }); Sound.play('click'); }
+  else if (b.dataset.send) { const f = b.dataset.send === 'home' ? 'm' + app.myIdx : b.dataset.send === 'room' ? 'room' : 'ev'; cmd({ t: 'send', unit: app.sel, field: f }); Sound.play('click'); }
   else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft, unit: app.sel }); Sound.play('merge'); }
   else if (b.dataset.a) action(b.dataset.a);
 });
@@ -648,7 +650,8 @@ function renderSideTabs() {
   const badge = (d, n) => { const el = document.querySelector(`#sidetabs [data-d=${d}] .badge`); el.textContent = n; el.classList.toggle('hidden', !n); };
   badge('recipe', p.craftable.length);
   badge('mission', p.tickets || 0);
-  badge('story', p.story.states.filter((x) => x === 'open').length + (p.story.active ? 1 : 0));
+  const sv = app.v.story;
+  badge('story', sv.states.filter((x) => x === 'open').length + (sv.active ? 1 : 0));
   for (const b of document.querySelectorAll('#sidetabs button')) b.classList.toggle('on', b.dataset.d === app.drawer);
 }
 function toggleDrawer(d) { if (app.drawer === d) closeDrawer(); else { app.drawer = d; $('#drawer').classList.remove('hidden'); renderDrawer(); renderSideTabs(); Sound.play('click'); } }
@@ -684,11 +687,12 @@ function renderDrawer() {
       ${p.missions.map(([id, cur, ok]) => { const m = app.missionMap[id]; return `<div class="st ${ok ? 'cleared' : 'open'}"><div class="t">${ok ? '✅' : m.icon} ${esc(m.name)}</div><div>${esc(m.desc)} — <b>${ok ? '완료' : `${cur}/${m.goal}`}</b></div></div>`; }).join('')}`;
   } else if (app.drawer === 'story') {
     const names = { open: '도전 가능', active: '도전 중', cleared: '클리어', locked: '잠김' };
-    html += `<h3>📖 보스 스토리</h3><div class="hint">각자 <b>내 보스방</b>에서 장마다 보스를 따로 잡아요 (${app.cat.storyTime}초 제한). 도전하면 내 전장에서 정예를 보스방으로 보내세요 — 끝나면 자동으로 돌아와요. 클리어하면 <b>히든 조합 재료</b>를 얻어요.</div>
-      ${app.cat.story.map((st, i) => { const state = p.story.states[i]; const it = app.cat.items[st.item]; return `<div class="st ${state}"><div class="t">${st.ch}장 「${esc(st.title)}」 ${st.icon} <span class="hint">${names[state]}${state === 'locked' ? ` · ${st.wave}웨이브부터` : ''}</span></div>
+    const sv = app.v.story;
+    html += `<h3>📖 보스 스토리 (함께)</h3><div class="hint">보스방은 <b>둘이 같이</b> 써요. 누가 도전을 누르든 장마다 보스가 나오고 (${app.cat.storyTime}초 제한), 둘 다 자기 전장에서 정예를 보내 함께 잡아요 — 끝나면 자동으로 돌아와요. 클리어하면 <b>둘 다</b> 히든 조합 재료를 얻어요.</div>
+      ${app.cat.story.map((st, i) => { const state = sv.states[i]; const it = app.cat.items[st.item]; return `<div class="st ${state}"><div class="t">${st.ch}장 「${esc(st.title)}」 ${st.icon} <span class="hint">${names[state]}${state === 'locked' ? ` · ${st.wave}웨이브부터` : ''}</span></div>
         <div class="hint">보스: ${esc(st.boss)} · 보상 ${it.icon} ${esc(it.name)} + 골드 ${st.gold}${st.ch % 2 === 0 ? ' + 영웅 영입권' : ''}</div>
         ${state === 'cleared' ? `<div class="hint">“${esc(st.outro)}”</div>` : ''}
-        <div class="acts">${state === 'open' ? `<button class="primary" data-story="${st.id}" ${p.story.active || p.story.cd ? 'disabled' : ''}>⚔ 도전 + 정예 3명 보내기${p.story.cd ? ` (${p.story.cd}초)` : ''}</button>` : ''}${state === 'active' ? `<button data-view="r${app.myIdx}">📖 보스방 보기 (⏳${p.story.left}초)</button>` : ''}</div></div>`; }).join('')}
+        <div class="acts">${state === 'open' ? `<button class="primary" data-story="${st.id}" ${sv.active || sv.cd ? 'disabled' : ''}>⚔ 도전 + 정예 3명 보내기${sv.cd ? ` (${sv.cd}초)` : ''}</button>` : ''}${state === 'active' ? `<button data-view="room">📖 보스방 보기 (⏳${sv.left}초)</button> <button data-join="1">⚔ 나도 정예 3명 보내기</button>` : ''}</div></div>`; }).join('')}
       <div class="sec">⚔ 스토리 이벤트 (함께)</div>
       <div class="hint">${app.cat.events.map((e) => `${e.wave}웨이브: ${e.icon} ${esc(e.boss)}`).join(' · ')} — 열리면 둘 다 이벤트 전장에 유닛을 보내 ${app.cat.eventTime}초 안에 함께 잡아요. 성공하면 모두 영웅 영입권 + 🌠 별의 파편.</div>`;
   }
@@ -697,7 +701,8 @@ function renderDrawer() {
 onPress($('#drawer'), (b) => {
   if (b.dataset.close) closeDrawer();
   else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft }); Sound.play('merge'); }
-  else if (b.dataset.story) { cmd({ t: 'story', id: b.dataset.story }); setTimeout(() => { cmd({ t: 'dispatch', field: 'r' + app.myIdx, n: 3 }); switchField('r' + app.myIdx); }, 150); }
+  else if (b.dataset.story) { cmd({ t: 'story', id: b.dataset.story }); setTimeout(() => { cmd({ t: 'dispatch', field: 'room', n: 3 }); switchField('room'); }, 150); }
+  else if (b.dataset.join) { cmd({ t: 'dispatch', field: 'room', n: 3 }); switchField('room'); }
   else if (b.dataset.view) switchField(b.dataset.view);
 });
 
@@ -714,8 +719,8 @@ function onStoryFx(f) {
   const [, kind, id, who] = f;
   if (kind === 'event') { const ev = app.cat.events[id]; storyBox(ev.icon, `스토리 이벤트 — ${ev.boss}`, ev.intro); banner('⚔ 스토리 이벤트!'); Sound.play('boss'); return; }
   const st = app.cat.story.find((x) => x.id === id);
-  if (!st || who !== app.myIdx) return;
-  if (kind === 'start') { storyBox(st.icon, `${st.ch}장 「${st.title}」`, st.intro); Sound.play('boss'); }
+  if (!st) return;
+  if (kind === 'start') { storyBox(st.icon, `${st.ch}장 「${st.title}」`, st.intro + (who !== app.myIdx ? `\n— ${app.info.players[who].name}님이 도전을 시작했어요. 보스방에 정예를 보내 도와주세요!` : '')); Sound.play('boss'); }
   if (kind === 'clear') { storyBox('📜', `${st.ch}장 클리어!`, st.outro); banner(`📖 ${st.ch}장 클리어!`); Sound.play('win'); }
 }
 
@@ -767,7 +772,7 @@ document.addEventListener('keydown', (e) => {
   if (key === 'q' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('summon'); return; }
   if (key === 'w' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', premium: true, tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('rare'); return; }
   if (key === 'r') { toggleDrawer('recipe'); return; }
-  if (key === 'tab') { e.preventDefault(); const order = ['m' + app.myIdx, 'r' + app.myIdx, ...(app.v.event ? ['ev'] : []), ...app.info.players.map((_, i) => 'm' + i).filter((f) => f !== 'm' + app.myIdx)]; switchField(order[(order.indexOf(app.viewField) + 1) % order.length]); return; }
+  if (key === 'tab') { e.preventDefault(); const order = ['m' + app.myIdx, 'room', ...(app.v.event ? ['ev'] : []), ...app.info.players.map((_, i) => 'm' + i).filter((f) => f !== 'm' + app.myIdx)]; switchField(order[(order.indexOf(app.viewField) + 1) % order.length]); return; }
   if (map[key]) { action(map[key]); return; }
   if (['1', '2', '3'].includes(key)) { action('up', Object.keys(app.cat.cats)[Number(key) - 1]); return; }
   if (key === 'p' || key === ' ') { send({ t: 'pause' }); e.preventDefault(); return; }
@@ -983,7 +988,7 @@ function openGuide() {
       <li>✨ <b>합성 (F)</b>: 같은 유닛 <b>3개</b>(전설은 2개)를 모으면 한 등급 위 <b>무작위</b> 유닛이 돼요. 일반 → 희귀 → 에픽 → 전설 → 신화. 합성할 수 있는 유닛에는 ✦ 표시가 떠요.</li>
       <li>🏯 <b>각자 전장</b>: 둘이 <b>각자 자기 전장</b>을 막아요. 위쪽 탭으로 동료 전장을 볼 수 있고(Tab 키), 어느 한쪽이라도 무너지면 패배!</li>
       <li>📜 <b>조합법 (R)</b>: 정해진 재료를 모으면 원하는 유닛을 만들 수 있어요. <b>히든 조합</b>은 ???로 가려져 있고, 보스 스토리 보상 재료가 필요해요.</li>
-      <li>📖 <b>보스 스토리</b>: 각자 자기 보스방에서 6장의 스토리 보스를 따로 잡아요. ⚔ <b>스토리 이벤트</b>(12·24·36웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>
+      <li>📖 <b>보스 스토리</b>: <b>보스방은 둘이 함께</b> 써요 — 6장의 스토리 보스를 같이 유닛을 보내 잡아요. ⚔ <b>스토리 이벤트</b>(12·24·36웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>
       <li>🦸 <b>영웅</b>: 오른쪽 <b>🎖 미션</b>(처치 수, 전설 만들기, 보스 잡기 등)을 달성하면 <b>영웅 영입권</b>을 받아요. 영웅 8명 중 3명이 제시되고 하나를 골라 데려와요. 영웅은 요괴를 잡을수록 레벨이 올라 강해져요 (최대 Lv.10).</li>
       <li>🖱 유닛을 누르고 빈칸을 누르면 <b>이동</b>, Shift+클릭이면 내 유닛 둘의 자리 <b>바꾸기</b>. 오른쪽 클릭은 선택 취소.</li>
       <li>⚔🏹🔮 <b>강화 (1·2·3)</b>: 검술·궁술·술법 유닛 피해를 각각 올려요. 내 유닛 구성에 맞춰 강화하세요.</li>
@@ -993,9 +998,8 @@ function openGuide() {
     </ul>
     <p><b>맵 종류</b></p>
     <ul>
-      <li>➡ <b>양쪽 돌격·위아래 돌격·합류·쌍둥이 길</b>: 요괴가 <b>양쪽 입구</b>(보라색 소용돌이)에서 나와 결계(⛩️)로 몰려와요. 결계에 닿으면 생명이 줄고, 보스는 -10!</li>
-      <li>🔁 <b>순환·쌍둥이 순환</b>: 양쪽 입구에서 나온 요괴가 계속 돌아요. 살아 있는 요괴가 한도에 닿으면 패배. 보스는 ${app.cat ? app.cat.bossTime : 100}초 안에 잡아야 해요.</li>
-      <li>쌍둥이 맵은 길이 두 개라 <b>한 사람씩 한쪽</b>을 맡으면 좋아요 (자동 배치도 내 쪽 절반 우선).</li>
+      <li>➡ <b>외길·긴 외길·결계 돌격</b>: 요괴가 <b>입구 하나</b>(보라색 소용돌이)에서 나와 끝(⛩️)으로 가요. 끝에 닿으면 생명이 줄고, 보스는 -10!</li>
+      <li>🔁 <b>순환·큰 순환</b>: 입구에서 나온 요괴가 계속 돌아요. 살아 있는 요괴가 한도에 닿으면 패배. 보스는 ${app.cat ? app.cat.bossTime : 100}초 안에 잡아야 해요.</li>
     </ul>
     <p><b>요괴 특징</b>: 🐦‍⬛ 까마귀는 날아다녀서 검술 유닛이 못 때려요 · 💀 갑옷 망령은 방어가 높아 강한 한 방이나 방어 깎기가 좋아요 · 🟢 점액은 죽으면 분열 · 🐸 보물 두꺼비를 잡으면 보상!</p>
     <p><b>웨이브 변이</b>: 질풍(빠름)·거구(체력)·재생·강철(방어)·떼거리(수가 많음)·유령(회피). 오른쪽 '다음 웨이브'에서 미리 확인하세요.</p>

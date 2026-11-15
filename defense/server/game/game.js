@@ -5,7 +5,7 @@ const D = require('./data');
 const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
-const FIELD_HP = 0.62; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
+const FIELD_HP = 1.05; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
 function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
@@ -50,12 +50,13 @@ class Game {
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
       bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
-      items: {}, story: { cleared: [], active: null, deadline: 0, cdUntil: 0 },
+      items: {},
     }));
     // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
     this.fields = [];
     for (const p of this.players) this.fields.push(makeField('m' + p.idx, 'main', p.idx, this.map, this.diff));
-    for (const p of this.players) this.fields.push(makeField('r' + p.idx, 'room', p.idx, M.ROOM_MAP, this.diff));
+    this.fields.push(makeField('room', 'room', null, M.ROOM_MAP, this.diff));
+    this.story = { cleared: [], active: null, deadline: 0, cdUntil: 0, by: null }; // 보스 스토리 진행 (둘이 함께)
     this.fields.push(makeField('ev', 'event', null, M.EVENT_MAP, this.diff));
     this.F = Object.fromEntries(this.fields.map((f) => [f.id, f]));
     this.mains = this.fields.filter((f) => f.kind === 'main');
@@ -87,7 +88,7 @@ class Game {
   occupied(f, x, y) { return this.units.some((u) => u.field === f && u.x === x && u.y === y); }
   free(f, x, y) { const F = this.F[f]; return !!F && Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !F.blocked.has(x + ',' + y) && !this.occupied(f, x, y); }
   /** 내가 유닛을 둘 수 있는 전장인가 */
-  canUse(p, f) { return f === 'm' + p.idx || f === 'r' + p.idx || (f === 'ev' && !!this.event); }
+  canUse(p, f) { return f === 'm' + p.idx || f === 'room' || (f === 'ev' && !!this.event); }
   autoSpot(owner, fieldId) {
     const p = typeof owner === 'string' ? this.player(owner) : this.players[owner];
     const F = this.F[fieldId || 'm' + p.idx];
@@ -179,46 +180,51 @@ class Game {
   }
 
   // ───────── 보스 스토리 (각자) ─────────
-  storyState(p, s) {
-    if (p.story.cleared.includes(s.id)) return 'cleared';
-    if (p.story.active === s.id) return 'active';
+  storyState(s) {
+    const st = this.story;
+    if (st.cleared.includes(s.id)) return 'cleared';
+    if (st.active === s.id) return 'active';
     const i = D.STORY.indexOf(s);
-    if (i > 0 && !p.story.cleared.includes(D.STORY[i - 1].id)) return 'locked';
+    if (i > 0 && !st.cleared.includes(D.STORY[i - 1].id)) return 'locked';
     if (this.wave < s.wave) return 'locked';
     return 'open';
   }
+  /** 보스 스토리 시작 — 보스방은 둘이 함께 쓰고, 둘 다 유닛을 보낼 수 있음 */
   startStory(p, id) {
     const s = D.STORY.find((x) => x.id === id);
     if (!s) return null;
-    const st = this.storyState(p, s);
-    if (st === 'cleared') return '이미 깬 장이에요.';
-    if (st === 'locked') return this.wave < s.wave ? `${s.wave}웨이브부터 도전할 수 있어요.` : '이전 장을 먼저 깨야 해요.';
-    if (p.story.active) return '이미 도전 중이에요.';
-    if (p.story.cdUntil > this.time) return `잠시 뒤 다시 도전할 수 있어요 (${Math.ceil(p.story.cdUntil - this.time)}초)`;
-    const base = hpBase(Math.max(this.wave, s.wave)) * this.diff.hp * FIELD_HP;
-    this.spawnBoss('r' + p.idx, { k: s.model, name: s.boss, hp: base * s.hp, speed: 0.5, armor: s.armor, storyBoss: s.id, owner: p.idx, gold: 0 });
-    p.story.active = s.id;
-    p.story.deadline = this.time + D.STORY_TIME;
-    this.msg(`📖 ${p.name}: 보스 스토리 ${s.ch}장 「${s.title}」 시작! 보스방에 유닛을 보내세요`, 'event');
+    const state = this.storyState(s);
+    if (state === 'cleared') return '이미 깬 장이에요.';
+    if (state === 'locked') return this.wave < s.wave ? `${s.wave}웨이브부터 도전할 수 있어요.` : '이전 장을 먼저 깨야 해요.';
+    if (this.story.active) return '이미 도전 중이에요.';
+    if (this.story.cdUntil > this.time) return `잠시 뒤 다시 도전할 수 있어요 (${Math.ceil(this.story.cdUntil - this.time)}초)`;
+    const base = hpBase(Math.max(this.wave, s.wave)) * this.diff.hp * FIELD_HP * Math.max(1, this.players.length * 0.85);
+    this.spawnBoss('room', { k: s.model, name: s.boss, hp: base * s.hp, speed: 0.5, armor: s.armor, storyBoss: s.id, gold: 0 });
+    this.story.active = s.id;
+    this.story.deadline = this.time + D.STORY_TIME;
+    this.story.by = p.idx;
+    this.msg(`📖 ${p.name}: 보스 스토리 ${s.ch}장 「${s.title}」 시작! 둘 다 보스방에 유닛을 보내 함께 잡으세요`, 'event');
     this.fxp('*', ['story', 'start', s.id, p.idx]);
     return null;
   }
-  endStory(p, win) {
-    const s = D.STORY.find((x) => x.id === p.story.active);
-    p.story.active = null;
+  endStory(win) {
+    const s = D.STORY.find((x) => x.id === this.story.active);
+    this.story.active = null;
     if (win) {
-      p.story.cleared.push(s.id);
-      p.items[s.item] = (p.items[s.item] || 0) + 1;
-      p.gold += s.gold;
-      if (s.ch % 2 === 0) { p.tickets++; this.offerHero(p); }
-      this.msg(`📖 ${p.name}: ${s.ch}장 「${s.title}」 클리어! ${D.ITEMS[s.item].icon} ${D.ITEMS[s.item].name} · 골드 +${s.gold}${s.ch % 2 === 0 ? ' · 영웅 영입권 +1' : ''}`, 'legend');
-      this.fxp('*', ['story', 'clear', s.id, p.idx]);
+      this.story.cleared.push(s.id);
+      for (const p of this.players) {
+        p.items[s.item] = (p.items[s.item] || 0) + 1;
+        p.gold += s.gold;
+        if (s.ch % 2 === 0) { p.tickets++; this.offerHero(p); }
+      }
+      this.msg(`📖 ${s.ch}장 「${s.title}」 클리어! 모두 ${D.ITEMS[s.item].icon} ${D.ITEMS[s.item].name} · 골드 +${s.gold}${s.ch % 2 === 0 ? ' · 영웅 영입권 +1' : ''}`, 'legend');
+      this.fxp('*', ['story', 'clear', s.id, -1]);
     } else {
-      p.story.cdUntil = this.time + D.STORY_COOLDOWN;
-      for (const e of this.enemies) if (e.field === 'r' + p.idx) { e.dead = true; e.gone = true; }
-      this.msg(`📖 ${p.name}: 「${s.boss}」이(가) 어둠 속으로 사라졌어요… ${D.STORY_COOLDOWN}초 뒤 다시 도전`, 'bad');
+      this.story.cdUntil = this.time + D.STORY_COOLDOWN;
+      for (const e of this.enemies) if (e.field === 'room') { e.dead = true; e.gone = true; }
+      this.msg(`📖 「${s.boss}」이(가) 어둠 속으로 사라졌어요… ${D.STORY_COOLDOWN}초 뒤 다시 도전`, 'bad');
     }
-    this.returnUnits('r' + p.idx);
+    this.returnUnits('room');
   }
 
   spawnBoss(field, o) {
@@ -352,7 +358,7 @@ class Game {
     }
     if (by != null && this.players[by]) this.players[by].kills++;
     this.fxp(e.field, ['die', e.id, Math.round(e.x * 10), Math.round(e.y * 10), e.boss ? 2 : e.mini ? 1 : 0]);
-    if (e.storyBoss) { this.endStory(this.players[e.owner], true); return; }
+    if (e.storyBoss) { this.endStory(true); return; }
     if (e.eventBoss) { this.closeEvent(true); return; }
     const owner = F.kind === 'main' ? this.players[F.owner] : null;
     if (e.boss && owner) owner.bosses++;
@@ -723,7 +729,7 @@ class Game {
       for (const F of this.mains) this.spawn(s, F.id);
     }
     // 보스방·이벤트 제한 시간
-    for (const p of this.players) if (p.story.active && p.story.deadline <= this.time) this.endStory(p, false);
+    if (this.story.active && this.story.deadline <= this.time) this.endStory(false);
     if (this.event && this.event.deadline <= this.time) this.closeEvent(false);
     // 요괴 이동·상태
     const sealed = this.globalSlowUntil > this.time;
@@ -894,13 +900,13 @@ class Game {
       event: this.event ? { idx: this.event.idx, left: Math.max(0, Math.ceil(this.event.deadline - this.time)) } : null,
       nextEvent: (D.EVENTS.find((e) => e.wave > this.wave) || {}).wave || null,
       eventsDone: this.eventsDone, discovered: this.discovered,
+      story: { cleared: this.story.cleared, active: this.story.active, left: this.story.active ? Math.max(0, Math.ceil(this.story.deadline - this.time)) : 0, cd: Math.max(0, Math.ceil(this.story.cdUntil - this.time)), states: D.STORY.map((s) => this.storyState(s)) },
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
         rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
         items: p.items, craftable: this.craftable(p),
-        story: { cleared: p.story.cleared, active: p.story.active, left: p.story.active ? Math.max(0, Math.ceil(p.story.deadline - this.time)) : 0, cd: Math.max(0, Math.ceil(p.story.cdUntil - this.time)), states: D.STORY.map((s) => this.storyState(p, s)) },
       })),
       units: this.units.map((u) => [u.id, u.owner, u.type, u.x, u.y, Math.round(u.dmg || 0), D.UNIT_MAP[u.type].hero ? D.heroLevel(u.kills || 0) : 0, u.kills || 0, u.field]),
       enemies: this.enemies.map((e) => [e.id, e.k, Math.round(e.x * 100), Math.round(e.y * 100), Math.round((e.hp / e.maxHp) * 100), (e.slowUntil > this.time || this.globalSlowUntil > this.time ? 1 : 0) | (e.stunUntil > this.time ? 2 : 0) | (e.burn && e.burn.until > this.time ? 4 : 0) | (e.poison && e.poison.until > this.time ? 8 : 0) | (e.flying ? 16 : 0) | (e.boss ? 32 : 0) | (e.mini ? 64 : 0), e.field]),
@@ -928,8 +934,9 @@ function botAct(g, p) {
   // 스토리 이벤트: 정예 둘을 보냄 / 보스 스토리: 셋을 보냄
   if (g.event && !mine.some((u) => u.field === 'ev')) g.command(p.id, { t: 'dispatch', field: 'ev', n: 2 });
   const strong = mine.filter((u) => D.UNIT_MAP[u.type].tier >= 3).length;
-  const next = D.STORY.find((s) => g.storyState(p, s) === 'open');
-  if (!p.story.active && next && strong >= 4 + next.ch && p.story.cdUntil <= g.time) { if (!g.command(p.id, { t: 'story', id: next.id })) g.command(p.id, { t: 'dispatch', field: 'r' + p.idx, n: 3 }); }
+  const next = D.STORY.find((s) => g.storyState(s) === 'open');
+  if (!g.story.active && next && strong >= 4 + next.ch && g.story.cdUntil <= g.time) g.command(p.id, { t: 'story', id: next.id });
+  if (g.story.active && !mine.some((u) => u.field === 'room')) g.command(p.id, { t: 'dispatch', field: 'room', n: 3 });
   // 필살기: 내 전장에서 가장 앞선 요괴
   const front = g.enemies.filter((e) => e.field === 'm' + p.idx);
   if (p.skillCd <= 0 && front.length >= 6) {

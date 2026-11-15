@@ -192,71 +192,39 @@ function rasterize(pts, loop) {
 const line = (nodes) => ({ pts: extendOut(toTiles(nodes), true), loop: false });
 const lineOut = (nodes) => ({ pts: extendOut(extendOut(toTiles(nodes), true), false), loop: false });
 
-/** 양쪽 돌격: 왼쪽·오른쪽(또는 위·아래)에서 들어와 가운데 결계(⛩️)로 */
-function genDual(r, vertical = false, depth = 0) {
+const SIDES = ['left', 'right', 'top', 'bottom'];
+/** 외길: 한쪽 가장자리 입구에서 반대쪽(또는 옆쪽) 가장자리로 빠져나감 */
+function genLine(r, long = false) {
+  const from = SIDES[Math.floor(r() * 4)];
+  const opp = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' }[from];
+  const to = r() < 0.7 ? opp : SIDES.filter((x) => x !== from && x !== opp)[Math.floor(r() * 2)];
+  const nodes = walkPath(r, { from, to, minLen: long ? 22 + Math.floor(r() * 6) : 14 + Math.floor(r() * 6) }) || walkPath(r, { from: 'left', to: 'right', minLen: 12 });
+  return { kind: 'line', paths: [lineOut(nodes)] };
+}
+/** 결계 돌격: 한쪽 입구에서 들어와 맵 가운데 결계(⛩️)까지 */
+function genCenter(r) {
   for (let t = 0; t < 60; t++) {
-    const base = vertical ? [2 + Math.floor(r() * 4), 2] : [3 + Math.floor(r() * 2), 1 + Math.floor(r() * 3)];
-    const [sa, sb] = vertical ? ['top', 'bottom'] : ['left', 'right'];
-    const a = walkTo(r, { from: sa, target: base, minLen: 7 + Math.floor(r() * 5), maxLen: 16 });
-    if (!a) continue;
-    const avoid = new Set(a.map((n) => n.join(',')));
-    const b = walkTo(r, { from: sb, target: base, minLen: Math.max(6, a.length - 3), maxLen: a.length + 4, avoid });
-    if (!b) continue;
-    return { kind: 'line', paths: [line(a), line(b)], base: [base.map(tx)] };
+    const base = [3 + Math.floor(r() * 2), 1 + Math.floor(r() * 3)];
+    const a = walkTo(r, { from: SIDES[Math.floor(r() * 4)], target: base, minLen: 13 + Math.floor(r() * 6), maxLen: 26 });
+    if (a) return { kind: 'line', paths: [line(a)], base: [base.map(tx)] };
   }
-  if (depth > 2) throw new Error('맵 생성 실패');
-  return genDual(r, !vertical, depth + 1);
+  return genLine(r);
 }
-function genTwinLine(r) {
-  // 왼쪽·오른쪽 절반에 길이 하나씩, 서로 반대 방향 (한 사람이 한쪽씩)
-  const flip = r() < 0.5;
-  const a = walkPath(r, { cols: [0, 3], from: flip ? 'top' : 'bottom', to: flip ? 'bottom' : 'top', minLen: 9 });
-  const b = walkPath(r, { cols: [4, 7], from: flip ? 'bottom' : 'top', to: flip ? 'top' : 'bottom', minLen: 9 });
-  if (!a || !b) return genDual(r);
-  return { kind: 'line', paths: [lineOut(a), lineOut(b)] };
-}
-function genMerge(r) {
-  // 왼쪽·오른쪽에서 들어와 한 길로 합쳐진 뒤 위나 아래로 빠져나감
-  for (let t = 0; t < 80; t++) {
-    const down = r() < 0.5;
-    const j = [2 + Math.floor(r() * 4), down ? 1 + Math.floor(r() * 2) : 2 + Math.floor(r() * 2)];
-    const trunk = walkTo(r, { from: down ? 'bottom' : 'top', target: j, minLen: 3, maxLen: 8 });
-    if (!trunk) continue;
-    trunk.reverse(); // j → 가장자리
-    const tset = new Set(trunk.map((n) => n.join(',')));
-    const a = walkTo(r, { from: 'left', target: j, minLen: 4, maxLen: 12, avoid: tset });
-    if (!a) continue;
-    const av2 = new Set([...tset, ...a.map((n) => n.join(','))]);
-    const b = walkTo(r, { from: 'right', target: j, minLen: 4, maxLen: 12, avoid: av2 });
-    if (!b) continue;
-    const rest = trunk.slice(1);
-    return { kind: 'line', paths: [lineOut(a.concat(rest)), lineOut(b.concat(rest))] };
-  }
-  return genDual(r);
-}
-/** 순환 길에 입구 두 개 (반대편) */
-const loop2 = (nodes) => { const pts = toTiles(nodes); return [{ pts, loop: true }, { pts, loop: true, start: 0.5 }]; };
-function genLoop(r) {
-  return { kind: 'loop', paths: loop2(loopPath(r, { size: [6, 16] })) };
-}
-function genTwinLoop(r) {
-  const a = loopPath(r, { cols: [0, 2], size: [4, 8] });
-  const b = loopPath(r, { cols: [4, 6], size: [4, 8] });
-  if (!a || !b) return genLoop(r);
-  return { kind: 'loop', paths: [{ pts: toTiles(a), loop: true }, { pts: toTiles(b), loop: true, start: 0.5 }] };
+function genLoop(r, big = false) {
+  return { kind: 'loop', paths: [{ pts: toTiles(loopPath(r, { size: big ? [12, 20] : [6, 14] })), loop: true }] };
 }
 
-const GENERATORS = { line: (r) => genDual(r, false), dualv: (r) => genDual(r, true), twin: genTwinLine, merge: genMerge, loop: genLoop, twinloop: genTwinLoop };
-const KIND_NAMES = { line: '양쪽 돌격', dualv: '위아래 돌격', twin: '쌍둥이 길', merge: '합류', loop: '순환', twinloop: '쌍둥이 순환' };
+const GENERATORS = { line: (r) => genLine(r), long: (r) => genLine(r, true), center: genCenter, loop: (r) => genLoop(r), bigloop: (r) => genLoop(r, true) };
+const KIND_NAMES = { line: '외길', long: '긴 외길', center: '결계 돌격', loop: '순환', bigloop: '큰 순환' };
 
 // ───────── 손으로 만든 맵 (굵은 격자 노드) ─────────
 const HAND = [
-  { id: 'h-ring', name: '첫 번째 결계', theme: 'temple', kindName: '순환', make: () => ({ kind: 'loop', paths: loop2([[1, 1], [6, 1], [6, 3], [1, 3]]) }), note: '연습용 사각 순환 (입구 둘)' },
-  { id: 'h-snake', name: '굽이굽이 뱀길', theme: 'bamboo', kindName: '양쪽 돌격', make: () => ({ kind: 'line', paths: [line([[0, 0], [2, 0], [2, 4], [3, 4], [3, 2]]), line([[7, 4], [5, 4], [5, 0], [4, 0], [4, 2], [3, 2]])], base: [[tx(3), tx(2)]] }), note: '양쪽에서 굽이쳐 가운데 사당으로' },
-  { id: 'h-zigzag', name: '번개 고개', theme: 'snow', kindName: '양쪽 돌격', make: () => ({ kind: 'line', paths: [line([[0, 4], [1, 4], [1, 0], [2, 0], [2, 3], [3, 3], [3, 2]]), line([[7, 0], [6, 0], [6, 4], [5, 4], [5, 1], [4, 1], [4, 2], [3, 2]])], base: [[tx(3), tx(2)]] }), note: '오르내리는 두 고갯길' },
-  { id: 'h-double', name: '두 개의 연못', theme: 'swamp', kindName: '쌍둥이 순환', make: () => ({ kind: 'loop', paths: [{ pts: toTiles([[0, 0], [3, 0], [3, 4], [0, 4]]), loop: true }, { pts: toTiles([[4, 0], [7, 0], [7, 4], [4, 4]]), loop: true, start: 0.5 }] }), note: '한 사람씩 맡는 두 순환' },
-  { id: 'h-cross', name: '세거리 장터', theme: 'lantern', kindName: '세 방향 돌격', make: () => ({ kind: 'line', paths: [line([[0, 0], [0, 2], [3, 2]]), line([[7, 4], [7, 2], [4, 2], [4, 3], [3, 3], [3, 2]]), line([[2, 4], [1, 4], [1, 3], [2, 3], [2, 1], [3, 1], [3, 2]])], base: [[tx(3), tx(2)]] }), note: '세 방향에서 몰려드는 장터' },
-  { id: 'h-figure', name: '용암 8자 고리', theme: 'lava', kindName: '순환', make: () => ({ kind: 'loop', paths: loop2([[0, 0], [3, 0], [3, 2], [6, 2], [6, 0], [7, 0], [7, 4], [4, 4], [4, 3], [1, 3], [1, 4], [0, 4]]) }), note: '울퉁불퉁 큰 순환' },
+  { id: 'h-ring', name: '첫 번째 결계', theme: 'temple', kindName: '순환', make: () => ({ kind: 'loop', paths: [{ pts: toTiles([[1, 1], [6, 1], [6, 3], [1, 3]]), loop: true }] }), note: '연습용 사각 순환' },
+  { id: 'h-snake', name: '굽이굽이 뱀길', theme: 'bamboo', kindName: '긴 외길', make: () => ({ kind: 'line', paths: [lineOut([[0, 0], [7, 0], [7, 2], [0, 2], [0, 4], [7, 4]])] }), note: '세 번 꺾이는 긴 길' },
+  { id: 'h-spiral', name: '소용돌이 사당', theme: 'night', kindName: '결계 돌격', make: () => ({ kind: 'line', paths: [line([[0, 0], [7, 0], [7, 4], [0, 4], [0, 1], [6, 1], [6, 3], [1, 3], [1, 2], [5, 2]])], base: [[tx(5), tx(2)]] }), note: '가운데 사당으로 빨려드는 길' },
+  { id: 'h-zigzag', name: '번개 고개', theme: 'snow', kindName: '외길', make: () => ({ kind: 'line', paths: [lineOut([[0, 4], [1, 4], [1, 0], [3, 0], [3, 4], [5, 4], [5, 0], [7, 0]])] }), note: '위아래로 오르내리는 길' },
+  { id: 'h-coast', name: '파도 치는 해안선', theme: 'sea', kindName: '외길', make: () => ({ kind: 'line', paths: [lineOut([[0, 1], [2, 1], [2, 3], [4, 3], [4, 1], [6, 1], [6, 3], [7, 3]])] }), note: '파도 모양 길' },
+  { id: 'h-figure', name: '용암 8자 고리', theme: 'lava', kindName: '큰 순환', make: () => ({ kind: 'loop', paths: [{ pts: toTiles([[0, 0], [3, 0], [3, 2], [6, 2], [6, 0], [7, 0], [7, 4], [4, 4], [4, 3], [1, 3], [1, 4], [0, 4]]), loop: true }] }), note: '울퉁불퉁 큰 순환' },
 ];
 
 // ───────── 시드로 만든 맵 목록 ─────────
@@ -303,13 +271,13 @@ for (const h of HAND) {
   const m = { id: h.id, name: h.name, theme: h.theme, kindName: h.kindName, W, H, seed: 7, note: h.note, ...h.make() };
   MAPS.push(decorate(m, rng(h.id.length * 977)));
 }
-let lineN = 0;
-GEN_LIST.forEach(([name, theme, kind], i) => MAPS.push(build('g' + (i + 1), name, theme, kind === 'line' && lineN++ % 2 ? 'dualv' : kind, 1000 + i * 7919)));
+const KIND_OF = { line: 'line', twin: 'center', merge: 'long', loop: 'loop', twinloop: 'bigloop' };
+GEN_LIST.forEach(([name, theme, kind], i) => MAPS.push(build('g' + (i + 1), name, theme, KIND_OF[kind], 1000 + i * 7919)));
 const MAP_MAP = Object.fromEntries(MAPS.map((m) => [m.id, m]));
 
 /** 보스방 (각자) · 스토리 이벤트 전장 (함께) */
-const ROOM_MAP = decorate({ id: 'room', name: '보스방', theme: 'night', kind: 'loop', kindName: '보스방', W, H, seed: 3, note: '보스 스토리 도전', paths: [{ pts: toTiles([[1, 1], [6, 1], [6, 3], [1, 3]]), loop: true }] }, rng(4242));
-const EVENT_MAP = decorate({ id: 'event', name: '스토리 이벤트 전장', theme: 'lava', kind: 'loop', kindName: '이벤트', W, H, seed: 5, note: '둘이 함께', paths: loop2([[0, 0], [3, 0], [3, 1], [4, 1], [4, 0], [7, 0], [7, 4], [4, 4], [4, 3], [3, 3], [3, 4], [0, 4]]) }, rng(777));
+const ROOM_MAP = decorate({ id: 'room', name: '보스방', theme: 'night', kind: 'loop', kindName: '보스방', W, H, seed: 3, note: '보스 스토리 (함께)', paths: [{ pts: toTiles([[1, 1], [6, 1], [6, 3], [1, 3]]), loop: true }] }, rng(4242));
+const EVENT_MAP = decorate({ id: 'event', name: '스토리 이벤트 전장', theme: 'lava', kind: 'loop', kindName: '이벤트', W, H, seed: 5, note: '둘이 함께', paths: [{ pts: toTiles([[0, 0], [3, 0], [3, 1], [4, 1], [4, 0], [7, 0], [7, 4], [4, 4], [4, 3], [3, 3], [3, 4], [0, 4]]), loop: true }] }, rng(777));
 
 /** 완전 랜덤 맵 (매번 새로) */
 function randomMap(seed) {
