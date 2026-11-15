@@ -26,6 +26,8 @@ class Game {
       id: p.id, name: p.name, idx: i, bot: !!p.bot, leader: D.LEADER_MAP[p.leader] ? p.leader : D.LEADERS[i % D.LEADERS.length].id,
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
+      // 미션·영웅
+      bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
     }));
     this.units = [];
     this.enemies = [];
@@ -47,7 +49,7 @@ class Game {
       if (p.loop) pts.push(pts[0]);
       const cum = [0];
       for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-      return { pts, cum, len: cum[cum.length - 1], loop: p.loop };
+      return { pts, cum, len: cum[cum.length - 1], loop: p.loop, start: p.start || 0 };
     });
     this.blocked = new Set();
     for (const [x, y] of this.map.pathTiles) this.blocked.add(x + ',' + y);
@@ -58,8 +60,17 @@ class Game {
       if (this.blocked.has(x + ',' + y)) continue;
       let d = 99;
       for (const [px, py] of this.map.pathTiles) d = Math.min(d, Math.max(Math.abs(px - x), Math.abs(py - y)));
-      this.spots.push({ x, y, d });
+      // 길마다 거리 (쌍둥이 맵에서 내 쪽 길 옆에 자동 배치)
+      const dp = this.map.paths.map((p) => {
+        let m = 99;
+        for (const k of M.rasterize(p.pts, p.loop)) { const [px, py] = k.split(',').map(Number); m = Math.min(m, Math.max(Math.abs(px - x), Math.abs(py - y))); }
+        return m;
+      });
+      this.spots.push({ x, y, d, dp });
     }
+    // 길 모양이 서로 다른 맵이면 사람마다 맡는 길을 나눔
+    const distinct = new Set(this.map.paths.map((p) => JSON.stringify(p.pts))).size;
+    this.sides = distinct > 1 && this.players.length > 1;
     this.nextPlan = this.planWave(1);
   }
 
@@ -71,13 +82,12 @@ class Game {
   free(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !this.blocked.has(x + ',' + y) && !this.occupied(x, y); }
   autoSpot(owner) {
     // 같은 편 유닛 근처 + 길에 가까운 빈칸 (쌍둥이 맵이면 내 쪽 절반 우선)
-    const half = this.players.length > 1 && this.map.paths.length > 1;
     const me = this.player(owner);
     let best = null, bs = Infinity;
     for (const s of this.spots) {
       if (this.occupied(s.x, s.y)) continue;
       let score = s.d * 10 + this.rand() * 4;
-      if (half) score += ((me.idx === 0) === (s.x < M.W / 2) ? 0 : 25);
+      if (this.sides) score += s.dp[me.idx % s.dp.length] * 6;
       if (score < bs) { bs = score; best = s; }
     }
     return best;
@@ -156,7 +166,7 @@ class Game {
     e.maxHp = e.hp;
     e.id = this.nextId++;
     e.path = s.path ?? (this.spawnCounter = (this.spawnCounter || 0) + 1) % this.paths.length;
-    e.dist = s.dist || 0;
+    e.dist = s.dist ?? this.paths[e.path].start * this.paths[e.path].len;
     e.travel = s.dist || 0;
     e.slowPct = 0; e.slowUntil = 0; e.stunUntil = 0; e.shred = 0; e.shredUntil = 0;
     e.poison = null; e.burn = null; e.laps = 0;
@@ -184,6 +194,7 @@ class Game {
     const t = D.UNIT_MAP[u.type];
     const p = this.players[u.owner];
     let dmg = t.dmg * (1 + D.ECON.upgradeStep * p.upg[t.cat]);
+    if (t.hero) dmg *= 1 + D.HERO_LV_DMG * (D.heroLevel(u.kills || 0) - 1);
     let as = 1;
     let range = t.range;
     if (p.leader === 'sword' && t.cat === 'blade') dmg *= 1.15;
@@ -221,7 +232,7 @@ class Game {
     e.hp -= a;
     if (u) { u.dmg = (u.dmg || 0) + a; this.players[u.owner].damage += a; }
     else if (opts.by != null) this.players[opts.by].damage += a;
-    if (e.hp <= 0.5) this.kill(e, u ? u.owner : opts.by);
+    if (e.hp <= 0.5) { if (u) u.kills = (u.kills || 0) + 1; this.kill(e, u ? u.owner : opts.by); }
     return a;
   }
 
@@ -235,7 +246,9 @@ class Game {
       p.gold += Math.round(g);
     }
     if (by != null && this.players[by]) this.players[by].kills++;
-    this.fx.push(['die', Math.round(e.x * 10), Math.round(e.y * 10), e.boss ? 2 : e.mini ? 1 : 0]);
+    this.fx.push(['die', e.id, Math.round(e.x * 10), Math.round(e.y * 10), e.boss ? 2 : e.mini ? 1 : 0]);
+    if (e.boss) for (const p of this.players) p.bosses++;
+    if (e.treasure) for (const p of this.players) p.toads++;
     if (e.split) {
       for (let i = 0; i < e.split; i++) {
         const c = this.spawn({ type: 'slime', path: e.path, dist: Math.max(0, e.dist - 0.3 * i) });
@@ -269,16 +282,17 @@ class Game {
   }
 
   /** 등급을 정해 유닛 주기 (auto: 빈자리 자동) */
-  giveUnit(p, tier, roll = false, spot = null) {
-    if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return null;
+  giveUnit(p, tier, roll = false, spot = null, type = null) {
+    if (!type && this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return null;
     let t = tier;
     if (roll && tier === 2) t = this.rand() < 0.15 ? 3 : 2;
     const s = spot || this.autoSpot(p.id);
     if (!s) return null;
-    const u = { id: this.nextId++, owner: p.idx, type: this.pick(D.BY_TIER[t]), x: s.x, y: s.y, cdLeft: 0.3, dmg: 0, born: this.time };
+    const u = { id: this.nextId++, owner: p.idx, type: type || this.pick(D.BY_TIER[t]), x: s.x, y: s.y, cdLeft: 0.3, dmg: 0, kills: 0, born: this.time };
+    if (t <= 5) p.bestTier = Math.max(p.bestTier, t);
     this.units.push(u);
     this.fx.push(['summon', u.x, u.y, t]);
-    if (t >= 4) this.msg(`✨ ${p.name}: ${D.TIERS[t - 1].name} 「${D.UNIT_MAP[u.type].icon} ${D.UNIT_MAP[u.type].name}」!`, t === 5 ? 'myth' : 'legend');
+    if (t >= 4 && t <= 5) this.msg(`✨ ${p.name}: ${D.TIERS[t - 1].name} 「${D.UNIT_MAP[u.type].icon} ${D.UNIT_MAP[u.type].name}」!`, t === 5 ? 'myth' : 'legend');
     return u;
   }
 
@@ -354,6 +368,7 @@ class Game {
         const u = unit(c.unit);
         if (!u) return null;
         const t = D.UNIT_MAP[u.type];
+        if (t.hero) return '영웅은 팔 수 없어요.';
         p.gold += Math.round(D.ECON.sellRate[t.tier] * (p.leader === 'merchant' ? 1.2 : 1));
         this.units = this.units.filter((x) => x !== u);
         return null;
@@ -363,6 +378,7 @@ class Game {
         if (!u) return null;
         const t = D.UNIT_MAP[u.type];
         const need = D.MERGE_NEED[t.tier];
+        if (t.hero) return '영웅은 합성하지 않아요. 요괴를 처치할수록 레벨이 올라요!';
         if (!need) return '신화 유닛은 더 합성할 수 없어요.';
         const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type).sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
         if (same.length < need - 1) return `같은 유닛이 ${need}개 있어야 합성할 수 있어요.`;
@@ -397,6 +413,20 @@ class Game {
         this.msg(`${D.BLESS_MAP[c.id].icon} ${p.name}: 축복 「${D.BLESS_MAP[c.id].name}」`, 'info');
         return null;
       }
+      case 'hero': {
+        if (!p.heroChoice || !p.heroChoice.includes(c.id)) return null;
+        let spot = null;
+        if (c.tile) { if (!this.free(c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1] }; }
+        const u = this.giveUnit(p, 6, false, spot, c.id);
+        if (!u) return '빈자리가 없어요.';
+        p.heroes.push(c.id);
+        p.tickets--;
+        p.heroChoice = null;
+        this.fx.push(['hero', u.x, u.y]);
+        this.msg(`🦸 ${p.name}: 영웅 「${D.UNIT_MAP[c.id].icon} ${D.UNIT_MAP[c.id].name}」 합류!`, 'myth');
+        this.offerHero(p);
+        return { ok: u.id };
+      }
       case 'skill': return this.useSkill(p, c);
       case 'ping': {
         if (typeof c.x === 'number' && typeof c.y === 'number') this.fx.push(['ping', Math.round(c.x * 10), Math.round(c.y * 10), p.idx]);
@@ -404,6 +434,34 @@ class Game {
       }
       default: return null;
     }
+  }
+
+  // ───────── 미션 · 영웅 ─────────
+  missionValue(p, stat) {
+    if (stat === 'kills') return p.kills;
+    if (stat === 'upgSum') return p.upg.blade + p.upg.bow + p.upg.magic;
+    if (stat === 'wave') return this.wave;
+    return p[stat] || 0;
+  }
+  checkMissions() {
+    for (const p of this.players) {
+      for (const m of D.MISSIONS) {
+        if (p.done.includes(m.id) || this.missionValue(p, m.stat) < m.goal) continue;
+        p.done.push(m.id);
+        p.tickets++;
+        this.msg(`🎖 ${p.name}: 미션 「${m.icon} ${m.name}」 달성! 영웅 영입권 +1`, 'legend');
+        this.fx.push(['mission', p.idx]);
+      }
+      this.offerHero(p);
+    }
+  }
+  offerHero(p) {
+    if (p.heroChoice || p.tickets <= 0) return;
+    const pool = D.HEROES.map((h) => h.id).filter((id) => !p.heroes.includes(id));
+    if (!pool.length) { p.tickets--; p.gold += 500; this.msg(`🦸 ${p.name}: 영웅을 모두 모아 영입권을 골드 500으로 바꿨어요.`, 'good'); return; }
+    const opts = [];
+    while (opts.length < Math.min(3, pool.length)) { const h = this.pick(pool); if (!opts.includes(h)) opts.push(h); }
+    p.heroChoice = opts;
   }
 
   useSkill(p, c) {
@@ -526,8 +584,10 @@ class Game {
       if (this.count >= this.limit) this.end(false, `요괴가 ${this.limit}마리 넘게 쌓였어요…`);
     } else if (this.lives <= 0) { this.lives = 0; this.end(false, '마을 결계가 무너졌어요…'); }
     if (!this.result && !this.endless && this.wave >= D.WAVES && !this.spawnQueue.length && !this.enemies.length) this.end(true, `${D.WAVES}웨이브를 모두 막아냈어요!`);
+    const tickNo = Math.round(this.time / dt);
+    if (tickNo % 20 === 0) this.checkMissions();
     // 봇
-    if (Math.floor(this.time / dt) % 10 === 0) for (const p of this.players) if (p.bot) botAct(this, p);
+    if (tickNo % 10 === 0) for (const p of this.players) if (p.bot) botAct(this, p);
   }
 
   bossAbility(e, dt) {
@@ -554,10 +614,13 @@ class Game {
     if (t.crit && this.rand() < t.crit.chance) { dmg *= t.crit.mult; crit = true; }
     if (p.bless.includes('crit') && this.rand() < 0.1 * p.bless.filter((b) => b === 'crit').length) { dmg *= 2; crit = true; }
     const kind = t.chain ? 'chain' : t.splash ? 'splash' : t.cat;
-    this.fx.push(['atk', u.x, u.y, Math.round(tg.x * 10), Math.round(tg.y * 10), kind, t.tier, crit ? 1 : 0]);
+    let first = true;
     const hit = (e, amt) => {
       if (t.execute && !e.boss && !e.mini && e.hp - amt <= e.maxHp * t.execute) amt = e.hp + 1;
-      this.hurt(e, amt, u, { pierce: t.pierceArmor });
+      const done = Math.round(this.hurt(e, amt, u, { pierce: t.pierceArmor }));
+      // 타격 효과: 첫 대상은 공격 모션과 함께, 나머지(광역·연쇄)는 맞은 표시만
+      if (first) { this.fx.push(['atk', u.id, e.id, done, kind, t.tier, crit ? 1 : 0, Math.round(e.x * 10), Math.round(e.y * 10)]); first = false; }
+      else this.fx.push(['hit', e.id, done, Math.round(e.x * 10), Math.round(e.y * 10)]);
       if (t.slow && (e.slowUntil <= this.time || e.slowPct <= t.slow.pct)) { e.slowPct = t.slow.pct; e.slowUntil = this.time + t.slow.dur; }
       if (t.poison && (!e.poison || e.poison.until < this.time || e.poison.dps <= t.poison.dps)) e.poison = { dps: t.poison.dps * (1 + D.ECON.upgradeStep * p.upg[t.cat]), until: this.time + t.poison.dur, by: u.owner };
       if (t.burn && (!e.burn || e.burn.until < this.time || e.burn.dps <= t.burn.dps)) e.burn = { dps: t.burn.dps * (1 + D.ECON.upgradeStep * p.upg[t.cat]), until: this.time + t.burn.dur, by: u.owner };
@@ -574,7 +637,7 @@ class Game {
         for (const e of this.enemies) { if (e.dead || done.has(e)) continue; const d = Math.hypot(e.x - cur.x, e.y - cur.y); if (d < bd) { bd = d; best = e; } }
         if (!best) break;
         amt *= 0.85;
-        this.fx.push(['zap', Math.round(cur.x * 10), Math.round(cur.y * 10), Math.round(best.x * 10), Math.round(best.y * 10)]);
+        this.fx.push(['zap', Math.round(cur.x * 10), Math.round(cur.y * 10), Math.round(best.x * 10), Math.round(best.y * 10), t.hero ? 1 : 0]);
         hit(best, amt);
         done.add(best); cur = best;
       }
@@ -603,11 +666,13 @@ class Game {
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
         rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, units: this.units.filter((u) => u.owner === p.idx).length,
+        missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
       })),
-      units: this.units.map((u) => [u.id, u.owner, u.type, u.x, u.y, Math.round(u.dmg || 0)]),
+      units: this.units.map((u) => [u.id, u.owner, u.type, u.x, u.y, Math.round(u.dmg || 0), D.UNIT_MAP[u.type].hero ? D.heroLevel(u.kills || 0) : 0, u.kills || 0]),
       enemies: this.enemies.map((e) => [e.id, e.k, Math.round(e.x * 100), Math.round(e.y * 100), Math.round((e.hp / e.maxHp) * 100), (e.slowUntil > this.time || this.globalSlowUntil > this.time ? 1 : 0) | (e.stunUntil > this.time ? 2 : 0) | (e.burn && e.burn.until > this.time ? 4 : 0) | (e.poison && e.poison.until > this.time ? 8 : 0) | (e.flying ? 16 : 0) | (e.boss ? 32 : 0) | (e.mini ? 64 : 0)]),
       zones: this.zones.map((z) => [Math.round(z.x * 10), Math.round(z.y * 10), z.r]),
       fx, msgs, result: this.result,
+      paths: undefined,
       boss: (() => { const b = this.enemies.find((e) => e.boss) || this.enemies.find((e) => e.mini); return b ? { name: b.name, hp: Math.round(b.hp), max: b.maxHp, left: b.deadline && this.loopMode ? Math.max(0, Math.ceil(b.deadline - this.time)) : null } : null; })(),
     };
   }
@@ -617,6 +682,7 @@ class Game {
 function botAct(g, p) {
   if (g.result) return;
   if (p.choice) g.command(p.id, { t: 'bless', id: p.choice[0] });
+  if (p.heroChoice) g.command(p.id, { t: 'hero', id: p.heroChoice[0] });
   // 합성할 수 있으면 합성
   const mine = g.units.filter((u) => u.owner === p.idx);
   const byType = {};

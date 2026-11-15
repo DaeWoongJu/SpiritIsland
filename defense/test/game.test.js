@@ -13,7 +13,7 @@ test('맵이 충분히 많고, 모든 길이 이어져 있다', () => {
   const ids = new Set();
   for (const m of [...M.MAPS, ...Array.from({ length: 100 }, (_, i) => M.randomMap(i * 7 + 1))]) {
     if (m.id !== 'random') { assert.ok(!ids.has(m.id), '중복 id ' + m.id); ids.add(m.id); }
-    assert.ok(m.paths.length >= 1, m.id);
+    assert.ok(m.paths.length >= 2, `${m.id}: 입구가 둘 이상이어야 함 (양쪽에서 나옴)`);
     for (const p of m.paths) {
       assert.ok(p.pts.length >= 3, m.id);
       for (let i = 1; i < p.pts.length; i++) {
@@ -94,6 +94,43 @@ test('AI 둘이서 쉬움 난이도는 끝까지 깬다', () => {
     while (!g.result && g.time < 3000) { g.tick(); g.fx.length = 0; g.msgs.length = 0; }
     assert.ok(g.result && g.result.win, `${mapId}: ${g.result && g.result.reason} (웨이브 ${g.wave})`);
   }
+});
+
+test('미션을 달성하면 영웅을 데려오고, 영웅은 처치로 레벨업', () => {
+  const g = new Game(roster(1), { mapId: 'h-snake', seed: 9 });
+  const p = g.players[0];
+  p.kills = 200;
+  g.checkMissions();
+  assert.strictEqual(p.tickets, 1);
+  assert.strictEqual(p.heroChoice.length, 3);
+  const id = p.heroChoice[0];
+  const r = g.command('a', { t: 'hero', id });
+  assert.ok(r && r.ok);
+  assert.strictEqual(p.tickets, 0);
+  const hero = g.units.find((u) => u.id === r.ok);
+  assert.strictEqual(hero.type, id);
+  assert.strictEqual(typeof g.command('a', { t: 'sell', unit: hero.id }), 'string');
+  assert.strictEqual(typeof g.command('a', { t: 'merge', unit: hero.id }), 'string');
+  const d1 = g.unitStats(hero).dmg;
+  hero.kills = 600;
+  assert.ok(g.unitStats(hero).dmg > d1 * 2);
+  // 같은 미션은 한 번만
+  g.checkMissions();
+  assert.strictEqual(p.tickets, 0);
+  // 소환으로는 영웅이 안 나옴
+  p.gold = 1e6;
+  for (let i = 0; i < 30; i++) g.command('a', { t: 'summon', premium: true });
+  assert.strictEqual(g.units.filter((u) => D.UNIT_MAP[u.type].hero).length, 1);
+});
+
+test('요괴가 양쪽 입구에서 나온다', () => {
+  const g = new Game(roster(2), { mapId: 'g1', seed: 10 });
+  for (let i = 0; i < 300; i++) g.tick();
+  assert.deepStrictEqual(new Set(g.enemies.map((e) => e.path)), new Set([0, 1]));
+  const lp = new Game(roster(2), { mapId: 'h-ring', seed: 10 });
+  for (let i = 0; i < 160; i++) lp.tick();
+  const starts = new Set(lp.enemies.map((e) => Math.round(e.dist - e.travel)));
+  assert.ok(starts.size >= 2, '순환 맵도 반대편 입구에서');
 });
 
 test('화면용 상태는 JSON으로 보낼 수 있다', () => {

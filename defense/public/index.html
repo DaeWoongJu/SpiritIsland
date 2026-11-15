@@ -74,6 +74,7 @@
         <div class="board-wrap">
           <canvas id="board"></canvas>
           <div id="bless" class="bless hidden"></div>
+          <div id="herochoice" class="bless hero-pick hidden"></div>
           <div id="banner" class="banner hidden"></div>
         </div>
         <div id="controls" class="controls"></div>
@@ -81,6 +82,7 @@
       <aside class="side-col">
         <div id="team" class="team"></div>
         <div id="selected" class="selected"></div>
+        <div id="missions" class="missions"></div>
         <div id="nextwave" class="nextwave"></div>
         <div class="tabs"><button data-tab="feed" class="on">소식</button><button data-tab="chat">채팅</button></div>
         <div id="feed" class="feed"></div>
@@ -92,7 +94,9 @@
   <div id="modal" class="modal hidden"><div class="modal-inner card"></div></div>
   <div id="toast" class="toast hidden"></div>
 
+  <script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.min.js", "three/addons/": "/vendor/three/examples/jsm/" } }</script>
   <script src="/sound.js"></script>
   <script src="/app.js"></script>
+  <script type="module" src="/board3d.js"></script>
 </body>
 </html>

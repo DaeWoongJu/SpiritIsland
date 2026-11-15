@@ -41,6 +41,12 @@ const Sound = (() => {
     win: () => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone(f, 0.3, 'triangle', 0.7, 0, i * 0.14)); },
     lose: () => { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.45, 'triangle', 0.6, 0, i * 0.22)); },
     hit: () => noise(0.05, 0.12, 2000),
+    slash: () => { noise(0.07, 0.22, 2500 + Math.random() * 1500); tone(900 + Math.random() * 300, 0.05, 'triangle', 0.12, -500); },
+    arrow: () => { tone(1400 + Math.random() * 300, 0.05, 'sine', 0.12, -900); },
+    zap: () => { tone(600 + Math.random() * 400, 0.08, 'sawtooth', 0.08, 500); },
+    kill: () => { tone(300 + Math.random() * 120, 0.08, 'square', 0.12, -200); noise(0.06, 0.12, 900); },
+    bigkill: () => { noise(0.5, 0.6, 200); tone(90, 0.6, 'sawtooth', 0.5, -40); [660, 880, 1100].forEach((f, i) => tone(f, 0.25, 'triangle', 0.4, 0, 0.15 + i * 0.08)); },
+    hero: () => { [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.4, 'triangle', 0.5, 0, i * 0.09)); noise(0.3, 0.3, 600); },
     bless: () => { [784, 988, 1175].forEach((f, i) => tone(f, 0.3, 'sine', 0.6, 0, i * 0.1)); },
     ping: () => { tone(1200, 0.12, 'sine', 0.5); tone(1500, 0.12, 'sine', 0.4, 0, 0.1); },
   };
@@ -48,7 +54,7 @@ const Sound = (() => {
     play(name) {
       if (!on || !SFX[name]) return;
       const now = performance.now();
-      if (last[name] && now - last[name] < 60) return;
+      if (last[name] && now - last[name] < (name === 'slash' || name === 'arrow' || name === 'zap' || name === 'kill' ? 45 : 60)) return;
       last[name] = now;
       try { SFX[name](); } catch { /* 무시 */ }
     },

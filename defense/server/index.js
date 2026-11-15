@@ -13,6 +13,7 @@ const M = require('./game/maps');
 
 const PORT = Number(process.env.PORT) || 3600;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const THREE_DIR = path.dirname(path.dirname(require.resolve('three')));
 const MAX_PLAYERS = 2;
 const COLORS = ['#58b8f8', '#f87898'];
 const BOT_NAME = 'AI 동료 단비';
@@ -22,7 +23,7 @@ const CATALOG = {
   tiers: D.TIERS, units: D.UNITS, cats: D.CATS, enemies: D.ENEMIES, bosses: D.BOSSES, miniboss: D.MINIBOSS, modifiers: D.MODIFIERS,
   leaders: D.LEADERS, blessings: D.BLESSINGS, difficulties: D.DIFFICULTIES, mergeNeed: D.MERGE_NEED, econ: { ...D.ECON, waveBonus: undefined, upgradeCost: undefined },
   summonOdds: D.SUMMON_ODDS, premiumOdds: D.PREMIUM_ODDS, waves: D.WAVES, waveTime: D.WAVE_TIME, bossTime: D.BOSS_TIME,
-  themes: M.THEMES, maps: M.MAPS.map(M.summary), colors: COLORS,
+  themes: M.THEMES, maps: M.MAPS.map(M.summary), colors: COLORS, missions: D.MISSIONS, heroLvDmg: D.HERO_LV_DMG,
 };
 
 // ───────────── HTTP ─────────────
@@ -32,6 +33,17 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
   let p = decodeURIComponent(url.pathname);
+  // 3D 전장용 three.js 를 node_modules 에서 제공
+  if (p.startsWith('/vendor/three/')) {
+    const file = path.normalize(path.join(THREE_DIR, p.slice('/vendor/three/'.length)));
+    if (!file.startsWith(THREE_DIR) || !/^(build|examples[\\/]jsm)[\\/]/.test(path.relative(THREE_DIR, file))) { res.writeHead(403); res.end(); return; }
+    fs.readFile(file, (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' });
+      res.end(data);
+    });
+    return;
+  }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, p));
   if (!file.startsWith(PUBLIC_DIR)) { res.writeHead(403); res.end(); return; }
