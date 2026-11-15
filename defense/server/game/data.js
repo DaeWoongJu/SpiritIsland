@@ -27,24 +27,24 @@ const UNITS = [
   { id: 'powder', tier: 1, name: '화약공', icon: '💣', cat: 'magic', dmg: 8, cd: 1.5, range: 2.8, splash: 0.9, desc: '작은 폭발로 여럿을 공격' },
   { id: 'needle', tier: 1, name: '독침꾼', icon: '🧪', cat: 'bow', dmg: 3, cd: 1.0, range: 3.0, poison: { dps: 7, dur: 3 }, desc: '독으로 계속 피해를 줍니다' },
   // ── 희귀 ──
-  { id: 'wave', tier: 2, name: '물결 검사', icon: '🌊', cat: 'blade', dmg: 34, cd: 0.8, range: 1.6, splash: 1.0, desc: '휘두르면 주변이 함께 베입니다' },
+  { id: 'wave', tier: 2, name: '물의 호흡 검사', icon: '🌊', cat: 'blade', dmg: 34, cd: 0.8, range: 1.6, splash: 1.0, desc: '휘두르면 주변이 함께 베입니다' },
   { id: 'wind', tier: 2, name: '바람 궁수', icon: '🍃', cat: 'bow', dmg: 15, cd: 0.38, range: 3.8, desc: '아주 빠르게 연사' },
   { id: 'frost', tier: 2, name: '얼음 무녀', icon: '❄️', cat: 'magic', dmg: 20, cd: 1.0, range: 3.0, slow: { pct: 0.45, dur: 2 }, desc: '강하게 얼려 느리게 만듭니다' },
   { id: 'spark', tier: 2, name: '뇌전 술사', icon: '⚡', cat: 'magic', dmg: 24, cd: 1.1, range: 3.0, chain: 3, desc: '번개가 3번 튕깁니다' },
   { id: 'monk', tier: 2, name: '철퇴 승병', icon: '🔨', cat: 'blade', dmg: 38, cd: 1.1, range: 1.5, shred: 2, desc: '갑옷을 부숩니다 (방어 -2, 최대 5번)' },
   // ── 에픽 ──
-  { id: 'flame', tier: 3, name: '화염 검객', icon: '🔥', cat: 'blade', dmg: 95, cd: 0.9, range: 1.7, splash: 1.2, burn: { dps: 30, dur: 3 }, desc: '불꽃 베기 + 화상' },
-  { id: 'spear', tier: 3, name: '천둥 창술사', icon: '🌩️', cat: 'blade', dmg: 75, cd: 0.7, range: 2.0, chain: 4, desc: '창끝의 번개가 4번 튕깁니다' },
+  { id: 'flame', tier: 3, name: '불꽃의 호흡 검객', icon: '🔥', cat: 'blade', dmg: 95, cd: 0.9, range: 1.7, splash: 1.2, burn: { dps: 30, dur: 3 }, desc: '불꽃 베기 + 화상' },
+  { id: 'spear', tier: 3, name: '번개의 호흡 창술사', icon: '🌩️', cat: 'blade', dmg: 75, cd: 0.7, range: 2.0, chain: 4, desc: '창끝의 번개가 4번 튕깁니다' },
   { id: 'moon', tier: 3, name: '달빛 궁사', icon: '🌙', cat: 'bow', dmg: 60, cd: 0.6, range: 4.6, crit: { chance: 0.25, mult: 3 }, desc: '25% 확률로 3배 치명타' },
   { id: 'petal', tier: 3, name: '꽃잎 무녀', icon: '🌸', cat: 'magic', dmg: 45, cd: 1.0, range: 3.2, slow: { pct: 0.3, dur: 1.5 }, aura: { as: 0.25, r: 2.5 }, desc: '주변 아군 공격 속도 +25%' },
-  { id: 'shadow', tier: 3, name: '그림자 닌자', icon: '🥷', cat: 'blade', dmg: 85, cd: 0.5, range: 1.6, execute: 0.12, desc: '체력 12% 이하 요괴를 즉사 (보스 제외)' },
+  { id: 'shadow', tier: 3, name: '안개의 호흡 닌자', icon: '🥷', cat: 'blade', dmg: 85, cd: 0.5, range: 1.6, execute: 0.12, desc: '체력 12% 이하 요괴를 즉사 (보스 제외)' },
   // ── 전설 ──
-  { id: 'sun', tier: 4, name: '태양 검성', icon: '☀️', cat: 'blade', dmg: 340, cd: 0.8, range: 1.9, splash: 1.5, burn: { dps: 90, dur: 3 }, desc: '태양처럼 넓게 불태웁니다' },
+  { id: 'sun', tier: 4, name: '해의 호흡 검성', icon: '☀️', cat: 'blade', dmg: 340, cd: 0.8, range: 1.9, splash: 1.5, burn: { dps: 90, dur: 3 }, desc: '태양처럼 넓게 불태웁니다' },
   { id: 'storm', tier: 4, name: '폭풍 대궁', icon: '🌪️', cat: 'bow', dmg: 150, cd: 0.32, range: 5.0, multi: 3, desc: '한 번에 3마리 동시 사격' },
   { id: 'queen', tier: 4, name: '서리 여왕', icon: '🧊', cat: 'magic', dmg: 210, cd: 1.2, range: 3.6, splash: 1.5, slow: { pct: 0.55, dur: 2 }, stun: { chance: 0.1, dur: 1 }, desc: '넓게 얼리고 가끔 꽁꽁 묶습니다' },
   { id: 'thunder', tier: 4, name: '뇌신', icon: '⛈️', cat: 'magic', dmg: 260, cd: 1.0, range: 3.6, chain: 6, desc: '번개가 6번 튕깁니다' },
   // ── 신화 ──
-  { id: 'emperor', tier: 5, name: '일월 검제', icon: '🗡️', cat: 'blade', dmg: 1150, cd: 0.6, range: 2.2, splash: 1.6, pierceArmor: true, desc: '해와 달의 검. 방어를 무시하는 광역 베기' },
+  { id: 'emperor', tier: 5, name: '일월의 호흡 검제', icon: '🗡️', cat: 'blade', dmg: 1150, cd: 0.6, range: 2.2, splash: 1.6, pierceArmor: true, desc: '해와 달의 검. 방어를 무시하는 광역 베기' },
   { id: 'fox', tier: 5, name: '구미호 무녀', icon: '🦊', cat: 'magic', dmg: 720, cd: 0.8, range: 4.0, chain: 5, burn: { dps: 200, dur: 3 }, aura: { dmg: 0.2, r: 3 }, desc: '여우불 연쇄 + 주변 아군 피해 +20%' },
   { id: 'bird', tier: 5, name: '천둥새', icon: '🦅', cat: 'bow', dmg: 620, cd: 0.26, range: 5.6, multi: 4, desc: '하늘의 왕. 4마리 동시 사격' },
 ];
@@ -54,27 +54,27 @@ const UNITS = [
  * 처치할수록 레벨이 올라 강해짐 (최대 10). 사람마다 같은 영웅은 한 명씩.
  */
 const HEROES = [
-  { id: 'h_flame', tier: 6, hero: true, name: '불꽃의 검사 염호', icon: '🔥', cat: 'blade', dmg: 500, cd: 0.9, range: 1.9, splash: 1.5, burn: { dps: 160, dur: 3 }, desc: '불꽃 검무로 넓게 베고 태웁니다', look: { robe: '#d83818', haori: '#f8c030', hair: '#f8a020', fx: '#ff7a2a' } },
-  { id: 'h_water', tier: 6, hero: true, name: '물결의 검사 수련', icon: '🌊', cat: 'blade', dmg: 270, cd: 0.5, range: 1.9, multi: 3, slow: { pct: 0.4, dur: 2 }, desc: '흐르는 물처럼 셋을 동시에 베고 느리게', look: { robe: '#183870', haori: '#3898e8', hair: '#101828', fx: '#58c8ff' } },
-  { id: 'h_thunder', tier: 6, hero: true, name: '번개의 검사 뇌진', icon: '⚡', cat: 'blade', dmg: 340, cd: 0.32, range: 2.2, chain: 3, desc: '눈에 보이지 않는 속도의 번개 일섬', look: { robe: '#e8c020', haori: '#f8e870', hair: '#f8d830', fx: '#fff070' } },
-  { id: 'h_wind', tier: 6, hero: true, name: '바람의 검사 풍운', icon: '🌪️', cat: 'blade', dmg: 320, cd: 0.6, range: 2.4, splash: 1.3, multi: 2, desc: '회오리 베기로 둘을 한꺼번에', look: { robe: '#20683a', haori: '#e8f0e8', hair: '#c8c8c8', fx: '#a8f8b8' } },
-  { id: 'h_moth', tier: 6, hero: true, name: '독나비 술사 접화', icon: '🦋', cat: 'magic', dmg: 180, cd: 0.5, range: 3.6, poison: { dps: 420, dur: 4 }, execute: 0.1, desc: '맹독 나비. 약해진 요괴는 즉사 (보스 제외)', look: { robe: '#5a2878', haori: '#e8a8f8', hair: '#281838', fx: '#d878ff' } },
-  { id: 'h_stone', tier: 6, hero: true, name: '바위의 승려 암철', icon: '🪨', cat: 'blade', dmg: 1040, cd: 1.4, range: 1.8, splash: 1.6, stun: { chance: 0.25, dur: 1 }, shred: 3, desc: '철퇴로 땅을 내려쳐 기절·방어 파괴', look: { robe: '#584838', haori: '#a89878', hair: '#201810', fx: '#d8b888' } },
-  { id: 'h_sound', tier: 6, hero: true, name: '음률의 검사 향', icon: '🎵', cat: 'magic', dmg: 380, cd: 1.0, range: 3.0, splash: 1.8, aura: { as: 0.3, r: 3 }, desc: '폭음의 검. 주변 아군 공격 속도 +30%', look: { robe: '#383848', haori: '#f87898', hair: '#e8e8f8', fx: '#ff98c8' } },
-  { id: 'h_moon', tier: 6, hero: true, name: '달그림자 궁수 월하', icon: '🌙', cat: 'bow', dmg: 660, cd: 0.8, range: 6.0, crit: { chance: 0.35, mult: 3 }, multi: 2, desc: '초승달 화살. 35% 확률로 3배 치명타', look: { robe: '#28204a', haori: '#9888e8', hair: '#d8d8f8', fx: '#c8b8ff' } },
+  { id: 'h_flame', tier: 6, hero: true, name: '불꽃의 호흡 염호', icon: '🔥', cat: 'blade', dmg: 500, cd: 0.9, range: 1.9, splash: 1.5, burn: { dps: 160, dur: 3 }, desc: '불꽃 검무로 넓게 베고 태웁니다', look: { robe: '#d83818', haori: '#f8c030', hair: '#f8a020', fx: '#ff7a2a' } },
+  { id: 'h_water', tier: 6, hero: true, name: '물의 호흡 수련', icon: '🌊', cat: 'blade', dmg: 270, cd: 0.5, range: 1.9, multi: 3, slow: { pct: 0.4, dur: 2 }, desc: '흐르는 물처럼 셋을 동시에 베고 느리게', look: { robe: '#183870', haori: '#3898e8', hair: '#101828', fx: '#58c8ff' } },
+  { id: 'h_thunder', tier: 6, hero: true, name: '번개의 호흡 뇌진', icon: '⚡', cat: 'blade', dmg: 340, cd: 0.32, range: 2.2, chain: 3, desc: '눈에 보이지 않는 속도의 번개 일섬', look: { robe: '#e8c020', haori: '#f8e870', hair: '#f8d830', fx: '#fff070' } },
+  { id: 'h_wind', tier: 6, hero: true, name: '바람의 호흡 풍운', icon: '🌪️', cat: 'blade', dmg: 320, cd: 0.6, range: 2.4, splash: 1.3, multi: 2, desc: '회오리 베기로 둘을 한꺼번에', look: { robe: '#20683a', haori: '#e8f0e8', hair: '#c8c8c8', fx: '#a8f8b8' } },
+  { id: 'h_moth', tier: 6, hero: true, name: '나비의 호흡 접화', icon: '🦋', cat: 'magic', dmg: 180, cd: 0.5, range: 3.6, poison: { dps: 420, dur: 4 }, execute: 0.1, desc: '맹독 나비. 약해진 요괴는 즉사 (보스 제외)', look: { robe: '#5a2878', haori: '#e8a8f8', hair: '#281838', fx: '#d878ff' } },
+  { id: 'h_stone', tier: 6, hero: true, name: '바위의 호흡 암철', icon: '🪨', cat: 'blade', dmg: 1040, cd: 1.4, range: 1.8, splash: 1.6, stun: { chance: 0.25, dur: 1 }, shred: 3, desc: '철퇴로 땅을 내려쳐 기절·방어 파괴', look: { robe: '#584838', haori: '#a89878', hair: '#201810', fx: '#d8b888' } },
+  { id: 'h_sound', tier: 6, hero: true, name: '소리의 호흡 향', icon: '🎵', cat: 'magic', dmg: 380, cd: 1.0, range: 3.0, splash: 1.8, aura: { as: 0.3, r: 3 }, desc: '폭음의 검. 주변 아군 공격 속도 +30%', look: { robe: '#383848', haori: '#f87898', hair: '#e8e8f8', fx: '#ff98c8' } },
+  { id: 'h_moon', tier: 6, hero: true, name: '달의 호흡 월하', icon: '🌙', cat: 'bow', dmg: 660, cd: 0.8, range: 6.0, crit: { chance: 0.35, mult: 3 }, multi: 2, desc: '초승달 화살. 35% 확률로 3배 치명타', look: { robe: '#28204a', haori: '#9888e8', hair: '#d8d8f8', fx: '#c8b8ff' } },
 ];
 UNITS.push(...HEROES);
 
 /** 히든 유닛 — 히든 조합으로만 만듦 (조합법은 처음엔 ??? 로 가려져 있음) */
 const HIDDEN_UNITS = [
-  { id: 'x_allstar', tier: 7, hidden: true, name: '만능 수련생 다온', icon: '🎒', cat: 'blade', dmg: 170, cd: 0.45, range: 2.6, multi: 2, slow: { pct: 0.2, dur: 1 }, desc: '다섯 수련생의 기술을 모두 익힌 신동', look: { robe: '#384868', haori: '#f8f0d8', hair: '#3a2010', fx: '#ffe8a0' } },
-  { id: 'x_crimson', tier: 7, hidden: true, name: '적월검귀 홍야', icon: '🩸', cat: 'blade', dmg: 1500, cd: 0.55, range: 2.2, splash: 1.6, execute: 0.15, burn: { dps: 300, dur: 3 }, desc: '붉은 달빛을 머금은 귀검. 약해진 요괴 즉사', look: { robe: '#401018', haori: '#e82838', hair: '#f8f0f0', fx: '#ff3050' } },
+  { id: 'x_allstar', tier: 7, hidden: true, name: '전집중 수련생 다온', icon: '🎒', cat: 'blade', dmg: 170, cd: 0.45, range: 2.6, multi: 2, slow: { pct: 0.2, dur: 1 }, desc: '다섯 수련생의 기술을 모두 익힌 신동', look: { robe: '#384868', haori: '#f8f0d8', hair: '#3a2010', fx: '#ffe8a0' } },
+  { id: 'x_crimson', tier: 7, hidden: true, name: '핏빛 달의 호흡 홍야', icon: '🩸', cat: 'blade', dmg: 1500, cd: 0.55, range: 2.2, splash: 1.6, execute: 0.15, burn: { dps: 300, dur: 3 }, desc: '붉은 달빛을 머금은 귀검. 약해진 요괴 즉사', look: { robe: '#401018', haori: '#e82838', hair: '#f8f0f0', fx: '#ff3050' } },
   { id: 'x_spider', tier: 7, hidden: true, name: '거미실 인형사 사요', icon: '🕸️', cat: 'magic', dmg: 600, cd: 0.7, range: 3.8, multi: 4, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.15, dur: 1 }, desc: '실로 넷을 묶어 꼼짝 못 하게', look: { robe: '#f0f0f8', haori: '#8878b8', hair: '#f8f8ff', fx: '#e0d8ff' } },
-  { id: 'x_snow', tier: 7, hidden: true, name: '설화검희 은설', icon: '❄️', cat: 'blade', dmg: 1400, cd: 0.6, range: 2.2, splash: 1.8, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.2, dur: 1 }, desc: '눈꽃 검무로 넓게 얼립니다', look: { robe: '#e8f4ff', haori: '#88c8f8', hair: '#f8fcff', fx: '#c8f0ff' } },
-  { id: 'x_inferno', tier: 7, hidden: true, name: '업화검신 염제', icon: '☄️', cat: 'blade', dmg: 2200, cd: 0.8, range: 2.2, splash: 2.2, burn: { dps: 600, dur: 3 }, desc: '꺼지지 않는 불꽃으로 모든 것을 태웁니다', look: { robe: '#601008', haori: '#ff6a10', hair: '#ffd040', fx: '#ff8020' } },
+  { id: 'x_snow', tier: 7, hidden: true, name: '눈꽃의 호흡 은설', icon: '❄️', cat: 'blade', dmg: 1400, cd: 0.6, range: 2.2, splash: 1.8, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.2, dur: 1 }, desc: '눈꽃 검무로 넓게 얼립니다', look: { robe: '#e8f4ff', haori: '#88c8f8', hair: '#f8fcff', fx: '#c8f0ff' } },
+  { id: 'x_inferno', tier: 7, hidden: true, name: '업화의 호흡 염제', icon: '☄️', cat: 'blade', dmg: 2200, cd: 0.8, range: 2.2, splash: 2.2, burn: { dps: 600, dur: 3 }, desc: '꺼지지 않는 불꽃으로 모든 것을 태웁니다', look: { robe: '#601008', haori: '#ff6a10', hair: '#ffd040', fx: '#ff8020' } },
   { id: 'x_abyss', tier: 7, hidden: true, name: '심연의 낚시꾼 해무', icon: '🎣', cat: 'bow', dmg: 1200, cd: 0.4, range: 6.0, multi: 3, shred: 3, desc: '심연에서 건져 올린 작살. 셋을 꿰뚫고 방어 파괴', look: { robe: '#0a2840', haori: '#28a8a8', hair: '#103040', fx: '#40f0e0' } },
-  { id: 'x_shadowlord', tier: 7, hidden: true, name: '그림자 검성 무영', icon: '🌑', cat: 'blade', dmg: 1800, cd: 0.35, range: 2.2, chain: 3, execute: 0.2, pierceArmor: true, desc: '보이지 않는 검. 방어 무시 연쇄 베기', look: { robe: '#0a0a10', haori: '#302848', hair: '#000000', fx: '#a070ff' } },
-  { id: 'x_dawn', tier: 7, hidden: true, name: '새벽의 수호신 효명', icon: '🌅', cat: 'magic', dmg: 4000, cd: 0.7, range: 5.0, chain: 6, burn: { dps: 1000, dur: 3 }, aura: { as: 0.3, dmg: 0.3, r: 3.5 }, pierceArmor: true, desc: '긴 밤을 끝내는 새벽빛. 주변 아군 공속·피해 +30%', look: { robe: '#f8f0e0', haori: '#ffb040', hair: '#fff8e0', fx: '#ffe070' } },
+  { id: 'x_shadowlord', tier: 7, hidden: true, name: '그림자의 호흡 무영', icon: '🌑', cat: 'blade', dmg: 1800, cd: 0.35, range: 2.2, chain: 3, execute: 0.2, pierceArmor: true, desc: '보이지 않는 검. 방어 무시 연쇄 베기', look: { robe: '#0a0a10', haori: '#302848', hair: '#000000', fx: '#a070ff' } },
+  { id: 'x_dawn', tier: 7, hidden: true, name: '새벽의 호흡 효명', icon: '🌅', cat: 'magic', dmg: 4000, cd: 0.7, range: 5.0, chain: 6, burn: { dps: 1000, dur: 3 }, aura: { as: 0.3, dmg: 0.3, r: 3.5 }, pierceArmor: true, desc: '긴 밤을 끝내는 새벽빛. 주변 아군 공속·피해 +30%', look: { robe: '#f8f0e0', haori: '#ffb040', hair: '#fff8e0', fx: '#ffe070' } },
 ];
 UNITS.push(...HIDDEN_UNITS);
 
