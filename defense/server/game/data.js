@@ -290,7 +290,7 @@ const ECON = {
   upgradeCost: (lv) => 45 + lv * 30,
   upgradeStep: 0.12, // 강화 1단계마다 피해 +12%
   maxUpgrade: 30,
-  maxUnits: 40,
+  maxUnits: 9999, // 사실상 제한 없음 (같은 유닛은 한 칸에 겹쳐 쌓임)
 };
 
 /** 일반 소환 확률 [일반, 희귀, 에픽, 전설] */
