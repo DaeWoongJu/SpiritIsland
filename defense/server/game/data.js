@@ -142,22 +142,22 @@ const RECIPE_MAP = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
 
 /** 보스 스토리 — 각자 자기 보스방에서 도전 (이전 장을 깨야 다음 장) */
 const STORY = [
-  { id: 's1', ch: 1, wave: 4, title: '붉은 달의 밤', boss: '도깨비 장군 적귀', icon: '👹', model: 'b_ogre', hp: 390, armor: 3, item: 'moonshard', gold: 200,
+  { id: 's1', ch: 1, wave: 4, title: '붉은 달의 밤', boss: '도깨비 장군 적귀', icon: '👹', model: 'b_ogre', hp: 390, armor: 3, item: 'moonshard', gold: 100,
     intro: '붉은 달이 뜬 밤, 마을 어귀 대숲에서 북소리가 울린다. "인간 따위가 내 길을 막느냐!" 도깨비 장군 적귀가 철퇴를 치켜든다.',
     outro: '적귀가 쓰러지며 손에 쥐고 있던 붉은 달 조각을 떨어뜨렸다. 조각은 아직도 희미하게 빛난다…' },
-  { id: 's2', ch: 2, wave: 9, title: '안개 속 거미굴', boss: '거미 여왕 사라', icon: '🕷️', model: 'spider', hp: 600, armor: 5, item: 'silk', gold: 300,
+  { id: 's2', ch: 2, wave: 9, title: '안개 속 거미굴', boss: '거미 여왕 사라', icon: '🕷️', model: 'spider', hp: 600, armor: 5, item: 'silk', gold: 150,
     intro: '실종된 나무꾼들을 찾아 들어간 안개 숲. 사방에 하얀 실이 늘어져 있다. "어서 오렴… 내 인형이 되어 주겠니?"',
     outro: '거미 여왕이 사라진 자리에 질긴 은빛 실타래가 남았다. 나무꾼들은 무사히 마을로 돌아갔다.' },
-  { id: 's3', ch: 3, wave: 14, title: '얼어붙은 사당', boss: '설녀 빙화', icon: '🧊', model: 'wisp', hp: 250, armor: 6, item: 'ice', gold: 400,
+  { id: 's3', ch: 3, wave: 14, title: '얼어붙은 사당', boss: '설녀 빙화', icon: '🧊', model: 'wisp', hp: 250, armor: 6, item: 'ice', gold: 200,
     intro: '한여름에 눈이 내리는 산사. 종소리 대신 차가운 웃음소리가 들린다. "이 겨울을 끝내고 싶다면 나를 녹여 보아라."',
     outro: '빙화가 녹아내리자 산사에 봄바람이 불었다. 제단 위에 녹지 않는 만년설 결정 하나가 남았다.' },
-  { id: 's4', ch: 4, wave: 19, title: '불타는 다리', boss: '화염 귀신 염라귀', icon: '🔥', model: 'b_king', hp: 180, armor: 8, item: 'ember', gold: 500,
+  { id: 's4', ch: 4, wave: 19, title: '불타는 다리', boss: '화염 귀신 염라귀', icon: '🔥', model: 'b_king', hp: 180, armor: 8, item: 'ember', gold: 250,
     intro: '강 건너 마을로 가는 유일한 다리가 불길에 휩싸였다. 불꽃 속에서 거대한 그림자가 걸어 나온다. "재가 되어라!"',
     outro: '불길이 잦아든 다리 위, 꺼지지 않는 작은 불씨가 반짝인다. 따뜻하지만 결코 꺼지지 않는다.' },
-  { id: 's5', ch: 5, wave: 24, title: '심연의 늪', boss: '늪의 주인 흑린', icon: '🐉', model: 'b_serpent', hp: 90, armor: 10, item: 'pearl', gold: 650,
+  { id: 's5', ch: 5, wave: 24, title: '심연의 늪', boss: '늪의 주인 흑린', icon: '🐉', model: 'b_serpent', hp: 90, armor: 10, item: 'pearl', gold: 325,
     intro: '검은 늪의 수면이 갈라지며 비늘 덮인 거대한 몸이 솟아오른다. "천 년을 잠들어 있었다. 너희가 나를 깨웠구나."',
     outro: '흑린이 늪 깊이 가라앉고, 물 위로 어둡게 빛나는 심연의 진주가 떠올랐다.' },
-  { id: 's6', ch: 6, wave: 29, title: '그림자 무사', boss: '상현의 그림자 무사', icon: '🥷', model: 'armor', hp: 85, armor: 12, item: 'shade', gold: 800,
+  { id: 's6', ch: 6, wave: 29, title: '그림자 무사', boss: '상현의 그림자 무사', icon: '🥷', model: 'armor', hp: 85, armor: 12, item: 'shade', gold: 400,
     intro: '달 없는 밤, 발소리 없이 다가오는 검사가 있다. "요괴왕님의 명이다. 퇴마사의 목을 거두러 왔다."',
     outro: '그림자 무사가 무릎을 꿇고 사라진다. "요괴왕의 성은… 새벽이 오기 전에…" 검은 조각 하나가 남았다.' },
 ];
@@ -257,7 +257,7 @@ const LEADER_MAP = Object.fromEntries(LEADERS.map((l) => [l.id, l]));
 
 /** 보스를 잡을 때마다 고르는 축복 (각자 3개 중 1개) */
 const BLESSINGS = [
-  { id: 'gold', name: '복주머니', icon: '👛', desc: '즉시 골드 +300' },
+  { id: 'gold', name: '복주머니', icon: '👛', desc: '즉시 골드 +150' },
   { id: 'blade', name: '날 선 검', icon: '⚔️', desc: '검술 피해 +20%' },
   { id: 'bow', name: '매의 눈', icon: '🦅', desc: '궁술 피해 +20%' },
   { id: 'magic', name: '깊은 주문', icon: '🔮', desc: '술법 피해 +20%' },
@@ -265,7 +265,7 @@ const BLESSINGS = [
   { id: 'cheap', name: '단골 할인', icon: '🏷️', desc: '소환 비용 -15%' },
   { id: 'luck', name: '네잎 클로버', icon: '🍀', desc: '높은 등급 소환 확률 증가' },
   { id: 'free', name: '공짜 소환', icon: '🎁', desc: '희귀 이상 유닛 2개 즉시 소환' },
-  { id: 'income', name: '꾸준한 장사', icon: '📈', desc: '웨이브마다 골드 +40' },
+  { id: 'income', name: '꾸준한 장사', icon: '📈', desc: '웨이브마다 골드 +25' },
   { id: 'crit', name: '급소 찌르기', icon: '🎯', desc: '모든 공격 10% 확률 2배 피해' },
   { id: 'range', name: '망루', icon: '🗼', desc: '모든 유닛 사거리 +0.4' },
   { id: 'cool', name: '명상', icon: '🧘', desc: '필살기 재사용 시간 -30%' },
@@ -273,20 +273,21 @@ const BLESSINGS = [
 const BLESS_MAP = Object.fromEntries(BLESSINGS.map((b) => [b.id, b]));
 
 const DIFFICULTIES = [
-  { id: 'easy', name: '쉬움', hp: 0.75, limit: 90, lives: 30, gold: 1.2 },
-  { id: 'normal', name: '보통', hp: 1.2, limit: 75, lives: 20, gold: 1.0 },
-  { id: 'hard', name: '어려움', hp: 1.6, limit: 65, lives: 15, gold: 0.95 },
-  { id: 'hell', name: '지옥', hp: 2.2, limit: 55, lives: 10, gold: 0.9 },
+  // gold: 받는 돈 배율 · upg: 강화 비용 배율
+  { id: 'easy', name: '쉬움', hp: 0.75, limit: 90, lives: 30, gold: 1.2, upg: 0.85 },
+  { id: 'normal', name: '보통', hp: 1.2, limit: 75, lives: 20, gold: 1.0, upg: 1.0 },
+  { id: 'hard', name: '어려움', hp: 1.42, limit: 65, lives: 15, gold: 0.85, upg: 1.15 },
+  { id: 'hell', name: '지옥', hp: 1.9, limit: 55, lives: 10, gold: 0.75, upg: 1.3 },
 ];
 
 const ECON = {
-  startGold: 260,
-  summonsPerWave: 2, // 라운드마다 소환할 수 있는 횟수 (선택권·보상은 따로)
+  startGold: 200, // 소환 4번
   summonCost: 50,
   premiumCost: 180, // 고급 소환: 희귀 이상 보장
-  sellRate: [0, 25, 70, 200, 520, 1200, 0, 0],
-  waveBonus: (w) => 40 + w * 5,
-  upgradeCost: (lv) => 60 + lv * 45,
+  sellRate: [0, 15, 40, 100, 250, 600, 0, 0],
+  // 수입은 소환 비용(50)에 맞춰 조금씩: 초반 라운드당 약 2번, 후반 3~4번
+  waveBonus: (w) => 35 + Math.round(w * 1.5),
+  upgradeCost: (lv) => 45 + lv * 30,
   upgradeStep: 0.12, // 강화 1단계마다 피해 +12%
   maxUpgrade: 30,
   maxUnits: 40,

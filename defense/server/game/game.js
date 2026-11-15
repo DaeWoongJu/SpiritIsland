@@ -6,11 +6,11 @@ const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
 const ROOM_CENTER = [11, 7]; // 보스방 보스 자리 (고정)
-const FIELD_HP = 0.85; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
+const FIELD_HP = 0.92; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
 function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
-function killGold(w) { return 3 + Math.floor(w / 6); }
+function killGold(w) { return 1 + Math.floor(w / 15); }
 
 function makeField(id, kind, owner, map, diff) {
   const paths = map.paths.map((p) => {
@@ -56,7 +56,7 @@ class Game {
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
       bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
-      items: {}, autoGather: true, picks: { 2: 0, 3: 0, 4: 0 }, waveSummons: 0,
+      items: {}, autoGather: true, picks: { 2: 0, 3: 0, 4: 0 },
     }));
     // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
     this.fields = [];
@@ -172,7 +172,6 @@ class Game {
     this.curPlan = plan;
     this.nextPlan = this.wave < D.WAVES || this.endless ? this.planWave(this.wave + 1) : null;
     this.waveTimer = D.WAVE_TIME;
-    for (const p of this.players) p.waveSummons = 0;
     const q = [];
     for (let i = 0; i < plan.count; i++) q.push({ type: plan.second && i % 3 === 2 ? plan.second : plan.main, mod: plan.mod });
     if (plan.mini) q.push({ mini: true, mod: plan.mod });
@@ -186,7 +185,7 @@ class Game {
       for (const p of this.players) {
         let g = D.ECON.waveBonus(this.wave) * this.diff.gold;
         if (p.leader === 'merchant') g *= 1.5;
-        g += 40 * p.bless.filter((b) => b === 'income').length;
+        g += 25 * p.bless.filter((b) => b === 'income').length;
         p.gold += Math.round(g);
       }
     }
@@ -229,7 +228,7 @@ class Game {
     this.eventsDone.push({ idx: this.event.idx, win });
     if (win) {
       for (const p of this.players) {
-        p.tickets++; p.gold += 300 + this.wave * 6; p.items.star = (p.items.star || 0) + 1;
+        p.tickets++; p.gold += 150 + this.wave * 3; p.items.star = (p.items.star || 0) + 1;
         this.offerHero(p);
         this.grantPick(p, 4, '스토리 이벤트');
       }
@@ -457,7 +456,7 @@ class Game {
     if (e.treasure && owner) {
       const p = owner;
       if (this.rand() < 0.35) { const u = this.giveUnit(p, this.rand() < 0.15 ? 3 : 2); this.msg(`🐸 보물 두꺼비! ${p.name}: ${u ? D.UNIT_MAP[u.type].name + ' 획득' : '자리가 없어 골드로'}`, 'good'); if (!u) p.gold += 150; }
-      else { const g = 120 + w * 12; p.gold += g; this.msg(`🐸 보물 두꺼비! ${p.name}: 골드 +${g}`, 'good'); }
+      else { const g = 80 + w * 5; p.gold += g; this.msg(`🐸 보물 두꺼비! ${p.name}: 골드 +${g}`, 'good'); }
     }
     if ((e.boss || e.mini) && owner) {
       this.msg(e.boss ? `🏆 ${owner.name}: 보스 「${e.name}」 처치! 축복을 하나 고르세요.` : `👿 ${owner.name}: ${e.name} 처치! 축복을 하나 고르세요.`, 'good');
@@ -476,7 +475,7 @@ class Game {
 
   applyBlessing(p, id) {
     p.bless.push(id);
-    if (id === 'gold') p.gold += 300;
+    if (id === 'gold') p.gold += 150;
     if (id === 'free') { this.giveUnit(p, 2, true); this.giveUnit(p, 2, true); }
   }
 
@@ -522,7 +521,7 @@ class Game {
     return Math.round(c);
   }
   upgradeCost(p, cat) {
-    let c = D.ECON.upgradeCost(p.upg[cat]);
+    let c = D.ECON.upgradeCost(p.upg[cat]) * (this.diff.upg || 1);
     if (p.leader === 'smith') c *= 0.75;
     return Math.round(c);
   }
@@ -565,7 +564,6 @@ class Game {
       case 'summon': {
         const premium = !!c.premium;
         const cost = this.summonCost(p, premium);
-        if (p.waveSummons >= D.ECON.summonsPerWave) return `이번 라운드 소환 ${D.ECON.summonsPerWave}번을 다 썼어요. 다음 라운드에 다시! (🎁 선택소 선택권은 따로 쓸 수 있어요)`;
         if (p.gold < cost) return '골드가 부족해요.';
         if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return `유닛은 한 사람당 ${D.ECON.maxUnits}개까지예요.`;
         // 소환은 내 전장의 소환진에서 (같은 유닛이 있으면 그 무리에 합류)
@@ -573,7 +571,6 @@ class Game {
         const spot = null;
         p.gold -= cost;
         p.summons++;
-        p.waveSummons++;
         const u = this.giveUnit(p, this.rollTier(p, premium), false, spot);
         return u ? { ok: u.id } : null;
       }
@@ -870,7 +867,7 @@ class Game {
         this.zones.push({ field: f, x, y, r: 2.3, until: this.time + 5, dps: hpBase(w) * this.diff.hp * FIELD_HP * 2.2, by: p.idx });
         break;
       case 'priest': this.globalSlowUntil = this.time + 6; this.fxp('*', ['seal']); break;
-      case 'merchant': { const g = 100 + w * 15; p.gold += g; p.goldRainUntil = this.time + 10; this.fxp('*', ['goldrain', p.idx]); break; }
+      case 'merchant': { const g = 60 + w * 6; p.gold += g; p.goldRainUntil = this.time + 10; this.fxp('*', ['goldrain', p.idx]); break; }
       case 'smith': p.temperUntil = this.time + 8; this.fxp('*', ['temper', p.idx]); break;
       case 'gambler': {
         const mine = this.units.filter((u) => u.owner === p.idx && D.UNIT_MAP[u.type].tier < 5);
@@ -1082,7 +1079,7 @@ class Game {
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
-        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, picks: p.picks, waveSummons: p.waveSummons, summonCap: D.ECON.summonsPerWave, units: this.units.filter((u) => u.owner === p.idx).length,
+        rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, autoGather: p.autoGather, picks: p.picks, income: Math.round((D.ECON.waveBonus(Math.max(1, this.wave + 1)) * (p.leader === 'merchant' ? 1.5 : 1) + 25 * p.bless.filter((b) => b === 'income').length) * this.diff.gold), units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
         items: p.items, craftable: this.craftable(p),
       })),

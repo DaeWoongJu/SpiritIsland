@@ -489,14 +489,14 @@ function renderControls() {
   if (!p) return;
   const L = app.leaderMap[app.info.players[app.myIdx].leader];
   const cats = app.cat.cats;
-  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, p.autoGather, p.waveSummons, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
+  const key = JSON.stringify([p.gold, p.cost, p.pcost, p.ucost, p.upg, p.skillCd, app.aiming, p.units, app.selTile, app.sellMenu, p.autoGather, p.income, app.sellMenu ? app.v.units.filter((u) => u[1] === app.myIdx).map((u) => u[2]).join() : '']);
   if (key === renderControls.key) return;
   renderControls.key = key;
   const cdPct = p.skillCd > 0 ? (p.skillCd / p.skillMax) * 100 : 0;
   $('#controls').innerHTML = `
-    <div class="gold">💰 ${p.gold}</div>
-    <button class="btn-summon" data-a="summon" ${p.gold < p.cost || p.waveSummons >= p.summonCap ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 이번 라운드 ${p.waveSummons}/${p.summonCap}</small></button>
-    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost || p.waveSummons >= p.summonCap ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · Lv2 이상 · ${p.waveSummons}/${p.summonCap}</small></button>
+    <div class="gold" title="다음 웨이브 보너스 (처치 골드는 따로)">💰 ${p.gold}<small style="font-size:.45em;margin-left:6px;opacity:.8">+${p.income}/웨이브</small></div>
+    <button class="btn-summon" data-a="summon" ${p.gold < p.cost ? 'disabled' : ''}>🎲 소환 <kbd>Q</kbd><small>${p.cost}G · 지금 ${Math.floor(p.gold / p.cost)}번 가능</small></button>
+    <button class="btn-premium" data-a="premium" ${p.gold < p.pcost ? 'disabled' : ''}>💎 고급 소환 <kbd>W</kbd><small>${p.pcost}G · Lv2 이상</small></button>
     <div class="grp">${Object.entries(cats).map(([id, c], i) => `<button data-a="up" data-c="${id}" ${p.gold < p.ucost[id] ? 'disabled' : ''} title="${c.name} 유닛 피해 +12%">${c.icon} ${c.name} +${p.upg[id]} <kbd>${i + 1}</kbd><small>${p.ucost[id]}G</small></button>`).join('')}</div>
     <div class="grp"><button class="btn-skill ${app.aiming ? 'aim' : ''}" data-a="skill" ${p.skillCd > 0 ? 'disabled' : ''} title="${esc(L.skill.desc)}">${L.icon} ${esc(L.skill.name)} <kbd>E</kbd><small>${p.skillCd > 0 ? `${p.skillCd}초` : L.skill.target ? '위치 선택' : '바로 사용'}</small><span class="cdv" style="height:${cdPct}%"></span></button></div>
     <div class="grp"><button data-a="clearZone" title="소환진에 있는 내 유닛을 모두 길 옆 빈자리로">📦 소환진 비우기 <kbd>Z</kbd><small>길 옆으로 자동 배치</small></button><button data-a="autoGather" class="${p.autoGather ? 'on' : ''}" title="켜 두면 유닛 하나를 옮길 때 내 전장의 같은 유닛이 모두 따라와요">🧲 자동 모으기<small>${p.autoGather ? '켬 · 같은 유닛 따라옴' : '끔'}</small></button><button data-a="sellMenu" class="${app.sellMenu ? 'on' : ''}">💰 일괄 판매<small>등급별로 한꺼번에</small></button><button data-a="gift" ${app.v.players.length < 2 ? 'disabled' : ''}>🎁 골드 선물<small>동료에게 100G</small></button></div>
@@ -751,7 +751,7 @@ function renderDrawer() {
       ${app.cat.recipes.filter((r) => r.hidden).map(row).join('')}`;
   } else if (app.drawer === 'pick') {
     const total = Object.values(p.picks).reduce((a, b) => a + b, 0);
-    html += `<h3>🎁 선택소</h3><div class="hint">보스·우두머리·미션·보스 스토리·스토리 이벤트를 깨면 <b>선택권</b>을 받아요. 선택권 등급의 유닛 중 <b>원하는 걸 골라</b> 뽑을 수 있어요 (라운드 소환 횟수와 상관없이).</div>
+    html += `<h3>🎁 선택소</h3><div class="hint">보스·우두머리·미션·보스 스토리·스토리 이벤트를 깨면 <b>선택권</b>을 받아요. 선택권 등급의 유닛 중 <b>원하는 걸 골라</b> 뽑을 수 있어요 (골드가 들지 않아요).</div>
       <div class="hint" style="margin-top:4px">우두머리 → Lv2 · 보스·미션·스토리 1~3장 → Lv3 · 스토리 4~6장·스토리 이벤트 → H</div>
       ${!total ? '<div class="sec">아직 선택권이 없어요.</div>' : ''}
       ${[2, 3, 4].map((tr) => { const n = p.picks[tr] || 0; const tt = app.cat.tiers[tr - 1]; const list = app.cat.units.filter((u) => u.tier === tr && !u.hero && !u.hidden); const have = haveCounts();

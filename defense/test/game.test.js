@@ -6,8 +6,6 @@ const D = require('../server/game/data');
 const M = require('../server/game/maps');
 const { Game } = require('../server/game/game');
 
-const SUMMON_CAP = D.ECON.summonsPerWave;
-D.ECON.summonsPerWave = 999; // 테스트에서는 소환 횟수 제한을 풀어 둠 (제한은 아래에서 따로 확인)
 const roster = (n = 2, bot = false) => [{ id: 'a', name: 'A', leader: 'sword', bot }, { id: 'b', name: 'B', leader: 'merchant', bot }].slice(0, n);
 
 test('맵이 충분히 많고, 모든 길이 이어져 있다', () => {
@@ -88,29 +86,26 @@ test('같은 유닛은 한 칸에 겹쳐 쌓임', () => {
   assert.ok(!g.F.m0.zone.has(ua.x + ',' + ua.y));
 });
 
-test('라운드마다 소환 2번 · 보스·미션 보상으로 선택소 선택권', () => {
-  D.ECON.summonsPerWave = SUMMON_CAP;
-  try {
-    const g = new Game(roster(1), { mapId: 'g1', seed: 31 });
-    const p = g.players[0];
-    p.gold = 1e5;
-    assert.ok(g.command('a', { t: 'summon' }).ok);
-    assert.ok(g.command('a', { t: 'summon', premium: true }).ok);
-    assert.strictEqual(typeof g.command('a', { t: 'summon' }), 'string', '세 번째는 막힘');
-    g.startWave();
-    assert.ok(g.command('a', { t: 'summon' }).ok, '다음 라운드에 다시 가능');
-    // 미션 달성 → Lv3 선택권
-    p.kills = 200;
-    g.checkMissions();
-    assert.strictEqual(p.picks[3], 1);
-    const n = g.units.length;
-    assert.strictEqual(g.command('a', { t: 'pick', tier: 3, type: 'wave' }), null, 'Lv2 유닛은 Lv3 선택권으로 못 뽑음');
-    const r = g.command('a', { t: 'pick', tier: 3, type: 'moon' });
-    assert.ok(r && r.ok);
-    assert.strictEqual(g.units.length, n + 1);
-    assert.strictEqual(p.picks[3], 0);
-    assert.strictEqual(typeof g.command('a', { t: 'pick', tier: 3, type: 'moon' }), 'string', '선택권이 없으면 못 뽑음');
-  } finally { D.ECON.summonsPerWave = 999; }
+test('소환은 돈만큼 (횟수 제한 없음) · 보스·미션 보상으로 선택소 선택권', () => {
+  const g = new Game(roster(1), { mapId: 'g1', seed: 31 });
+  const p = g.players[0];
+  assert.strictEqual(p.gold, D.ECON.startGold);
+  const n = Math.floor(p.gold / g.summonCost(p, false));
+  for (let i = 0; i < n; i++) assert.ok(g.command('a', { t: 'summon' }).ok);
+  assert.strictEqual(typeof g.command('a', { t: 'summon' }), 'string', '돈이 없으면 못 뽑음');
+  // 강화 비용은 난이도에 따라
+  const hard = new Game(roster(1), { mapId: 'g1', seed: 31, difficulty: 'hard' });
+  assert.ok(hard.upgradeCost(hard.players[0], 'blade') > g.upgradeCost(p, 'blade'));
+  // 미션 달성 → Lv3 선택권
+  p.kills = 200;
+  g.checkMissions();
+  assert.strictEqual(p.picks[3], 1);
+  const before = g.units.length;
+  assert.strictEqual(g.command('a', { t: 'pick', tier: 3, type: 'wave' }), null, 'Lv2 유닛은 Lv3 선택권으로 못 뽑음');
+  const r = g.command('a', { t: 'pick', tier: 3, type: 'moon' });
+  assert.ok(r && r.ok);
+  assert.strictEqual(g.units.length, before + 1);
+  assert.strictEqual(typeof g.command('a', { t: 'pick', tier: 3, type: 'moon' }), 'string', '선택권이 없으면 못 뽑음');
 });
 
 test('판매: 하나 · 여러 개 · 등급 전체 (영웅·히든 제외)', () => {
