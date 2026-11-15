@@ -71,7 +71,15 @@
     <header id="topbar" class="topbar"></header>
     <div class="game-main">
       <div class="board-col">
+        <div id="fieldtabs" class="fieldtabs"></div>
         <div class="board-wrap">
+          <div id="sidetabs" class="sidetabs">
+            <button data-d="recipe">📜<span>조합법</span><i class="badge hidden"></i></button>
+            <button data-d="mission">🎖<span>미션</span><i class="badge hidden"></i></button>
+            <button data-d="story">📖<span>보스 스토리</span><i class="badge hidden"></i></button>
+          </div>
+          <div id="drawer" class="drawer hidden"></div>
+          <div id="storybox" class="storybox hidden"></div>
           <canvas id="board"></canvas>
           <div id="bless" class="bless hidden"></div>
           <div id="herochoice" class="bless hero-pick hidden"></div>
@@ -82,7 +90,6 @@
       <aside class="side-col">
         <div id="team" class="team"></div>
         <div id="selected" class="selected"></div>
-        <div id="missions" class="missions"></div>
         <div id="nextwave" class="nextwave"></div>
         <div class="tabs"><button data-tab="feed" class="on">소식</button><button data-tab="chat">채팅</button></div>
         <div id="feed" class="feed"></div>

@@ -212,9 +212,10 @@ function startView(msg) {
   app.info = msg.info;
   app.gameNo = msg.gameNo;
   app.myIdx = Math.max(0, msg.info.players.findIndex((p) => p.id === msg.you));
+  if (fresh || !app.viewField) app.viewField = 'm' + app.myIdx;
   if (fresh) { app.ents.clear(); app.fx = []; app.feed = []; app.sel = null; app.selTile = null; app.aiming = false; app.shownResult = false; app.v = null; $('#feed').innerHTML = ''; closeModal(); }
   const m = msg.info.map;
-  bgCanvas = drawBackground(m);
+  bgCanvas = drawBackground(fieldMap(app.viewField));
   show('game');
   setup3d();
   if (!app.use3d) { canvas.width = m.W * T; canvas.height = m.H * T; }
@@ -231,9 +232,73 @@ function setup3d() {
   if (!Board3D.ok && !Board3D.init($('.board-wrap'), canvas)) return;
   app.use3d = true;
   $('.board-wrap').classList.add('is3d');
-  Board3D.setup(app.info.map, app.cat);
+  Board3D.setup(fieldMap(app.viewField), app.cat);
   Board3D.resize();
 }
+
+// ───────────── 전장 (내 전장 · 동료 전장 · 내 보스방 · 스토리 이벤트) ─────────────
+function fieldMap(fid) {
+  const mp = app.info.maps;
+  if (!mp) return app.info.map;
+  return fid[0] === 'm' ? mp.main : fid[0] === 'r' ? mp.room : mp.event;
+}
+function fieldName(fid) {
+  if (fid === 'ev') return '스토리 이벤트 전장';
+  const i = Number(fid.slice(1));
+  const who = i === app.myIdx ? '내' : `${app.info.players[i] ? app.info.players[i].name : '?'}의`;
+  return fid[0] === 'm' ? `${who} 전장` : `${who} 보스방`;
+}
+function switchField(fid) {
+  if (fid === app.viewField) return;
+  app.viewField = fid;
+  app.ents.clear();
+  app.fx = [];
+  app.selTile = null;
+  app.aiming = false;
+  bgCanvas = drawBackground(fieldMap(fid));
+  if (app.use3d) Board3D.setup(fieldMap(fid), app.cat);
+  if (app.v) filterView();
+  renderFieldTabs();
+  renderControls.key = null;
+  Sound.play('click');
+}
+function filterView() {
+  const v = app.v;
+  app.fu = v.units.filter((u) => (u[8] || 'm0') === app.viewField);
+  app.vf = { ...v, units: app.fu, zones: v.zones.filter((z) => (z[3] || 'm0') === app.viewField), boss: (v.fields || []).find((f) => f.id === app.viewField)?.boss };
+}
+function renderFieldTabs() {
+  const v = app.v;
+  if (!v || !v.fields) return;
+  const me = app.myIdx;
+  const tabs = [];
+  const fst = (id) => v.fields.find((f) => f.id === id);
+  const lifeTxt = (f) => (app.info.loopMode ? `👹${f.count}/${f.limit}` : `❤️${f.lives}`);
+  for (const p of app.info.players.map((x, i) => i)) {
+    const f = fst('m' + p);
+    if (!f) continue;
+    const danger = app.info.loopMode ? f.count / f.limit > 0.7 : f.lives <= 5;
+    tabs.push(`<button data-f="m${p}" class="${app.viewField === 'm' + p ? 'cur' : ''} ${danger ? 'danger' : ''}">${p === me ? '🏯 내 전장' : `👀 ${esc(app.info.players[p].name)}`} <small>${lifeTxt(f)}</small></button>`);
+  }
+  const my = v.players[me];
+  const room = fst('r' + me);
+  tabs.push(`<button data-f="r${me}" class="${app.viewField === 'r' + me ? 'cur' : ''} ${my.story.active ? 'alert' : ''}">📖 내 보스방 <small>${my.story.active ? `⏳${my.story.left}초` : '대기'}</small></button>`);
+  if (v.event) tabs.push(`<button data-f="ev" class="${app.viewField === 'ev' ? 'cur' : ''} alert">⚔ 스토리 이벤트 <small>⏳${v.event.left}초</small></button>`);
+  else tabs.push(`<button disabled title="정해진 웨이브에 열려요">⚔ 스토리 이벤트 <small>${v.nextEvent ? `${v.nextEvent}웨이브` : '끝'}</small></button>`);
+  // 보스방·이벤트를 보고 있으면 보내기/돌려보내기
+  if (app.viewField !== 'm' + me && (app.viewField === 'ev' || app.viewField === 'r' + me)) {
+    const n = v.units.filter((u) => u[1] === me && u[8] === app.viewField).length;
+    tabs.push('<span style="flex:1"></span>');
+    tabs.push(`<button data-act="dispatch">⚔ 정예 3명 보내기</button><button data-act="recall" ${n ? '' : 'disabled'}>↩ 돌려보내기 (${n})</button>`);
+  }
+  setHTML($('#fieldtabs'), tabs.join(''));
+  void room;
+}
+onPress($('#fieldtabs'), (b) => {
+  if (b.dataset.f) switchField(b.dataset.f);
+  else if (b.dataset.act === 'dispatch') { cmd({ t: 'dispatch', field: app.viewField, n: 3 }); Sound.play('rare'); }
+  else if (b.dataset.act === 'recall') cmd({ t: 'recall', field: app.viewField });
+});
 app.on3dReady = () => { if (app.info && !app.use3d && !$('#game').classList.contains('hidden')) setup3d(); };
 app.Sound = Sound;
 
@@ -291,6 +356,7 @@ function onTick(v) {
   // 요괴 위치 보간 준비
   const seen = new Set();
   for (const e of v.enemies) {
+    if ((e[6] || 'm0') !== app.viewField) continue;
     const [id, k, x100, y100, hp, fl] = e;
     const x = x100 / 100, y = y100 / 100;
     seen.add(id);
@@ -301,7 +367,15 @@ function onTick(v) {
   }
   for (const id of [...app.ents.keys()]) if (!seen.has(id)) app.ents.delete(id);
   // 효과
-  for (const f of v.fx) { if (app.use3d) Board3D.fx(f, app); else addFx(f, now); }
+  filterView();
+  for (const f0 of v.fx) {
+    const where = f0[0];
+    const f = f0.slice(1);
+    if (f[0] === 'story') { onStoryFx(f); continue; }
+    if (f[0] === 'hidden') { rememberHidden(f[1]); continue; }
+    if (where !== '*' && where !== app.viewField) { if (f[0] === 'leak' && where === 'm' + app.myIdx) { Sound.play('leak'); toast('💔 내 전장에서 요괴가 빠져나갔어요!'); } continue; }
+    if (app.use3d) Board3D.fx(f, app); else addFx(f, now);
+  }
   for (const m of v.msgs) {
     addFeed(m.text, m.kind);
     if (m.kind === 'boss') { banner(m.text.replace(/^⚠ /, '').split('!')[0] + '!'); Sound.play('boss'); }
@@ -320,7 +394,9 @@ function onTick(v) {
   renderNext();
   renderBless();
   renderHeroPick();
-  renderMissions();
+  renderFieldTabs();
+  renderSideTabs();
+  if (app.drawer) renderDrawer();
   if (v.result && !app.shownResult) { app.shownResult = true; setTimeout(showResult, 900); Sound.play(v.result.win ? 'win' : 'lose'); }
   if (prev && prev.wave !== v.wave && v.wave) banner(`${v.wave}웨이브`);
 }
@@ -363,15 +439,20 @@ function renderTop() {
   if (!v) return;
   const host = app.room && app.room.hostId === app.you;
   const loop = app.info.loopMode;
-  const danger = loop ? v.count / v.limit : 1 - v.lives / app.info.diff.lives;
+  const myF = (v.fields || []).find((f) => f.id === 'm' + app.myIdx) || { lives: 0, limit: 1, count: 0 };
+  const viewF = (v.fields || []).find((f) => f.id === app.viewField);
+  const danger = loop ? myF.count / myF.limit : 1 - myF.lives / app.info.diff.lives;
+  const others = (v.fields || []).filter((f) => f.id[0] === 'm' && f.id !== 'm' + app.myIdx);
+  const vboss = viewF && viewF.boss;
   const waveTxt = v.wave ? `${v.wave}${v.endless ? '' : ` / ${v.waves}`} 웨이브` : '준비!';
   setHTML($('#topbar'), `
     <span class="wv">${waveTxt}</span>
     <span class="stat">${v.lastWave ? '🏁 마지막 웨이브!' : `⏱ 다음 웨이브 ${v.nextIn}초`}</span>
     ${loop
-    ? `<span class="bar ${danger < 0.5 ? 'safe' : ''}" title="살아 있는 요괴 수 (보스 10, 우두머리 3)"><i style="width:${Math.min(100, danger * 100)}%"></i><span>👹 ${v.count} / ${v.limit}</span></span>`
-    : `<span class="bar ${danger < 0.5 ? 'safe' : ''}" title="생명"><i style="width:${Math.max(0, (v.lives / app.info.diff.lives) * 100)}%"></i><span>❤️ ${v.lives} / ${app.info.diff.lives}</span></span>`}
-    ${v.boss ? `<span class="bar bossbar"><i style="width:${(v.boss.hp / v.boss.max) * 100}%"></i><span>${esc(v.boss.name)} ${fmt(v.boss.hp)}${v.boss.left != null ? ` · ⏳${v.boss.left}초` : ''}</span></span>` : ''}
+    ? `<span class="bar ${danger < 0.5 ? 'safe' : ''}" title="내 전장에 살아 있는 요괴 수 (보스 10, 우두머리 3)"><i style="width:${Math.min(100, danger * 100)}%"></i><span>내 전장 👹 ${myF.count} / ${myF.limit}</span></span>`
+    : `<span class="bar ${danger < 0.5 ? 'safe' : ''}" title="내 전장 생명"><i style="width:${Math.max(0, (myF.lives / app.info.diff.lives) * 100)}%"></i><span>내 전장 ❤️ ${myF.lives} / ${app.info.diff.lives}</span></span>`}
+    ${others.map((f) => `<span class="stat hint">동료 ${loop ? `👹${f.count}/${f.limit}` : `❤️${f.lives}`}</span>`).join('')}
+    ${vboss ? `<span class="bar bossbar"><i style="width:${(vboss.hp / vboss.max) * 100}%"></i><span>${esc(vboss.name)} ${fmt(vboss.hp)}${vboss.left != null ? ` · ⏳${vboss.left}초` : ''}</span></span>` : ''}
     ${v.sealed ? '<span class="stat">⛩️ 결계!</span>' : ''}
     <span class="sp"></span>
     ${v.paused ? '<span class="stat" style="color:#f88">⏸ 일시정지</span>' : ''}
@@ -417,7 +498,7 @@ function action(a, c) {
   const p = me();
   if (!p) return;
   if (a === 'summon' || a === 'premium') {
-    cmd({ t: 'summon', premium: a === 'premium', tile: app.selTile || undefined });
+    cmd({ t: 'summon', premium: a === 'premium', tile: app.selTile || undefined, field: app.selTile ? app.viewField : undefined });
     app.selTile = null;
     Sound.play(a === 'premium' ? 'rare' : 'summon');
   } else if (a === 'up') { cmd({ t: 'upgrade', cat: c }); Sound.play('upgrade'); }
@@ -455,16 +536,16 @@ function unitCounts(owner) {
 function renderSelected() {
   const el = $('#selected');
   const u = app.sel && app.v.units.find((x) => x[0] === app.sel);
-  const hu = !u && app.hover && app.v.units.find((x) => x[3] === app.hover.x && x[4] === app.hover.y);
+  const hu = !u && app.hover && (app.fu || []).find((x) => x[3] === app.hover.x && x[4] === app.hover.y);
   const show = u || hu;
   if (!show) {
     const cnt = unitCounts(app.myIdx);
     const ready = Object.entries(cnt).filter(([id, n]) => app.cat.mergeNeed[app.unitMap[id].tier] && n >= app.cat.mergeNeed[app.unitMap[id].tier]);
-    setHTML(el, `<div class="hint">유닛을 누르면 정보가 보여요.<br>빈칸을 누르고 <b>Q</b>로 그 자리에 소환 · 유닛 선택 후 빈칸 클릭 = 이동 · <b>G</b> = 동료에게 위치 알림</div>
+    setHTML(el, `<div class="hint">유닛을 누르면 정보가 보여요.<br>빈칸을 누르고 <b>Q</b>로 그 자리에 소환 · 유닛 선택 후 빈칸 클릭 = 이동 (위 탭으로 다른 전장을 연 뒤 빈칸을 누르면 그 전장으로 보내요) · <b>G</b> = 동료에게 위치 알림</div>
       ${ready.length ? `<div style="margin-top:6px">✨ 합성 가능: ${ready.map(([id, n]) => `<button class="small" data-merge="${id}">${app.unitMap[id].icon} ${esc(app.unitMap[id].name)} ×${n}</button>`).join(' ')}</div>` : ''}`);
     return;
   }
-  const [id, owner, type, , , dmg, lvl, kills] = show;
+  const [id, owner, type, , , dmg, lvl, kills, ufield] = show;
   const t = app.unitMap[type];
   const tier = app.cat.tiers[t.tier - 1];
   const mine = owner === app.myIdx;
@@ -474,7 +555,9 @@ function renderSelected() {
   setHTML(el, `<div class="un">${t.icon} ${esc(t.name)} <span class="tier-tag" style="background:${tier.color}">${tier.name}</span></div>
     <div class="hint">${cat.icon} ${cat.name} · 피해 ${t.dmg} · ${(1 / t.cd).toFixed(1)}회/초 · 사거리 ${t.range}${t.cat === 'blade' ? ' · 날아다니는 적 공격 불가' : ''}</div>
     <div>${esc(t.desc)}</div>
-    <div class="hint">누적 피해 ${fmt(dmg)} · ${mine ? '내 유닛' : `${esc(app.info.players[owner].name)}의 유닛`}${need ? ` · 같은 유닛 ${have}/${need}` : ''}</div>
+    <div class="hint">누적 피해 ${fmt(dmg)} · ${mine ? '내 유닛' : `${esc(app.info.players[owner].name)}의 유닛`} · 📍${esc(fieldName(ufield || 'm0'))}${need ? ` · 같은 유닛 ${have}/${need}` : ''}</div>
+    ${mine && u ? `<div class="acts">${ufield !== 'm' + app.myIdx ? '<button class="small" data-send="home">↩ 내 전장으로</button>' : ''}${ufield !== 'r' + app.myIdx ? '<button class="small" data-send="room">📖 보스방으로</button>' : ''}${app.v.event && ufield !== 'ev' ? '<button class="small" data-send="ev">⚔ 이벤트로</button>' : ''}</div>` : ''}
+    ${mine && u ? recipeHints(type) : ''}
     ${t.hero ? `<div style="color:#8ff0e0"><b>Lv.${lvl}</b> / 10 · 처치 ${kills} · 피해 +${(lvl - 1) * 12}% (요괴를 잡을수록 성장)</div>` : ''}
     ${mine && u && t.hero ? '<div class="acts"><span class="hint">영웅은 합성·판매하지 않아요 · 빈칸 클릭 = 이동</span></div>' : ''}
     ${mine && u && !t.hero ? `<div class="acts">
@@ -484,6 +567,8 @@ function renderSelected() {
 }
 onPress($('#selected'), (b) => {
   if (b.dataset.merge) { const x = app.v.units.find((q) => q[1] === app.myIdx && q[2] === b.dataset.merge); if (x) { cmd({ t: 'merge', unit: x[0] }); Sound.play('merge'); } }
+  else if (b.dataset.send) { const f = b.dataset.send === 'home' ? 'm' + app.myIdx : b.dataset.send === 'room' ? 'r' + app.myIdx : 'ev'; cmd({ t: 'send', unit: app.sel, field: f }); Sound.play('click'); }
+  else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft, unit: app.sel }); Sound.play('merge'); }
   else if (b.dataset.a) action(b.dataset.a);
 });
 
@@ -519,18 +604,120 @@ function renderHeroPick() {
   el.innerHTML = `<b>🦸 영웅 영입권!</b> <span class="hint">데려올 영웅을 고르세요 ${app.selTile ? '(고른 칸에 배치)' : '(빈칸을 먼저 누르면 그 자리에)'} · 남은 영입권 ${p.tickets}</span><div class="opts">${p.heroChoice.map((id) => { const h = app.unitMap[id]; return `<button data-h="${id}"><b>${h.icon}</b>${esc(h.name)}<small>${esc(h.desc)}</small></button>`; }).join('')}</div>`;
   el.classList.remove('hidden');
 }
-onPress($('#herochoice'), (b) => { if (b.dataset.h) { cmd({ t: 'hero', id: b.dataset.h, tile: app.selTile || undefined }); app.selTile = null; } });
+onPress($('#herochoice'), (b) => { if (b.dataset.h) { cmd({ t: 'hero', id: b.dataset.h, tile: app.selTile || undefined, field: app.viewField }); app.selTile = null; } });
 
-function renderMissions() {
-  const p = me();
-  if (!p || !p.missions) return;
-  const done = p.missions.filter((m) => m[2]).length;
-  const open = app.missionsOpen !== false;
-  const html = `<div class="mh" data-toggle="1"><span>🎖 미션 (${done}/${p.missions.length}) → 영웅 영입권</span><span>${open ? '▲' : '▼'}</span></div>
-    ${open ? `<div class="ml">${p.missions.map(([id, cur, ok]) => { const m = app.missionMap[id]; return `<span class="${ok ? 'done' : ''}">${ok ? '✅' : m.icon} ${esc(m.desc)}</span><span class="pg ${ok ? 'done' : ''}">${ok ? '완료' : `${cur}/${m.goal}`}</span>`; }).join('')}</div>` : ''}`;
-  setHTML($('#missions'), html);
+
+// ───────────── 오른쪽 서랍: 조합법 · 미션 · 보스 스토리 ─────────────
+function hiddenKnown() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem('defense-hidden') || '[]'); } catch { /* 무시 */ }
+  return new Set([...saved, ...((app.v && app.v.discovered) || [])]);
 }
-$('#missions').addEventListener('click', (e) => { if (e.target.closest('[data-toggle]')) { app.missionsOpen = app.missionsOpen === false; renderMissions(); } });
+function rememberHidden(id) {
+  const k = hiddenKnown();
+  const first = !k.has(id);
+  k.add(id);
+  try { localStorage.setItem('defense-hidden', JSON.stringify([...k])); } catch { /* 무시 */ }
+  if (first) { banner('🔮 히든 조합 발견!'); Sound.play('myth'); }
+}
+function haveCounts() {
+  const c = {};
+  for (const u of app.v.units) if (u[1] === app.myIdx) c[u[2]] = (c[u[2]] || 0) + 1;
+  return c;
+}
+function ingChips(r, have, items) {
+  const used = {};
+  return r.need.map((n) => {
+    used[n] = (used[n] || 0) + 1;
+    if (n[0] === '#') { const it = app.cat.items[n.slice(1)]; const ok = (items[n.slice(1)] || 0) >= used[n]; return `<span class="chip ${ok ? 'have' : ''}" title="보스 스토리·이벤트 보상">${it.icon} ${esc(it.name)}</span>`; }
+    const t = app.unitMap[n];
+    return `<span class="chip ${(have[n] || 0) >= used[n] ? 'have' : ''}">${t.icon} ${esc(t.name)}</span>`;
+  }).join('');
+}
+/** 선택한 유닛이 재료로 들어가는 조합 */
+function recipeHints(type) {
+  const p = me();
+  const known = hiddenKnown();
+  const list = app.cat.recipes.filter((r) => r.need.includes(type) && (!r.hidden || known.has(r.id)));
+  if (!list.length) return '';
+  return `<div style="margin-top:6px"><b>📜 이 유닛으로 만드는 조합</b>${list.map((r) => { const o = app.unitMap[r.out]; const ok = p.craftable.includes(r.id); return `<div class="rc ${ok ? 'ok' : ''} ${r.hidden ? 'hid' : ''}" style="--c:${app.cat.tiers[o.tier - 1].color}"><span class="out">${o.icon} ${esc(o.name)}</span><span class="ing">${ingChips(r, haveCounts(), p.items)}</span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`; }).join('')}</div>`;
+}
+function renderSideTabs() {
+  const p = me();
+  if (!p) return;
+  const badge = (d, n) => { const el = document.querySelector(`#sidetabs [data-d=${d}] .badge`); el.textContent = n; el.classList.toggle('hidden', !n); };
+  badge('recipe', p.craftable.length);
+  badge('mission', p.tickets || 0);
+  badge('story', p.story.states.filter((x) => x === 'open').length + (p.story.active ? 1 : 0));
+  for (const b of document.querySelectorAll('#sidetabs button')) b.classList.toggle('on', b.dataset.d === app.drawer);
+}
+function toggleDrawer(d) { if (app.drawer === d) closeDrawer(); else { app.drawer = d; $('#drawer').classList.remove('hidden'); renderDrawer(); renderSideTabs(); Sound.play('click'); } }
+function closeDrawer() { app.drawer = null; $('#drawer').classList.add('hidden'); $('#drawer')._html = null; if (app.v) renderSideTabs(); }
+onPress($('#sidetabs'), (b) => toggleDrawer(b.dataset.d));
+function renderDrawer() {
+  const p = me();
+  if (!p || !app.drawer) return;
+  let html = `<button class="small" style="float:right" data-close="1">✕</button>`;
+  if (app.drawer === 'recipe') {
+    const have = haveCounts();
+    const known = hiddenKnown();
+    const row = (r) => {
+      const o = app.unitMap[r.out];
+      const ok = p.craftable.includes(r.id);
+      const tier = app.cat.tiers[o.tier - 1];
+      if (r.hidden && !known.has(r.id)) return `<div class="rc hid"><span class="out">❓ ???</span><span class="ing"><span class="hint">${esc(r.hint)}</span></span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+      return `<div class="rc ${ok ? 'ok' : ''} ${r.hidden ? 'hid' : ''}" style="--c:${tier.color}" title="${esc(o.desc)}"><span class="out">${o.icon} ${esc(o.name)}</span><span class="ing">${ingChips(r, have, p.items)}</span>${ok ? `<button class="primary" data-craft="${r.id}">조합</button>` : ''}</div>`;
+    };
+    const groups = [[2, '희귀'], [3, '에픽'], [4, '전설'], [5, '신화']];
+    const itemsHtml = Object.entries(p.items).filter(([, n]) => n > 0).map(([k, n]) => `<span class="chip have">${app.cat.items[k].icon} ${esc(app.cat.items[k].name)} ×${n}</span>`).join('');
+    html += `<h3>📜 조합법 <span class="hint">R</span></h3>
+      <div class="hint">재료 유닛(내 전장·보스방 어디든)이 모이면 <b>조합</b> 버튼이 켜져요. 초록 칩 = 가진 재료. 같은 유닛 3개를 모으는 <b>랜덤 합성(F)</b>도 그대로 있어요.</div>
+      ${itemsHtml ? `<div class="sec">🎒 재료 아이템</div><div class="items">${itemsHtml}</div>` : ''}
+      ${groups.map(([t, n]) => `<div class="sec" style="color:${app.cat.tiers[t - 1].color}">${n}</div>${app.cat.recipes.filter((r) => !r.hidden && app.unitMap[r.out].tier === t).map(row).join('')}`).join('')}
+      <div class="sec" style="color:#ff5ad8">🔮 히든 조합 (${app.cat.recipes.filter((r) => r.hidden && known.has(r.id)).length}/${app.cat.recipes.filter((r) => r.hidden).length} 발견)</div>
+      <div class="hint">처음엔 ???로 가려져 있어요. 힌트를 보고 재료를 맞히면 공개돼요 (한 번 찾으면 이 컴퓨터에 기억돼요).</div>
+      ${app.cat.recipes.filter((r) => r.hidden).map(row).join('')}`;
+  } else if (app.drawer === 'mission') {
+    const done = p.missions.filter((m) => m[2]).length;
+    html += `<h3>🎖 미션 (${done}/${p.missions.length})</h3><div class="hint">미션을 달성할 때마다 <b>영웅 영입권</b> 1장 → 영웅 3명 중 1명을 데려와요. 보스 스토리 2·4·6장과 스토리 이벤트도 영입권을 줘요.</div>
+      ${p.tickets ? `<div class="sec">🦸 남은 영입권 ${p.tickets}장</div>` : ''}
+      ${p.missions.map(([id, cur, ok]) => { const m = app.missionMap[id]; return `<div class="st ${ok ? 'cleared' : 'open'}"><div class="t">${ok ? '✅' : m.icon} ${esc(m.name)}</div><div>${esc(m.desc)} — <b>${ok ? '완료' : `${cur}/${m.goal}`}</b></div></div>`; }).join('')}`;
+  } else if (app.drawer === 'story') {
+    const names = { open: '도전 가능', active: '도전 중', cleared: '클리어', locked: '잠김' };
+    html += `<h3>📖 보스 스토리</h3><div class="hint">각자 <b>내 보스방</b>에서 장마다 보스를 따로 잡아요 (${app.cat.storyTime}초 제한). 도전하면 내 전장에서 정예를 보스방으로 보내세요 — 끝나면 자동으로 돌아와요. 클리어하면 <b>히든 조합 재료</b>를 얻어요.</div>
+      ${app.cat.story.map((st, i) => { const state = p.story.states[i]; const it = app.cat.items[st.item]; return `<div class="st ${state}"><div class="t">${st.ch}장 「${esc(st.title)}」 ${st.icon} <span class="hint">${names[state]}${state === 'locked' ? ` · ${st.wave}웨이브부터` : ''}</span></div>
+        <div class="hint">보스: ${esc(st.boss)} · 보상 ${it.icon} ${esc(it.name)} + 골드 ${st.gold}${st.ch % 2 === 0 ? ' + 영웅 영입권' : ''}</div>
+        ${state === 'cleared' ? `<div class="hint">“${esc(st.outro)}”</div>` : ''}
+        <div class="acts">${state === 'open' ? `<button class="primary" data-story="${st.id}" ${p.story.active || p.story.cd ? 'disabled' : ''}>⚔ 도전 + 정예 3명 보내기${p.story.cd ? ` (${p.story.cd}초)` : ''}</button>` : ''}${state === 'active' ? `<button data-view="r${app.myIdx}">📖 보스방 보기 (⏳${p.story.left}초)</button>` : ''}</div></div>`; }).join('')}
+      <div class="sec">⚔ 스토리 이벤트 (함께)</div>
+      <div class="hint">${app.cat.events.map((e) => `${e.wave}웨이브: ${e.icon} ${esc(e.boss)}`).join(' · ')} — 열리면 둘 다 이벤트 전장에 유닛을 보내 ${app.cat.eventTime}초 안에 함께 잡아요. 성공하면 모두 영웅 영입권 + 🌠 별의 파편.</div>`;
+  }
+  setHTML($('#drawer'), html);
+}
+onPress($('#drawer'), (b) => {
+  if (b.dataset.close) closeDrawer();
+  else if (b.dataset.craft) { cmd({ t: 'craft', recipe: b.dataset.craft }); Sound.play('merge'); }
+  else if (b.dataset.story) { cmd({ t: 'story', id: b.dataset.story }); setTimeout(() => { cmd({ t: 'dispatch', field: 'r' + app.myIdx, n: 3 }); switchField('r' + app.myIdx); }, 150); }
+  else if (b.dataset.view) switchField(b.dataset.view);
+});
+
+/** 스토리 대화창 */
+function storyBox(face, title, text) {
+  const el = $('#storybox');
+  el.innerHTML = `<div class="face">${face}</div><div><div class="tt">${esc(title)}</div><p>${esc(text)}</p><button class="small" data-x="1">닫기</button></div>`;
+  el.classList.remove('hidden');
+  clearTimeout(storyBox.t);
+  storyBox.t = setTimeout(() => el.classList.add('hidden'), 14000);
+}
+$('#storybox').addEventListener('click', (e) => { if (e.target.closest('[data-x]')) $('#storybox').classList.add('hidden'); });
+function onStoryFx(f) {
+  const [, kind, id, who] = f;
+  if (kind === 'event') { const ev = app.cat.events[id]; storyBox(ev.icon, `스토리 이벤트 — ${ev.boss}`, ev.intro); banner('⚔ 스토리 이벤트!'); Sound.play('boss'); return; }
+  const st = app.cat.story.find((x) => x.id === id);
+  if (!st || who !== app.myIdx) return;
+  if (kind === 'start') { storyBox(st.icon, `${st.ch}장 「${st.title}」`, st.intro); Sound.play('boss'); }
+  if (kind === 'clear') { storyBox('📜', `${st.ch}장 클리어!`, st.outro); banner(`📖 ${st.ch}장 클리어!`); Sound.play('win'); }
+}
 
 // ───────────── 입력 ─────────────
 function tileAt(e) {
@@ -544,7 +731,7 @@ app.freeTile = (x, y) => freeTile(x, y);
 app.entPos = (ent, now) => entPos(ent, now);
 function freeTile(x, y) {
   const m = app.info.map;
-  return x >= 0 && y >= 0 && x < m.W && y < m.H && !bgCanvas.blocked.has(x + ',' + y) && !app.v.units.some((u) => u[3] === x && u[4] === y);
+  return x >= 0 && y >= 0 && x < m.W && y < m.H && !bgCanvas.blocked.has(x + ',' + y) && !(app.fu || []).some((u) => u[3] === x && u[4] === y);
 }
 canvas.addEventListener('mousemove', (e) => { if (!app.info) return; app.hover = tileAt(e); });
 canvas.addEventListener('mouseleave', () => { app.hover = null; });
@@ -553,8 +740,8 @@ canvas.addEventListener('click', (e) => {
   if (!app.v) return;
   const t = tileAt(e);
   app.hover = t;
-  if (app.aiming) { cmd({ t: 'skill', x: t.fx, y: t.fy }); app.aiming = false; renderControls.key = null; return; }
-  const u = app.v.units.find((x) => x[3] === t.x && x[4] === t.y);
+  if (app.aiming) { cmd({ t: 'skill', x: t.fx, y: t.fy, field: app.viewField }); app.aiming = false; renderControls.key = null; return; }
+  const u = (app.fu || []).find((x) => x[3] === t.x && x[4] === t.y);
   if (u) {
     if (u[1] === app.myIdx) {
       if (app.sel && app.sel !== u[0] && e.shiftKey) { cmd({ t: 'swap', unit: app.sel, other: u[0] }); app.sel = null; return; }
@@ -563,7 +750,7 @@ canvas.addEventListener('click', (e) => {
     app.selTile = null;
     Sound.play('click');
   } else if (freeTile(t.x, t.y)) {
-    if (app.sel) { cmd({ t: 'move', unit: app.sel, tile: [t.x, t.y] }); app.sel = null; Sound.play('click'); }
+    if (app.sel) { cmd({ t: 'move', unit: app.sel, tile: [t.x, t.y], field: app.viewField }); app.sel = null; Sound.play('click'); }
     else { app.selTile = app.selTile && app.selTile[0] === t.x && app.selTile[1] === t.y ? null : [t.x, t.y]; }
   } else { app.sel = null; app.selTile = null; }
   renderSelected();
@@ -575,15 +762,17 @@ document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (k === 'enter') { app.tab = 'chat'; document.querySelector('.tabs [data-tab=chat]').click(); $('#chat input').focus(); e.preventDefault(); return; }
   const map = { q: 'summon', w: 'premium', e: 'skill', f: 'merge', s: 'sell' };
-  const ko = { ㅂ: 'q', ㅈ: 'w', ㄷ: 'e', ㄹ: 'f', ㄴ: 's', ㅔ: 'p', ㅎ: 'g' }; // 한글 자판
+  const ko = { ㅂ: 'q', ㅈ: 'w', ㄷ: 'e', ㄹ: 'f', ㄴ: 's', ㅔ: 'p', ㅎ: 'g', ㄱ: 'r' }; // 한글 자판
   const key = ko[k] || k;
-  if (key === 'q' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', tile: [app.hover.x, app.hover.y] }); Sound.play('summon'); return; }
-  if (key === 'w' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', premium: true, tile: [app.hover.x, app.hover.y] }); Sound.play('rare'); return; }
+  if (key === 'q' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('summon'); return; }
+  if (key === 'w' && app.hover && freeTile(app.hover.x, app.hover.y) && !app.selTile) { cmd({ t: 'summon', premium: true, tile: [app.hover.x, app.hover.y], field: app.viewField }); Sound.play('rare'); return; }
+  if (key === 'r') { toggleDrawer('recipe'); return; }
+  if (key === 'tab') { e.preventDefault(); const order = ['m' + app.myIdx, 'r' + app.myIdx, ...(app.v.event ? ['ev'] : []), ...app.info.players.map((_, i) => 'm' + i).filter((f) => f !== 'm' + app.myIdx)]; switchField(order[(order.indexOf(app.viewField) + 1) % order.length]); return; }
   if (map[key]) { action(map[key]); return; }
   if (['1', '2', '3'].includes(key)) { action('up', Object.keys(app.cat.cats)[Number(key) - 1]); return; }
   if (key === 'p' || key === ' ') { send({ t: 'pause' }); e.preventDefault(); return; }
-  if (key === 'g' && app.hover) { cmd({ t: 'ping', x: app.hover.fx, y: app.hover.fy }); return; }
-  if (key === 'escape') { app.sel = null; app.selTile = null; app.aiming = false; renderControls.key = null; closeModal(); }
+  if (key === 'g' && app.hover) { cmd({ t: 'ping', x: app.hover.fx, y: app.hover.fy, field: app.viewField }); return; }
+  if (key === 'escape') { app.sel = null; app.selTile = null; app.aiming = false; renderControls.key = null; closeModal(); closeDrawer(); $('#storybox').classList.add('hidden'); }
 });
 
 // ───────────── 효과 ─────────────
@@ -618,7 +807,7 @@ function frame() {
   if (!app.info || !app.v || !bgCanvas || $('#game').classList.contains('hidden')) return;
   const now = performance.now();
   if (app.use3d) { Board3D.render(app, now); return; }
-  const v = app.v;
+  const v = app.vf || app.v;
   const g = ctx;
   g.drawImage(bgCanvas, 0, 0);
   g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -778,6 +967,7 @@ function openCodex() {
       ${c.units.filter((u) => u.tier === t.id).map((u) => `<div class="cx" style="--c:${t.color}"><div class="n">${u.icon} ${esc(u.name)} <span class="hint">${c.cats[u.cat].icon}</span></div><div class="s">피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}회/초 · 사거리 ${u.range}</div><div class="s">${esc(effect(u))}</div><div>${esc(u.desc)}</div></div>`).join('')}
     </div></div>`).join('')}
     <h2>🦸 영웅 <span class="hint">— 소환·합성으로는 안 나와요. 미션을 달성해 받은 영입권으로 데려오고, 요괴를 잡을수록 레벨업(최대 10)</span></h2><div class="codex-grid">${c.units.filter((u) => u.hero).map((u) => `<div class="cx" style="--c:#48f0d8"><div class="n">${u.icon} ${esc(u.name)} <span class="hint">${c.cats[u.cat].icon}</span></div><div class="s">피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}회/초 · 사거리 ${u.range}</div><div class="s">${esc(effect(u))}</div><div>${esc(u.desc)}</div></div>`).join('')}</div>
+    <h2>🔮 히든 유닛 <span class="hint">— 히든 조합으로만 만들어요 (조합법은 📜 조합법에서)</span></h2><div class="codex-grid">${c.units.filter((u) => u.hidden).map((u) => { const r = c.recipes.find((x) => x.out === u.id); const k = hiddenKnown().has(r.id); return k ? `<div class="cx" style="--c:#ff5ad8"><div class="n">${u.icon} ${esc(u.name)}</div><div class="s">피해 ${u.dmg} · ${(1 / u.cd).toFixed(1)}회/초 · 사거리 ${u.range}</div><div>${esc(u.desc)}</div></div>` : `<div class="cx" style="--c:#ff5ad8"><div class="n">❓ ???</div><div class="s">${esc(r.hint)}</div></div>`; }).join('')}</div>
     <h2>🎖 미션</h2><div class="codex-grid">${c.missions.map((m) => `<div class="cx" style="--c:#fd6"><div class="n">${m.icon} ${esc(m.name)}</div><div class="s">${esc(m.desc)}</div></div>`).join('')}</div>
     <h2>👹 요괴</h2><div class="codex-grid">${Object.entries(c.enemies).map(([, e]) => `<div class="cx" style="--c:#a66"><div class="n">${e.icon} ${esc(e.name)}</div><div class="s">속도 ${e.speed} · 방어 ${e.armor}${e.flying ? ' · 비행' : ''}${e.split ? ' · 죽으면 분열' : ''}${e.regen ? ' · 재생' : ''}${e.treasure ? ' · 잡으면 보상!' : ''}</div></div>`).join('')}
     ${c.bosses.map((b) => `<div class="cx" style="--c:#f48"><div class="n">${b.icon} ${esc(b.name)} <span class="hint">${b.wave}웨이브</span></div><div class="s">${esc(b.desc)}</div></div>`).join('')}</div>
@@ -791,6 +981,9 @@ function openGuide() {
       <li>🎲 <b>소환 (Q)</b>: 50골드로 무작위 퇴마사를 불러요. 빈칸을 먼저 누르면 그 자리에, 아니면 길 가까운 곳에 자동으로 놓여요. 마우스를 빈칸에 올리고 Q를 눌러도 돼요.</li>
       <li>💎 <b>고급 소환 (W)</b>: 비싸지만 희귀 등급 이상이 확정!</li>
       <li>✨ <b>합성 (F)</b>: 같은 유닛 <b>3개</b>(전설은 2개)를 모으면 한 등급 위 <b>무작위</b> 유닛이 돼요. 일반 → 희귀 → 에픽 → 전설 → 신화. 합성할 수 있는 유닛에는 ✦ 표시가 떠요.</li>
+      <li>🏯 <b>각자 전장</b>: 둘이 <b>각자 자기 전장</b>을 막아요. 위쪽 탭으로 동료 전장을 볼 수 있고(Tab 키), 어느 한쪽이라도 무너지면 패배!</li>
+      <li>📜 <b>조합법 (R)</b>: 정해진 재료를 모으면 원하는 유닛을 만들 수 있어요. <b>히든 조합</b>은 ???로 가려져 있고, 보스 스토리 보상 재료가 필요해요.</li>
+      <li>📖 <b>보스 스토리</b>: 각자 자기 보스방에서 6장의 스토리 보스를 따로 잡아요. ⚔ <b>스토리 이벤트</b>(12·24·36웨이브)는 둘이 함께 이벤트 전장에 유닛을 보내 잡아요.</li>
       <li>🦸 <b>영웅</b>: 오른쪽 <b>🎖 미션</b>(처치 수, 전설 만들기, 보스 잡기 등)을 달성하면 <b>영웅 영입권</b>을 받아요. 영웅 8명 중 3명이 제시되고 하나를 골라 데려와요. 영웅은 요괴를 잡을수록 레벨이 올라 강해져요 (최대 Lv.10).</li>
       <li>🖱 유닛을 누르고 빈칸을 누르면 <b>이동</b>, Shift+클릭이면 내 유닛 둘의 자리 <b>바꾸기</b>. 오른쪽 클릭은 선택 취소.</li>
       <li>⚔🏹🔮 <b>강화 (1·2·3)</b>: 검술·궁술·술법 유닛 피해를 각각 올려요. 내 유닛 구성에 맞춰 강화하세요.</li>
@@ -806,7 +999,7 @@ function openGuide() {
     </ul>
     <p><b>요괴 특징</b>: 🐦‍⬛ 까마귀는 날아다녀서 검술 유닛이 못 때려요 · 💀 갑옷 망령은 방어가 높아 강한 한 방이나 방어 깎기가 좋아요 · 🟢 점액은 죽으면 분열 · 🐸 보물 두꺼비를 잡으면 보상!</p>
     <p><b>웨이브 변이</b>: 질풍(빠름)·거구(체력)·재생·강철(방어)·떼거리(수가 많음)·유령(회피). 오른쪽 '다음 웨이브'에서 미리 확인하세요.</p>
-    <p><b>단축키</b>: Q 소환 · W 고급 소환 · E 필살기 · F 합성 · S 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소</p>
+    <p><b>단축키</b>: Q 소환 · W 고급 소환 · E 필살기 · F 랜덤 합성 · R 조합법 · Tab 전장 바꾸기 · S 판매 · 1/2/3 강화 · G 위치 알림 · P/스페이스 일시정지 · Enter 채팅 · Esc 취소 · 마우스 휠 확대</p>
   </div>`);
 }
 

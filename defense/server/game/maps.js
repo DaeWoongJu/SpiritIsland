@@ -307,6 +307,10 @@ let lineN = 0;
 GEN_LIST.forEach(([name, theme, kind], i) => MAPS.push(build('g' + (i + 1), name, theme, kind === 'line' && lineN++ % 2 ? 'dualv' : kind, 1000 + i * 7919)));
 const MAP_MAP = Object.fromEntries(MAPS.map((m) => [m.id, m]));
 
+/** 보스방 (각자) · 스토리 이벤트 전장 (함께) */
+const ROOM_MAP = decorate({ id: 'room', name: '보스방', theme: 'night', kind: 'loop', kindName: '보스방', W, H, seed: 3, note: '보스 스토리 도전', paths: [{ pts: toTiles([[1, 1], [6, 1], [6, 3], [1, 3]]), loop: true }] }, rng(4242));
+const EVENT_MAP = decorate({ id: 'event', name: '스토리 이벤트 전장', theme: 'lava', kind: 'loop', kindName: '이벤트', W, H, seed: 5, note: '둘이 함께', paths: loop2([[0, 0], [3, 0], [3, 1], [4, 1], [4, 0], [7, 0], [7, 4], [4, 4], [4, 3], [3, 3], [3, 4], [0, 4]]) }, rng(777));
+
 /** 완전 랜덤 맵 (매번 새로) */
 function randomMap(seed) {
   const r = rng(seed);
@@ -322,4 +326,4 @@ function summary(m) {
   return { id: m.id, name: m.name, theme: m.theme, kind: m.kind, kindName: m.kindName, note: m.note, paths: m.paths, decor: m.decor, pathTiles: m.pathTiles, base: m.base || null, W, H };
 }
 
-module.exports = { W, H, THEMES, MAPS, MAP_MAP, randomMap, summary, rasterize, rng };
+module.exports = { W, H, THEMES, MAPS, MAP_MAP, ROOM_MAP, EVENT_MAP, randomMap, summary, rasterize, rng };

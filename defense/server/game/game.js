@@ -1,13 +1,37 @@
 'use strict';
 // 요괴 퇴마 디펜스 — 실시간 시뮬레이션 (서버가 모든 계산을 하고 화면에는 결과만 보냄)
+// 전장(field) 여러 개: 사람마다 자기 전장(m0, m1) · 자기 보스방(r0, r1) · 함께 쓰는 스토리 이벤트 전장(ev)
 const D = require('./data');
 const M = require('./maps');
 
 const DT = 0.05; // 1틱 = 0.05초
+const FIELD_HP = 0.62; // 한 사람이 한 전장을 혼자 막으므로 체력 보정
 
 /** 웨이브 기본 체력 */
-function hpBase(w) { return Math.round(22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
-function killGold(w) { return 2 + Math.floor(w / 8); }
+function hpBase(w) { return Math.round((w < 8 ? 0.55 + w * 0.06 : 1) * 22 * Math.pow(1.18, Math.min(w, 25) - 1) * Math.pow(1.125, Math.max(0, w - 25)) * (1 + w * 0.03)); }
+function killGold(w) { return 3 + Math.floor(w / 6); }
+
+function makeField(id, kind, owner, map, diff) {
+  const paths = map.paths.map((p) => {
+    const pts = p.pts.map(([x, y]) => [x + 0.5, y + 0.5]);
+    if (p.loop) pts.push(pts[0]);
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    return { pts, cum, len: cum[cum.length - 1], loop: p.loop, start: p.start || 0 };
+  });
+  const blocked = new Set();
+  for (const [x, y] of map.pathTiles) blocked.add(x + ',' + y);
+  for (const [x, y] of map.decor) blocked.add(x + ',' + y);
+  const spots = [];
+  for (let y = 0; y < M.H; y++) for (let x = 0; x < M.W; x++) {
+    if (blocked.has(x + ',' + y)) continue;
+    let d = 99;
+    for (const [px, py] of map.pathTiles) d = Math.min(d, Math.max(Math.abs(px - x), Math.abs(py - y)));
+    spots.push({ x, y, d });
+  }
+  spots.sort((a, b) => a.d - b.d);
+  return { id, kind, owner, map, paths, blocked, spots, loopMode: map.kind === 'loop', lives: diff.lives, limit: diff.limit, count: 0, spawnN: 0 };
+}
 
 class Game {
   /**
@@ -21,76 +45,61 @@ class Game {
     this.map = opts.mapId && opts.mapId !== 'random' && M.MAP_MAP[opts.mapId] ? M.MAP_MAP[opts.mapId] : M.randomMap(this.seed ^ 0x5bd1e995);
     this.endless = !!opts.endless;
     this.loopMode = this.map.kind === 'loop';
-    this.solo = roster.length === 1;
     this.players = roster.map((p, i) => ({
       id: p.id, name: p.name, idx: i, bot: !!p.bot, leader: D.LEADER_MAP[p.leader] ? p.leader : D.LEADERS[i % D.LEADERS.length].id,
       gold: D.ECON.startGold, upg: { blade: 0, bow: 0, magic: 0 }, bless: [], choice: null, skillCd: 8, kills: 0, damage: 0, summons: 0,
       goldRainUntil: 0, temperUntil: 0,
-      // 미션·영웅
       bosses: 0, toads: 0, bestTier: 1, done: [], tickets: 0, heroChoice: null, heroes: [],
+      items: {}, story: { cleared: [], active: null, deadline: 0, cdUntil: 0 },
     }));
+    // 전장: 각자 같은 모양의 전장을 하나씩 + 각자 보스방 + 함께 쓰는 이벤트 전장
+    this.fields = [];
+    for (const p of this.players) this.fields.push(makeField('m' + p.idx, 'main', p.idx, this.map, this.diff));
+    for (const p of this.players) this.fields.push(makeField('r' + p.idx, 'room', p.idx, M.ROOM_MAP, this.diff));
+    this.fields.push(makeField('ev', 'event', null, M.EVENT_MAP, this.diff));
+    this.F = Object.fromEntries(this.fields.map((f) => [f.id, f]));
+    this.mains = this.fields.filter((f) => f.kind === 'main');
     this.units = [];
     this.enemies = [];
-    this.zones = []; // 화살비 같은 지속 효과
+    this.zones = [];
     this.nextId = 1;
     this.time = 0;
     this.wave = 0;
-    this.waveTimer = 6; // 첫 웨이브까지
+    this.waveTimer = 6;
     this.spawnQueue = [];
-    this.lives = this.diff.lives;
-    this.limit = this.diff.limit;
     this.result = null;
     this.fx = [];
     this.msgs = [];
     this.globalSlowUntil = 0;
-    // 길 미리 계산
-    this.paths = this.map.paths.map((p) => {
-      const pts = p.pts.map(([x, y]) => [x + 0.5, y + 0.5]);
-      if (p.loop) pts.push(pts[0]);
-      const cum = [0];
-      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-      return { pts, cum, len: cum[cum.length - 1], loop: p.loop, start: p.start || 0 };
-    });
-    this.blocked = new Set();
-    for (const [x, y] of this.map.pathTiles) this.blocked.add(x + ',' + y);
-    for (const [x, y] of this.map.decor) this.blocked.add(x + ',' + y);
-    // 길 옆 자리(자동 배치용) — 길과 가까운 순
-    this.spots = [];
-    for (let y = 0; y < M.H; y++) for (let x = 0; x < M.W; x++) {
-      if (this.blocked.has(x + ',' + y)) continue;
-      let d = 99;
-      for (const [px, py] of this.map.pathTiles) d = Math.min(d, Math.max(Math.abs(px - x), Math.abs(py - y)));
-      // 길마다 거리 (쌍둥이 맵에서 내 쪽 길 옆에 자동 배치)
-      const dp = this.map.paths.map((p) => {
-        let m = 99;
-        for (const k of M.rasterize(p.pts, p.loop)) { const [px, py] = k.split(',').map(Number); m = Math.min(m, Math.max(Math.abs(px - x), Math.abs(py - y))); }
-        return m;
-      });
-      this.spots.push({ x, y, d, dp });
-    }
-    // 길 모양이 서로 다른 맵이면 사람마다 맡는 길을 나눔
-    const distinct = new Set(this.map.paths.map((p) => JSON.stringify(p.pts))).size;
-    this.sides = distinct > 1 && this.players.length > 1;
+    this.event = null; // { idx, deadline }
+    this.eventsDone = [];
+    this.discovered = []; // 이번 판에 공개된 히든 조합
     this.nextPlan = this.planWave(1);
   }
 
   // ───────── 도우미 ─────────
   pick(arr) { return arr[Math.floor(this.rand() * arr.length)]; }
   player(id) { return this.players.find((p) => p.id === id); }
-  msg(text, kind = 'info') { this.msgs.push({ text, kind, at: this.time }); }
-  occupied(x, y) { return this.units.some((u) => u.x === x && u.y === y); }
-  free(x, y) { return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !this.blocked.has(x + ',' + y) && !this.occupied(x, y); }
-  autoSpot(owner) {
-    // 같은 편 유닛 근처 + 길에 가까운 빈칸 (쌍둥이 맵이면 내 쪽 절반 우선)
-    const me = this.player(owner);
+  msg(text, kind = 'info', to = null) { this.msgs.push({ text, kind, at: this.time, to }); }
+  /** 효과 이벤트 (전장 id 를 앞에 붙임. '*' = 모든 전장) */
+  fxp(field, arr) { this.fx.push([field, ...arr]); }
+  mainOf(p) { return this.F['m' + p.idx]; }
+  occupied(f, x, y) { return this.units.some((u) => u.field === f && u.x === x && u.y === y); }
+  free(f, x, y) { const F = this.F[f]; return !!F && Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < M.W && y < M.H && !F.blocked.has(x + ',' + y) && !this.occupied(f, x, y); }
+  /** 내가 유닛을 둘 수 있는 전장인가 */
+  canUse(p, f) { return f === 'm' + p.idx || f === 'r' + p.idx || (f === 'ev' && !!this.event); }
+  autoSpot(owner, fieldId) {
+    const p = typeof owner === 'string' ? this.player(owner) : this.players[owner];
+    const F = this.F[fieldId || 'm' + p.idx];
     let best = null, bs = Infinity;
-    for (const s of this.spots) {
-      if (this.occupied(s.x, s.y)) continue;
-      let score = s.d * 10 + this.rand() * 4;
-      if (this.sides) score += s.dp[me.idx % s.dp.length] * 6;
+    for (const s of F.spots) {
+      if (s.d > 3 && best) break;
+      if (this.occupied(F.id, s.x, s.y)) continue;
+      const score = s.d * 10 + this.rand() * 4;
       if (score < bs) { bs = score; best = s; }
     }
-    return best;
+    if (!best) for (const s of F.spots) if (!this.occupied(F.id, s.x, s.y)) { best = s; break; }
+    return best ? { x: best.x, y: best.y, field: F.id } : null;
   }
 
   /** 다음 웨이브 계획 */
@@ -108,10 +117,11 @@ class Game {
   planInfo(p) {
     if (!p) return null;
     const boss = p.boss && D.BOSSES.find((b) => b.id === p.boss);
+    const ev = D.EVENTS.find((e) => e.wave === p.wave);
     return {
       wave: p.wave, main: D.ENEMIES[p.main].name, mainIcon: D.ENEMIES[p.main].icon, second: p.second && p.second !== p.main ? D.ENEMIES[p.second].name : null,
       mod: p.mod ? D.MODIFIERS.find((m) => m.id === p.mod) : null, boss: boss ? { name: boss.name, icon: boss.icon, desc: boss.desc } : null, mini: p.mini, count: p.count,
-      flying: p.main === 'crow' || p.second === 'crow',
+      flying: p.main === 'crow' || p.second === 'crow', event: ev ? { boss: ev.boss, icon: ev.icon } : null,
     };
   }
 
@@ -138,13 +148,105 @@ class Game {
         p.gold += Math.round(g);
       }
     }
+    // 스토리 이벤트
+    const ei = D.EVENTS.findIndex((e) => e.wave === this.wave);
+    if (ei >= 0 && !this.event) this.openEvent(ei);
   }
 
-  spawn(s) {
+  // ───────── 스토리 이벤트 (함께) ─────────
+  openEvent(i) {
+    const ev = D.EVENTS[i];
     const w = this.wave;
-    const base = hpBase(w) * this.diff.hp * (this.solo ? 0.7 : 1);
+    this.event = { idx: i, deadline: this.time + D.EVENT_TIME };
+    const base = hpBase(w) * this.diff.hp * FIELD_HP * Math.max(1, this.players.length * 0.8);
+    this.spawnBoss('ev', { k: ev.model, name: ev.boss, hp: base * ev.hp, speed: 0.45, armor: ev.armor, eventBoss: true, ability: 'brood', gold: 0 });
+    this.msg(`⚔ 스토리 이벤트! 「${ev.icon} ${ev.boss}」 — 이벤트 전장에 유닛을 보내 함께 쓰러뜨리세요 (${D.EVENT_TIME}초)`, 'event');
+    this.fxp('*', ['story', 'event', i]);
+  }
+  closeEvent(win) {
+    const ev = D.EVENTS[this.event.idx];
+    this.eventsDone.push({ idx: this.event.idx, win });
+    if (win) {
+      for (const p of this.players) {
+        p.tickets++; p.gold += 500 + this.wave * 10; p.items.star = (p.items.star || 0) + 1;
+        this.offerHero(p);
+      }
+      this.msg(`🏆 스토리 이벤트 성공! 「${ev.boss}」 처치 — 모두 영웅 영입권 +1 · 골드 · 🌠 별의 파편`, 'legend');
+    } else this.msg(`💨 「${ev.boss}」이(가) 사라졌어요… 스토리 이벤트 실패`, 'bad');
+    for (const e of this.enemies) if (e.field === 'ev') { e.dead = true; e.gone = true; }
+    this.event = null;
+    this.returnUnits('ev');
+  }
+
+  // ───────── 보스 스토리 (각자) ─────────
+  storyState(p, s) {
+    if (p.story.cleared.includes(s.id)) return 'cleared';
+    if (p.story.active === s.id) return 'active';
+    const i = D.STORY.indexOf(s);
+    if (i > 0 && !p.story.cleared.includes(D.STORY[i - 1].id)) return 'locked';
+    if (this.wave < s.wave) return 'locked';
+    return 'open';
+  }
+  startStory(p, id) {
+    const s = D.STORY.find((x) => x.id === id);
+    if (!s) return null;
+    const st = this.storyState(p, s);
+    if (st === 'cleared') return '이미 깬 장이에요.';
+    if (st === 'locked') return this.wave < s.wave ? `${s.wave}웨이브부터 도전할 수 있어요.` : '이전 장을 먼저 깨야 해요.';
+    if (p.story.active) return '이미 도전 중이에요.';
+    if (p.story.cdUntil > this.time) return `잠시 뒤 다시 도전할 수 있어요 (${Math.ceil(p.story.cdUntil - this.time)}초)`;
+    const base = hpBase(Math.max(this.wave, s.wave)) * this.diff.hp * FIELD_HP;
+    this.spawnBoss('r' + p.idx, { k: s.model, name: s.boss, hp: base * s.hp, speed: 0.5, armor: s.armor, storyBoss: s.id, owner: p.idx, gold: 0 });
+    p.story.active = s.id;
+    p.story.deadline = this.time + D.STORY_TIME;
+    this.msg(`📖 ${p.name}: 보스 스토리 ${s.ch}장 「${s.title}」 시작! 보스방에 유닛을 보내세요`, 'event');
+    this.fxp('*', ['story', 'start', s.id, p.idx]);
+    return null;
+  }
+  endStory(p, win) {
+    const s = D.STORY.find((x) => x.id === p.story.active);
+    p.story.active = null;
+    if (win) {
+      p.story.cleared.push(s.id);
+      p.items[s.item] = (p.items[s.item] || 0) + 1;
+      p.gold += s.gold;
+      if (s.ch % 2 === 0) { p.tickets++; this.offerHero(p); }
+      this.msg(`📖 ${p.name}: ${s.ch}장 「${s.title}」 클리어! ${D.ITEMS[s.item].icon} ${D.ITEMS[s.item].name} · 골드 +${s.gold}${s.ch % 2 === 0 ? ' · 영웅 영입권 +1' : ''}`, 'legend');
+      this.fxp('*', ['story', 'clear', s.id, p.idx]);
+    } else {
+      p.story.cdUntil = this.time + D.STORY_COOLDOWN;
+      for (const e of this.enemies) if (e.field === 'r' + p.idx) { e.dead = true; e.gone = true; }
+      this.msg(`📖 ${p.name}: 「${s.boss}」이(가) 어둠 속으로 사라졌어요… ${D.STORY_COOLDOWN}초 뒤 다시 도전`, 'bad');
+    }
+    this.returnUnits('r' + p.idx);
+  }
+
+  spawnBoss(field, o) {
+    const e = this.spawn({ custom: o }, field);
+    e.boss = true; e.special = true;
+    return e;
+  }
+
+  /** 보스방·이벤트 전장에 보냈던 유닛을 원래 자리로 */
+  returnUnits(fieldId) {
+    for (const u of this.units) {
+      if (u.field !== fieldId) continue;
+      const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(u.owner, 'm' + u.owner);
+      if (!home) continue;
+      this.fxp(u.field, ['tele', u.x, u.y]);
+      u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
+      this.fxp(u.field, ['tele', u.x, u.y]);
+    }
+  }
+
+  spawn(s, field) {
+    const F = this.F[field];
+    const w = Math.max(1, this.wave);
+    const base = hpBase(w) * this.diff.hp * FIELD_HP;
     let e;
-    if (s.boss) {
+    if (s.custom) {
+      e = { k: s.custom.k, name: s.custom.name, hp: s.custom.hp, speed: s.custom.speed, armor: s.custom.armor, ability: s.custom.ability, abilT: 0, gold: s.custom.gold || 0, storyBoss: s.custom.storyBoss, eventBoss: s.custom.eventBoss, owner: s.custom.owner };
+    } else if (s.boss) {
       const b = D.BOSSES.find((x) => x.id === s.boss);
       const lvl = this.endless && w > D.WAVES ? Math.pow(1.5, (w - D.WAVES) / 10) : 1;
       e = { k: b.id, name: b.name, hp: base * b.hpMul * lvl, speed: b.speed, armor: b.armor, boss: true, ability: b.ability, gold: 120 + w * 6, abilT: 0, deadline: this.time + D.BOSS_TIME };
@@ -161,12 +263,13 @@ class Game {
     if (mod === 'iron') e.armor += 5;
     if (mod === 'swarm') e.hp *= 0.65;
     if (mod === 'ghost') e.evade = 0.2;
-    if (w > D.WAVES) e.hp *= Math.pow(1.12, w - D.WAVES);
+    if (w > D.WAVES && !s.custom) e.hp *= Math.pow(1.12, w - D.WAVES);
     e.hp = Math.round(e.hp);
     e.maxHp = e.hp;
     e.id = this.nextId++;
-    e.path = s.path ?? (this.spawnCounter = (this.spawnCounter || 0) + 1) % this.paths.length;
-    e.dist = s.dist ?? this.paths[e.path].start * this.paths[e.path].len;
+    e.field = field;
+    e.path = s.path ?? (F.spawnN++ % F.paths.length);
+    e.dist = s.dist ?? F.paths[e.path].start * F.paths[e.path].len;
     e.travel = s.dist || 0;
     e.slowPct = 0; e.slowUntil = 0; e.stunUntil = 0; e.shred = 0; e.shredUntil = 0;
     e.poison = null; e.burn = null; e.laps = 0;
@@ -176,7 +279,7 @@ class Game {
   }
 
   placeEnemy(e) {
-    const p = this.paths[e.path];
+    const p = this.F[e.field].paths[e.path];
     let d = e.dist;
     if (p.loop) d = ((d % p.len) + p.len) % p.len;
     else d = Math.min(d, p.len);
@@ -206,9 +309,8 @@ class Game {
       if (b === 'range') range += 0.4;
     }
     if (p.temperUntil > this.time) as *= 1.6;
-    // 오라 (아군 전체에 적용: 둘이 붙어서 세우면 서로 도움이 됨)
     for (const o of this.units) {
-      if (o === u) continue;
+      if (o === u || o.field !== u.field) continue;
       const ot = D.UNIT_MAP[o.type];
       if (!ot.aura) continue;
       if (Math.hypot(o.x - u.x, o.y - u.y) > ot.aura.r) continue;
@@ -221,7 +323,7 @@ class Game {
   // ───────── 피해 ─────────
   hurt(e, amount, u, opts = {}) {
     if (e.hp <= 0) return 0;
-    if (e.evade && !opts.dot && this.rand() < e.evade) { this.fx.push(['miss', Math.round(e.x * 10), Math.round(e.y * 10)]); return 0; }
+    if (e.evade && !opts.dot && this.rand() < e.evade) { this.fxp(e.field, ['miss', Math.round(e.x * 10), Math.round(e.y * 10)]); return 0; }
     let a = amount;
     if (!opts.dot && !opts.pierce) {
       const armor = Math.max(0, e.armor - (e.shredUntil > this.time ? e.shred : 0));
@@ -240,30 +342,35 @@ class Game {
     e.hp = 0;
     e.dead = true;
     const w = this.wave;
-    for (const p of this.players) {
+    const F = this.F[e.field];
+    // 골드: 자기 전장 요괴는 그 전장 주인에게, 보스방·이벤트는 잡은 사람에게
+    const getter = F.kind === 'main' ? this.players[F.owner] : this.players[by ?? 0];
+    if (getter && e.gold) {
       let g = e.gold * this.diff.gold;
-      if (p.goldRainUntil > this.time) g *= 3;
-      p.gold += Math.round(g);
+      if (getter.goldRainUntil > this.time) g *= 3;
+      getter.gold += Math.round(g);
     }
     if (by != null && this.players[by]) this.players[by].kills++;
-    this.fx.push(['die', e.id, Math.round(e.x * 10), Math.round(e.y * 10), e.boss ? 2 : e.mini ? 1 : 0]);
-    if (e.boss) for (const p of this.players) p.bosses++;
-    if (e.treasure) for (const p of this.players) p.toads++;
+    this.fxp(e.field, ['die', e.id, Math.round(e.x * 10), Math.round(e.y * 10), e.boss ? 2 : e.mini ? 1 : 0]);
+    if (e.storyBoss) { this.endStory(this.players[e.owner], true); return; }
+    if (e.eventBoss) { this.closeEvent(true); return; }
+    const owner = F.kind === 'main' ? this.players[F.owner] : null;
+    if (e.boss && owner) owner.bosses++;
+    if (e.treasure && owner) owner.toads++;
     if (e.split) {
       for (let i = 0; i < e.split; i++) {
-        const c = this.spawn({ type: 'slime', path: e.path, dist: Math.max(0, e.dist - 0.3 * i) });
+        const c = this.spawn({ type: 'slime', path: e.path, dist: Math.max(0, e.dist - 0.3 * i) }, e.field);
         c.split = 0; c.hp = c.maxHp = Math.round(e.maxHp * 0.4); c.k = 'slime_s'; c.gold = 0; c.laps = e.laps; c.travel = e.travel;
       }
     }
-    if (e.treasure) {
-      for (const p of this.players) {
-        if (this.rand() < 0.35) { const u = this.giveUnit(p, this.rand() < 0.15 ? 3 : 2); this.msg(`🐸 보물 두꺼비! ${p.name}: ${u ? D.UNIT_MAP[u.type].name + ' 획득' : '자리가 없어 골드로'}`, 'good'); if (!u) p.gold += 150; }
-        else { const g = 120 + w * 12; p.gold += g; this.msg(`🐸 보물 두꺼비! ${p.name}: 골드 +${g}`, 'good'); }
-      }
+    if (e.treasure && owner) {
+      const p = owner;
+      if (this.rand() < 0.35) { const u = this.giveUnit(p, this.rand() < 0.15 ? 3 : 2); this.msg(`🐸 보물 두꺼비! ${p.name}: ${u ? D.UNIT_MAP[u.type].name + ' 획득' : '자리가 없어 골드로'}`, 'good'); if (!u) p.gold += 150; }
+      else { const g = 120 + w * 12; p.gold += g; this.msg(`🐸 보물 두꺼비! ${p.name}: 골드 +${g}`, 'good'); }
     }
-    if (e.boss || e.mini) {
-      this.msg(e.boss ? `🏆 보스 「${e.name}」 처치! 축복을 하나 고르세요.` : `👿 ${e.name} 처치! 축복을 하나 고르세요.`, 'good');
-      for (const p of this.players) this.offerBlessing(p);
+    if ((e.boss || e.mini) && owner) {
+      this.msg(e.boss ? `🏆 ${owner.name}: 보스 「${e.name}」 처치! 축복을 하나 고르세요.` : `👿 ${owner.name}: ${e.name} 처치! 축복을 하나 고르세요.`, 'good');
+      this.offerBlessing(owner);
     }
   }
 
@@ -271,7 +378,7 @@ class Game {
     const pool = D.BLESSINGS.map((b) => b.id);
     const opts = [];
     while (opts.length < 3) { const b = this.pick(pool); if (!opts.includes(b)) opts.push(b); }
-    if (p.choice) this.applyBlessing(p, p.choice[0]); // 못 고른 게 남아 있으면 첫 번째로
+    if (p.choice) this.applyBlessing(p, p.choice[0]);
     p.choice = opts;
   }
 
@@ -281,23 +388,25 @@ class Game {
     if (id === 'free') { this.giveUnit(p, 2, true); this.giveUnit(p, 2, true); }
   }
 
-  /** 등급을 정해 유닛 주기 (auto: 빈자리 자동) */
+  /** 유닛 주기 (spot 이 없으면 내 전장 빈자리 자동) */
   giveUnit(p, tier, roll = false, spot = null, type = null) {
     if (!type && this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return null;
     let t = tier;
     if (roll && tier === 2) t = this.rand() < 0.15 ? 3 : 2;
-    const s = spot || this.autoSpot(p.id);
+    const s = spot || this.autoSpot(p.idx);
     if (!s) return null;
-    const u = { id: this.nextId++, owner: p.idx, type: type || this.pick(D.BY_TIER[t]), x: s.x, y: s.y, cdLeft: 0.3, dmg: 0, kills: 0, born: this.time };
-    if (t <= 5) p.bestTier = Math.max(p.bestTier, t);
+    const ty = type || this.pick(D.BY_TIER[t]);
+    const tt = D.UNIT_MAP[ty].tier;
+    const u = { id: this.nextId++, owner: p.idx, type: ty, field: s.field || 'm' + p.idx, x: s.x, y: s.y, cdLeft: 0.3, dmg: 0, kills: 0, born: this.time, home: s.home || null };
+    if (tt <= 5) p.bestTier = Math.max(p.bestTier, tt);
     this.units.push(u);
-    this.fx.push(['summon', u.x, u.y, t]);
-    if (t >= 4 && t <= 5) this.msg(`✨ ${p.name}: ${D.TIERS[t - 1].name} 「${D.UNIT_MAP[u.type].icon} ${D.UNIT_MAP[u.type].name}」!`, t === 5 ? 'myth' : 'legend');
+    this.fxp(u.field, ['summon', u.x, u.y, tt]);
+    if (tt >= 4 && tt <= 5) this.msg(`✨ ${p.name}: ${D.TIERS[tt - 1].name} 「${D.UNIT_MAP[u.type].icon} ${D.UNIT_MAP[u.type].name}」!`, tt === 5 ? 'myth' : 'legend');
     return u;
   }
 
   rollTier(p, premium) {
-    let odds = (premium ? D.PREMIUM_ODDS : D.SUMMON_ODDS).slice();
+    const odds = (premium ? D.PREMIUM_ODDS : D.SUMMON_ODDS).slice();
     let luck = 1;
     if (p.leader === 'gambler') luck *= 2;
     luck *= Math.pow(1.5, p.bless.filter((b) => b === 'luck').length);
@@ -330,12 +439,35 @@ class Game {
     return cd;
   }
 
+  /** 조합에 쓸 재료 고르기 (없으면 null) */
+  craftPlan(p, r, prefer = null) {
+    const mine = this.units.filter((u) => u.owner === p.idx);
+    const used = new Set();
+    const items = {};
+    for (const n of r.need) {
+      if (n.startsWith('#')) {
+        const k = n.slice(1);
+        items[k] = (items[k] || 0) + 1;
+        if ((p.items[k] || 0) < items[k]) return null;
+        continue;
+      }
+      let u = prefer && prefer.type === n && !used.has(prefer) ? prefer : null;
+      if (!u) u = mine.find((x) => x.type === n && !used.has(x) && x.field === 'm' + p.idx) || mine.find((x) => x.type === n && !used.has(x));
+      if (!u) return null;
+      used.add(u);
+    }
+    return { units: [...used], items };
+  }
+  /** 조합 가능한 조합법 목록 */
+  craftable(p) { return D.RECIPES.filter((r) => this.craftPlan(p, r)).map((r) => r.id); }
+
   // ───────── 명령 ─────────
-  /** @returns {string|null} 오류 메시지 */
+  /** @returns {string|null|{ok:number}} 오류 메시지 */
   command(pid, c) {
     const p = this.player(pid);
     if (!p || !c || this.result) return null;
     const unit = (id) => this.units.find((u) => u.id === id && u.owner === p.idx);
+    const fieldOf = (f) => (typeof f === 'string' && this.F[f] ? f : 'm' + p.idx);
     switch (c.t) {
       case 'summon': {
         const premium = !!c.premium;
@@ -343,8 +475,13 @@ class Game {
         if (p.gold < cost) return '골드가 부족해요.';
         if (this.units.filter((u) => u.owner === p.idx).length >= D.ECON.maxUnits) return `유닛은 한 사람당 ${D.ECON.maxUnits}개까지예요.`;
         let spot = null;
-        if (c.tile) { if (!this.free(c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1] }; }
-        else if (!(spot = this.autoSpot(pid))) return '빈자리가 없어요.';
+        const f = fieldOf(c.field);
+        if (c.tile) {
+          if (!this.canUse(p, f)) return '여기에는 내 유닛을 둘 수 없어요.';
+          if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
+          spot = { x: c.tile[0], y: c.tile[1], field: f };
+          if (f !== 'm' + p.idx) spot.home = this.autoSpot(p.idx);
+        } else if (!(spot = this.autoSpot(p.idx))) return '빈자리가 없어요.';
         p.gold -= cost;
         p.summons++;
         const u = this.giveUnit(p, this.rollTier(p, premium), false, spot);
@@ -353,14 +490,56 @@ class Game {
       case 'move': {
         const u = unit(c.unit);
         if (!u || !c.tile) return null;
-        if (!this.free(c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
-        u.x = c.tile[0]; u.y = c.tile[1]; u.cdLeft = Math.max(u.cdLeft, 0.5);
+        const f = typeof c.field === 'string' ? c.field : u.field;
+        if (!this.canUse(p, f)) return f === 'ev' ? '스토리 이벤트가 열려 있을 때만 보낼 수 있어요.' : '여기에는 내 유닛을 둘 수 없어요.';
+        if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.';
+        if (f !== u.field) {
+          // 다른 전장으로 보내기 (보스방·이벤트 전장에서 돌아올 자리 기억)
+          if (f !== 'm' + p.idx && u.field === 'm' + p.idx) u.home = { field: u.field, x: u.x, y: u.y };
+          if (f === 'm' + p.idx) u.home = null;
+          this.fxp(u.field, ['tele', u.x, u.y]);
+          u.field = f;
+          u.cdLeft = Math.max(u.cdLeft, 1);
+          this.fxp(f, ['tele', c.tile[0], c.tile[1]]);
+        } else u.cdLeft = Math.max(u.cdLeft, 0.5);
+        u.x = c.tile[0]; u.y = c.tile[1];
+        return null;
+      }
+      case 'dispatch': {
+        // 가장 센 유닛 n개를 보스방·이벤트 전장으로 보내기
+        const f = c.field;
+        if (!this.canUse(p, f) || f === 'm' + p.idx) return '보낼 수 없는 곳이에요.';
+        const n = Math.max(1, Math.min(8, Number(c.n) || 3));
+        const cand = this.units.filter((u) => u.owner === p.idx && u.field === 'm' + p.idx).sort((a, b) => D.UNIT_MAP[b.type].tier - D.UNIT_MAP[a.type].tier || b.dmg - a.dmg).slice(0, n);
+        let sent = 0;
+        for (const u of cand) { const s = this.autoSpot(p.idx, f); if (!s) break; this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: f }); sent++; }
+        return sent ? null : '보낼 유닛이 없어요.';
+      }
+      case 'send': {
+        // 유닛 하나를 다른 전장(보스방·이벤트·내 전장)의 빈자리로
+        const u = unit(c.unit);
+        if (!u) return null;
+        if (!this.canUse(p, c.field)) return c.field === 'ev' ? '스토리 이벤트가 열려 있을 때만 보낼 수 있어요.' : '보낼 수 없는 곳이에요.';
+        if (c.field === u.field) return null;
+        const s = this.autoSpot(p.idx, c.field);
+        if (!s) return '빈자리가 없어요.';
+        return this.command(pid, { t: 'move', unit: u.id, tile: [s.x, s.y], field: c.field });
+      }
+      case 'recall': {
+        const f = c.field;
+        if (f === 'm' + p.idx) return null;
+        for (const u of this.units) if (u.owner === p.idx && u.field === f) {
+          const home = u.home && this.free(u.home.field, u.home.x, u.home.y) ? u.home : this.autoSpot(p.idx);
+          if (!home) continue;
+          this.fxp(u.field, ['tele', u.x, u.y]);
+          u.field = home.field; u.x = home.x; u.y = home.y; u.home = null; u.cdLeft = 0.6;
+          this.fxp(u.field, ['tele', u.x, u.y]);
+        }
         return null;
       }
       case 'swap': {
-        // 내 유닛 두 개 자리 바꾸기
         const a = unit(c.unit), b = unit(c.other);
-        if (!a || !b) return null;
+        if (!a || !b || a.field !== b.field) return null;
         [a.x, b.x] = [b.x, a.x]; [a.y, b.y] = [b.y, a.y];
         return null;
       }
@@ -368,25 +547,50 @@ class Game {
         const u = unit(c.unit);
         if (!u) return null;
         const t = D.UNIT_MAP[u.type];
-        if (t.hero) return '영웅은 팔 수 없어요.';
+        if (t.hero || t.hidden) return '영웅·히든 유닛은 팔 수 없어요.';
         p.gold += Math.round(D.ECON.sellRate[t.tier] * (p.leader === 'merchant' ? 1.2 : 1));
         this.units = this.units.filter((x) => x !== u);
         return null;
       }
       case 'merge': {
+        // 같은 유닛 n개 → 한 등급 위 무작위 (랜덤 합성)
         const u = unit(c.unit);
         if (!u) return null;
         const t = D.UNIT_MAP[u.type];
         const need = D.MERGE_NEED[t.tier];
         if (t.hero) return '영웅은 합성하지 않아요. 요괴를 처치할수록 레벨이 올라요!';
-        if (!need) return '신화 유닛은 더 합성할 수 없어요.';
-        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type).sort((a, b) => Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
+        if (t.hidden || !need) return '이 유닛은 더 합성할 수 없어요.';
+        const same = this.units.filter((x) => x !== u && x.owner === p.idx && x.type === u.type).sort((a, b) => (a.field === u.field ? 0 : 1) - (b.field === u.field ? 0 : 1) || Math.hypot(a.x - u.x, a.y - u.y) - Math.hypot(b.x - u.x, b.y - u.y));
         if (same.length < need - 1) return `같은 유닛이 ${need}개 있어야 합성할 수 있어요.`;
         const gone = new Set(same.slice(0, need - 1));
         this.units = this.units.filter((x) => !gone.has(x) && x !== u);
-        const nu = this.giveUnit(p, t.tier + 1, false, { x: u.x, y: u.y });
-        if (nu) { nu.cdLeft = 0.2; this.fx.push(['merge', u.x, u.y, t.tier + 1]); }
+        const nu = this.giveUnit(p, t.tier + 1, false, { x: u.x, y: u.y, field: u.field, home: u.home });
+        if (nu) { nu.cdLeft = 0.2; this.fxp(u.field, ['merge', u.x, u.y, t.tier + 1]); }
         return nu ? { ok: nu.id } : null;
+      }
+      case 'craft': {
+        // 조합법: 정해진 재료 → 정해진 유닛
+        const r = D.RECIPE_MAP[c.recipe];
+        if (!r) return null;
+        const plan = this.craftPlan(p, r, c.unit ? unit(c.unit) : null);
+        if (!plan) return '재료가 모자라요.';
+        const at = plan.units.find((x) => x.field === 'm' + p.idx) || plan.units[0];
+        const spot = { x: at.x, y: at.y, field: at.field, home: at.home };
+        const gone = new Set(plan.units);
+        this.units = this.units.filter((x) => !gone.has(x));
+        for (const [k, n] of Object.entries(plan.items)) p.items[k] -= n;
+        const nu = this.giveUnit(p, D.UNIT_MAP[r.out].tier, false, spot, r.out);
+        if (!nu) return null;
+        nu.cdLeft = 0.2;
+        const tt = D.UNIT_MAP[r.out].tier;
+        this.fxp(nu.field, [r.hidden ? 'hero' : 'merge', nu.x, nu.y, tt]);
+        if (r.hidden) {
+          const first = !this.discovered.includes(r.id);
+          if (first) this.discovered.push(r.id);
+          this.msg(`🔮 ${p.name}: 히든 조합${first ? ' 발견' : ''}! 「${D.UNIT_MAP[r.out].icon} ${D.UNIT_MAP[r.out].name}」`, 'myth');
+          this.fxp('*', ['hidden', r.id]);
+        } else if (tt >= 4) this.msg(`📜 ${p.name}: 조합 성공 「${D.UNIT_MAP[r.out].icon} ${D.UNIT_MAP[r.out].name}」`, 'legend');
+        return { ok: nu.id };
       }
       case 'upgrade': {
         if (!D.CATS[c.cat]) return null;
@@ -416,20 +620,22 @@ class Game {
       case 'hero': {
         if (!p.heroChoice || !p.heroChoice.includes(c.id)) return null;
         let spot = null;
-        if (c.tile) { if (!this.free(c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1] }; }
+        const f = fieldOf(c.field);
+        if (c.tile && this.canUse(p, f)) { if (!this.free(f, c.tile[0], c.tile[1])) return '거기에는 세울 수 없어요.'; spot = { x: c.tile[0], y: c.tile[1], field: f }; }
         const u = this.giveUnit(p, 6, false, spot, c.id);
         if (!u) return '빈자리가 없어요.';
         p.heroes.push(c.id);
         p.tickets--;
         p.heroChoice = null;
-        this.fx.push(['hero', u.x, u.y]);
+        this.fxp(u.field, ['hero', u.x, u.y, 6]);
         this.msg(`🦸 ${p.name}: 영웅 「${D.UNIT_MAP[c.id].icon} ${D.UNIT_MAP[c.id].name}」 합류!`, 'myth');
         this.offerHero(p);
         return { ok: u.id };
       }
+      case 'story': return this.startStory(p, c.id);
       case 'skill': return this.useSkill(p, c);
       case 'ping': {
-        if (typeof c.x === 'number' && typeof c.y === 'number') this.fx.push(['ping', Math.round(c.x * 10), Math.round(c.y * 10), p.idx]);
+        if (typeof c.x === 'number' && typeof c.y === 'number') this.fxp(fieldOf(c.field), ['ping', Math.round(c.x * 10), Math.round(c.y * 10), p.idx]);
         return null;
       }
       default: return null;
@@ -450,7 +656,7 @@ class Game {
         p.done.push(m.id);
         p.tickets++;
         this.msg(`🎖 ${p.name}: 미션 「${m.icon} ${m.name}」 달성! 영웅 영입권 +1`, 'legend');
-        this.fx.push(['mission', p.idx]);
+        this.fxp('*', ['mission', p.idx]);
       }
       this.offerHero(p);
     }
@@ -469,28 +675,29 @@ class Game {
     const L = D.LEADER_MAP[p.leader];
     const w = Math.max(1, this.wave);
     const x = Number(c.x), y = Number(c.y);
+    const f = typeof c.field === 'string' && this.F[c.field] ? c.field : 'm' + p.idx;
     if (L.skill.target && !(Number.isFinite(x) && Number.isFinite(y))) return '위치를 골라 주세요.';
+    if (L.skill.target && !this.canUse(p, f)) return '내 전장·보스방·이벤트 전장에서만 쓸 수 있어요.';
     switch (p.leader) {
       case 'sword': {
-        const dmg = hpBase(w) * this.diff.hp * 7;
-        for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - x, e.y - y) <= 2.6) this.hurt(e, dmg, null, { pierce: true, by: p.idx });
-        this.fx.push(['slash', Math.round(x * 10), Math.round(y * 10)]);
+        const dmg = hpBase(w) * this.diff.hp * FIELD_HP * 7;
+        for (const e of this.enemies) if (!e.dead && e.field === f && Math.hypot(e.x - x, e.y - y) <= 2.6) this.hurt(e, dmg, null, { pierce: true, by: p.idx });
+        this.fxp(f, ['slash', Math.round(x * 10), Math.round(y * 10)]);
         break;
       }
       case 'archer':
-        this.zones.push({ x, y, r: 2.3, until: this.time + 5, dps: hpBase(w) * this.diff.hp * 2.2, by: p.idx });
-        this.fx.push(['rain', Math.round(x * 10), Math.round(y * 10)]);
+        this.zones.push({ field: f, x, y, r: 2.3, until: this.time + 5, dps: hpBase(w) * this.diff.hp * FIELD_HP * 2.2, by: p.idx });
         break;
-      case 'priest': this.globalSlowUntil = this.time + 6; this.fx.push(['seal']); break;
-      case 'merchant': { const g = 100 + w * 15; p.gold += g; p.goldRainUntil = this.time + 10; this.fx.push(['goldrain', p.idx]); break; }
-      case 'smith': p.temperUntil = this.time + 8; this.fx.push(['temper', p.idx]); break;
+      case 'priest': this.globalSlowUntil = this.time + 6; this.fxp('*', ['seal']); break;
+      case 'merchant': { const g = 100 + w * 15; p.gold += g; p.goldRainUntil = this.time + 10; this.fxp('*', ['goldrain', p.idx]); break; }
+      case 'smith': p.temperUntil = this.time + 8; this.fxp('*', ['temper', p.idx]); break;
       case 'gambler': {
         const mine = this.units.filter((u) => u.owner === p.idx && D.UNIT_MAP[u.type].tier < 5);
         if (!mine.length) return '올릴 유닛이 없어요.';
         const u = this.pick(mine);
         const before = D.UNIT_MAP[u.type];
         u.type = this.pick(D.BY_TIER[before.tier + 1]);
-        this.fx.push(['merge', u.x, u.y, before.tier + 1]);
+        this.fxp(u.field, ['merge', u.x, u.y, before.tier + 1]);
         this.msg(`🎲 ${p.name}: ${before.name} → ${D.UNIT_MAP[u.type].name}!`, before.tier + 1 >= 4 ? 'legend' : 'info');
         break;
       }
@@ -507,11 +714,17 @@ class Game {
     const dt = DT;
     this.time += dt;
     for (const p of this.players) p.skillCd = Math.max(0, p.skillCd - dt);
-    // 웨이브
+    // 웨이브 (각자 전장에 똑같이)
     this.waveTimer -= dt;
     const lastWave = !this.endless && this.wave >= D.WAVES;
     if (this.waveTimer <= 0 && !lastWave) this.startWave();
-    while (this.spawnQueue.length && this.spawnQueue[0].at <= this.time) this.spawn(this.spawnQueue.shift());
+    while (this.spawnQueue.length && this.spawnQueue[0].at <= this.time) {
+      const s = this.spawnQueue.shift();
+      for (const F of this.mains) this.spawn(s, F.id);
+    }
+    // 보스방·이벤트 제한 시간
+    for (const p of this.players) if (p.story.active && p.story.deadline <= this.time) this.endStory(p, false);
+    if (this.event && this.event.deadline <= this.time) this.closeEvent(false);
     // 요괴 이동·상태
     const sealed = this.globalSlowUntil > this.time;
     for (const e of this.enemies) {
@@ -520,14 +733,15 @@ class Game {
       if (e.burn && e.burn.until > this.time) this.hurt(e, e.burn.dps * dt, null, { dot: true, by: e.burn.by });
       if (e.dead) continue;
       if (e.regen) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * e.regen * dt);
+      const F = this.F[e.field];
       if (e.boss) {
         this.bossAbility(e, dt);
-        if (this.loopMode && e.deadline <= this.time) {
+        if (F.kind === 'main' && F.loopMode && e.deadline <= this.time) {
           e.dead = true; e.gone = true;
           if (e.k === 'b_king' || (!this.endless && this.wave >= D.WAVES)) { this.end(false, `${D.BOSS_TIME}초 안에 「${e.name}」을(를) 쓰러뜨리지 못했어요…`); continue; }
-          this.limit -= 10;
-          this.fx.push(['leak', 10]);
-          this.msg(`💔 「${e.name}」이(가) 결계를 부수고 사라졌어요! 최대 요괴 수 -10 (${this.limit})`, 'bad');
+          F.limit -= 10;
+          this.fxp(F.id, ['leak', 10]);
+          this.msg(`💔 ${this.players[F.owner].name}의 전장: 「${e.name}」이(가) 결계를 부수고 사라졌어요! 최대 요괴 수 -10 (${F.limit})`, 'bad');
           continue;
         }
       }
@@ -540,17 +754,17 @@ class Game {
       if (e.stunUntil > this.time) sp = 0;
       e.dist += sp * dt;
       e.travel += sp * dt;
-      const path = this.paths[e.path];
+      const path = F.paths[e.path];
       if (path.loop) {
-        const laps = Math.floor(e.dist / path.len);
+        const laps = Math.floor((e.dist - path.start * path.len) / path.len);
         if (laps > e.laps) { e.laps = laps; if (e.treasure) { e.dead = true; e.gone = true; this.msg('🐸 보물 두꺼비가 도망쳤어요…', 'bad'); } }
       } else if (e.dist >= path.len) {
         e.dead = true; e.gone = true;
-        if (!e.treasure) {
+        if (!e.treasure && F.kind === 'main') {
           const cost = e.boss ? 10 : e.mini ? 3 : 1;
-          this.lives -= cost;
-          this.fx.push(['leak', cost]);
-          if (e.boss || e.mini) this.msg(`💔 ${e.name}이(가) 빠져나갔어요! 생명 -${cost}`, 'bad');
+          F.lives -= cost;
+          this.fxp(F.id, ['leak', cost]);
+          if (e.boss || e.mini) this.msg(`💔 ${this.players[F.owner].name}의 전장: ${e.name}이(가) 빠져나갔어요! 생명 -${cost}`, 'bad');
         }
         continue;
       }
@@ -558,35 +772,40 @@ class Game {
     }
     // 지속 효과
     this.zones = this.zones.filter((z) => z.until > this.time);
-    for (const z of this.zones) for (const e of this.enemies) if (!e.dead && Math.hypot(e.x - z.x, e.y - z.y) <= z.r) this.hurt(e, z.dps * dt, null, { dot: true, by: z.by });
-    // 유닛 공격
+    for (const z of this.zones) for (const e of this.enemies) if (!e.dead && e.field === z.field && Math.hypot(e.x - z.x, e.y - z.y) <= z.r) this.hurt(e, z.dps * dt, null, { dot: true, by: z.by });
+    // 유닛 공격 (같은 전장의 요괴만)
+    const byField = {};
+    for (const e of this.enemies) if (!e.dead) (byField[e.field] ||= []).push(e);
     for (const u of this.units) {
       u.cdLeft -= dt;
       if (u.cdLeft > 0) continue;
+      const list = byField[u.field];
+      if (!list) { u.cdLeft = 0.1; continue; }
       const st = this.unitStats(u);
       const ux = u.x + 0.5, uy = u.y + 0.5;
       const cands = [];
-      for (const e of this.enemies) {
+      for (const e of list) {
         if (e.dead || (e.flying && st.t.cat === 'blade')) continue;
-        const d = Math.hypot(e.x - ux, e.y - uy);
-        if (d <= st.range) cands.push(e);
+        if (Math.hypot(e.x - ux, e.y - uy) <= st.range) cands.push(e);
       }
       if (!cands.length) { u.cdLeft = 0.1; continue; }
       cands.sort((a, b) => b.travel - a.travel);
       const targets = cands.slice(0, st.t.multi || 1);
-      for (const tg of targets) this.attack(u, st, tg);
+      for (const tg of targets) this.attack(u, st, tg, list);
       u.cdLeft = st.cd;
     }
     this.enemies = this.enemies.filter((e) => !e.dead);
-    // 패배·승리
-    if (this.loopMode) {
-      this.count = this.enemies.reduce((s, e) => s + (e.boss ? 10 : e.mini ? 3 : e.treasure ? 0 : 1), 0);
-      if (this.count >= this.limit) this.end(false, `요괴가 ${this.limit}마리 넘게 쌓였어요…`);
-    } else if (this.lives <= 0) { this.lives = 0; this.end(false, '마을 결계가 무너졌어요…'); }
-    if (!this.result && !this.endless && this.wave >= D.WAVES && !this.spawnQueue.length && !this.enemies.length) this.end(true, `${D.WAVES}웨이브를 모두 막아냈어요!`);
+    // 패배·승리 (어느 한 전장이라도 무너지면 패배)
+    for (const F of this.mains) {
+      const who = this.players[F.owner].name;
+      if (F.loopMode) {
+        F.count = this.enemies.reduce((s, e) => s + (e.field !== F.id ? 0 : e.boss ? 10 : e.mini ? 3 : e.treasure ? 0 : 1), 0);
+        if (F.count >= F.limit) this.end(false, `${who}의 전장에 요괴가 ${F.limit}마리 넘게 쌓였어요…`);
+      } else if (F.lives <= 0) { F.lives = 0; this.end(false, `${who}의 전장 결계가 무너졌어요…`); }
+    }
+    if (!this.result && !this.endless && this.wave >= D.WAVES && !this.spawnQueue.length && !this.enemies.some((e) => this.F[e.field].kind === 'main')) this.end(true, `${D.WAVES}웨이브를 모두 막아냈어요!`);
     const tickNo = Math.round(this.time / dt);
     if (tickNo % 20 === 0) this.checkMissions();
-    // 봇
     if (tickNo % 10 === 0) for (const p of this.players) if (p.bot) botAct(this, p);
   }
 
@@ -595,18 +814,18 @@ class Game {
     const ab = e.ability;
     if ((ab === 'brood' || ab === 'all') && e.abilT % 6 < dt) {
       for (let i = 0; i < 3; i++) {
-        const c = this.spawn({ type: 'imp', path: e.path, dist: Math.max(0, e.dist - 0.4 * (i + 1)) });
+        const c = this.spawn({ type: 'imp', path: e.path, dist: Math.max(0, e.dist - 0.4 * (i + 1)) }, e.field);
         c.hp = c.maxHp = Math.round(e.maxHp * 0.012); c.gold = 1; c.laps = e.laps; c.travel = e.travel - 0.4 * (i + 1);
       }
-      this.fx.push(['brood', Math.round(e.x * 10), Math.round(e.y * 10)]);
+      this.fxp(e.field, ['brood', Math.round(e.x * 10), Math.round(e.y * 10)]);
     }
     if ((ab === 'heal' || ab === 'all') && (e.abilT + 3) % 10 < dt) {
       e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.04);
-      this.fx.push(['heal', Math.round(e.x * 10), Math.round(e.y * 10)]);
+      this.fxp(e.field, ['heal', Math.round(e.x * 10), Math.round(e.y * 10)]);
     }
   }
 
-  attack(u, st, tg) {
+  attack(u, st, tg, list) {
     const t = st.t;
     const p = this.players[u.owner];
     let dmg = st.dmg;
@@ -614,13 +833,13 @@ class Game {
     if (t.crit && this.rand() < t.crit.chance) { dmg *= t.crit.mult; crit = true; }
     if (p.bless.includes('crit') && this.rand() < 0.1 * p.bless.filter((b) => b === 'crit').length) { dmg *= 2; crit = true; }
     const kind = t.chain ? 'chain' : t.splash ? 'splash' : t.cat;
+    const f = u.field;
     let first = true;
     const hit = (e, amt) => {
       if (t.execute && !e.boss && !e.mini && e.hp - amt <= e.maxHp * t.execute) amt = e.hp + 1;
       const done = Math.round(this.hurt(e, amt, u, { pierce: t.pierceArmor }));
-      // 타격 효과: 첫 대상은 공격 모션과 함께, 나머지(광역·연쇄)는 맞은 표시만
-      if (first) { this.fx.push(['atk', u.id, e.id, done, kind, t.tier, crit ? 1 : 0, Math.round(e.x * 10), Math.round(e.y * 10)]); first = false; }
-      else this.fx.push(['hit', e.id, done, Math.round(e.x * 10), Math.round(e.y * 10)]);
+      if (first) { this.fxp(f, ['atk', u.id, e.id, done, kind, Math.min(5, t.tier), crit ? 1 : 0, Math.round(e.x * 10), Math.round(e.y * 10)]); first = false; }
+      else this.fxp(f, ['hit', e.id, done, Math.round(e.x * 10), Math.round(e.y * 10)]);
       if (t.slow && (e.slowUntil <= this.time || e.slowPct <= t.slow.pct)) { e.slowPct = t.slow.pct; e.slowUntil = this.time + t.slow.dur; }
       if (t.poison && (!e.poison || e.poison.until < this.time || e.poison.dps <= t.poison.dps)) e.poison = { dps: t.poison.dps * (1 + D.ECON.upgradeStep * p.upg[t.cat]), until: this.time + t.poison.dur, by: u.owner };
       if (t.burn && (!e.burn || e.burn.until < this.time || e.burn.dps <= t.burn.dps)) e.burn = { dps: t.burn.dps * (1 + D.ECON.upgradeStep * p.upg[t.cat]), until: this.time + t.burn.dur, by: u.owner };
@@ -628,16 +847,16 @@ class Game {
       if (t.stun && !e.boss && this.rand() < t.stun.chance) e.stunUntil = this.time + t.stun.dur;
     };
     hit(tg, dmg);
-    if (t.splash) for (const e of this.enemies) if (e !== tg && !e.dead && Math.hypot(e.x - tg.x, e.y - tg.y) <= t.splash && !(e.flying && t.cat === 'blade')) hit(e, dmg * 0.7);
+    if (t.splash) for (const e of list) if (e !== tg && !e.dead && Math.hypot(e.x - tg.x, e.y - tg.y) <= t.splash && !(e.flying && t.cat === 'blade')) hit(e, dmg * 0.7);
     if (t.chain) {
       let cur = tg, amt = dmg;
       const done = new Set([tg]);
       for (let i = 0; i < t.chain; i++) {
         let best = null, bd = 2.2;
-        for (const e of this.enemies) { if (e.dead || done.has(e)) continue; const d = Math.hypot(e.x - cur.x, e.y - cur.y); if (d < bd) { bd = d; best = e; } }
+        for (const e of list) { if (e.dead || done.has(e)) continue; const d = Math.hypot(e.x - cur.x, e.y - cur.y); if (d < bd) { bd = d; best = e; } }
         if (!best) break;
         amt *= 0.85;
-        this.fx.push(['zap', Math.round(cur.x * 10), Math.round(cur.y * 10), Math.round(best.x * 10), Math.round(best.y * 10), t.hero ? 1 : 0]);
+        this.fxp(f, ['zap', Math.round(cur.x * 10), Math.round(cur.y * 10), Math.round(best.x * 10), Math.round(best.y * 10), t.hero || t.hidden ? 1 : 0]);
         hit(best, amt);
         done.add(best); cur = best;
       }
@@ -652,28 +871,41 @@ class Game {
 
   // ───────── 화면용 ─────────
   staticView() {
-    return { map: M.summary(this.map), loopMode: this.loopMode, diff: this.diff, seed: this.seed, players: this.players.map((p) => ({ id: p.id, name: p.name, leader: p.leader, bot: p.bot })) };
+    return {
+      map: M.summary(this.map), loopMode: this.loopMode, diff: this.diff, seed: this.seed,
+      maps: { main: M.summary(this.map), room: M.summary(M.ROOM_MAP), event: M.summary(M.EVENT_MAP) },
+      fields: this.fields.map((f) => ({ id: f.id, kind: f.kind, owner: f.owner })),
+      players: this.players.map((p) => ({ id: p.id, name: p.name, leader: p.leader, bot: p.bot })),
+    };
   }
 
   /** 자주 보내는 상태 (작게) */
   view() {
     const fx = this.fx; this.fx = [];
     const msgs = this.msgs; this.msgs = [];
+    const bossOf = (fid) => {
+      const b = this.enemies.find((e) => e.field === fid && e.boss) || this.enemies.find((e) => e.field === fid && e.mini);
+      return b ? { name: b.name, hp: Math.round(b.hp), max: b.maxHp, left: b.deadline && this.F[fid].loopMode && this.F[fid].kind === 'main' ? Math.max(0, Math.ceil(b.deadline - this.time)) : null } : null;
+    };
     return {
       time: Math.round(this.time * 100) / 100, wave: this.wave, waves: D.WAVES, endless: this.endless, nextIn: Math.max(0, Math.ceil(this.waveTimer)), lastWave: !this.endless && this.wave >= D.WAVES,
-      cur: this.planInfo(this.curPlan), next: this.planInfo(this.nextPlan), lives: this.lives, limit: this.limit, count: this.count || 0, sealed: this.globalSlowUntil > this.time,
+      cur: this.planInfo(this.curPlan), next: this.planInfo(this.nextPlan), sealed: this.globalSlowUntil > this.time,
+      fields: this.fields.map((f) => ({ id: f.id, lives: f.lives, limit: f.limit, count: f.count, enemies: this.enemies.filter((e) => e.field === f.id).length, boss: bossOf(f.id) })),
+      event: this.event ? { idx: this.event.idx, left: Math.max(0, Math.ceil(this.event.deadline - this.time)) } : null,
+      nextEvent: (D.EVENTS.find((e) => e.wave > this.wave) || {}).wave || null,
+      eventsDone: this.eventsDone, discovered: this.discovered,
       players: this.players.map((p) => ({
         id: p.id, gold: p.gold, upg: p.upg, bless: p.bless, choice: p.choice, skillCd: Math.ceil(p.skillCd), skillMax: Math.round(this.skillMax(p)), kills: p.kills, damage: Math.round(p.damage),
         cost: this.summonCost(p, false), pcost: this.summonCost(p, true), ucost: { blade: this.upgradeCost(p, 'blade'), bow: this.upgradeCost(p, 'bow'), magic: this.upgradeCost(p, 'magic') },
         rain: p.goldRainUntil > this.time, temper: p.temperUntil > this.time, units: this.units.filter((u) => u.owner === p.idx).length,
         missions: D.MISSIONS.map((m) => [m.id, Math.min(m.goal, this.missionValue(p, m.stat)), p.done.includes(m.id) ? 1 : 0]), tickets: p.tickets, heroChoice: p.heroChoice,
+        items: p.items, craftable: this.craftable(p),
+        story: { cleared: p.story.cleared, active: p.story.active, left: p.story.active ? Math.max(0, Math.ceil(p.story.deadline - this.time)) : 0, cd: Math.max(0, Math.ceil(p.story.cdUntil - this.time)), states: D.STORY.map((s) => this.storyState(p, s)) },
       })),
-      units: this.units.map((u) => [u.id, u.owner, u.type, u.x, u.y, Math.round(u.dmg || 0), D.UNIT_MAP[u.type].hero ? D.heroLevel(u.kills || 0) : 0, u.kills || 0]),
-      enemies: this.enemies.map((e) => [e.id, e.k, Math.round(e.x * 100), Math.round(e.y * 100), Math.round((e.hp / e.maxHp) * 100), (e.slowUntil > this.time || this.globalSlowUntil > this.time ? 1 : 0) | (e.stunUntil > this.time ? 2 : 0) | (e.burn && e.burn.until > this.time ? 4 : 0) | (e.poison && e.poison.until > this.time ? 8 : 0) | (e.flying ? 16 : 0) | (e.boss ? 32 : 0) | (e.mini ? 64 : 0)]),
-      zones: this.zones.map((z) => [Math.round(z.x * 10), Math.round(z.y * 10), z.r]),
+      units: this.units.map((u) => [u.id, u.owner, u.type, u.x, u.y, Math.round(u.dmg || 0), D.UNIT_MAP[u.type].hero ? D.heroLevel(u.kills || 0) : 0, u.kills || 0, u.field]),
+      enemies: this.enemies.map((e) => [e.id, e.k, Math.round(e.x * 100), Math.round(e.y * 100), Math.round((e.hp / e.maxHp) * 100), (e.slowUntil > this.time || this.globalSlowUntil > this.time ? 1 : 0) | (e.stunUntil > this.time ? 2 : 0) | (e.burn && e.burn.until > this.time ? 4 : 0) | (e.poison && e.poison.until > this.time ? 8 : 0) | (e.flying ? 16 : 0) | (e.boss ? 32 : 0) | (e.mini ? 64 : 0), e.field]),
+      zones: this.zones.map((z) => [Math.round(z.x * 10), Math.round(z.y * 10), z.r, z.field]),
       fx, msgs, result: this.result,
-      paths: undefined,
-      boss: (() => { const b = this.enemies.find((e) => e.boss) || this.enemies.find((e) => e.mini); return b ? { name: b.name, hp: Math.round(b.hp), max: b.maxHp, left: b.deadline && this.loopMode ? Math.max(0, Math.ceil(b.deadline - this.time)) : null } : null; })(),
     };
   }
 }
@@ -683,37 +915,38 @@ function botAct(g, p) {
   if (g.result) return;
   if (p.choice) g.command(p.id, { t: 'bless', id: p.choice[0] });
   if (p.heroChoice) g.command(p.id, { t: 'hero', id: p.heroChoice[0] });
-  // 합성할 수 있으면 합성
+  // 조합법 (높은 등급부터)
+  const can = g.craftable(p).map((id) => D.RECIPE_MAP[id]).sort((a, b) => D.UNIT_MAP[b.out].tier - D.UNIT_MAP[a.out].tier);
+  if (can.length) { g.command(p.id, { t: 'craft', recipe: can[0].id }); return; }
   const mine = g.units.filter((u) => u.owner === p.idx);
   const byType = {};
   for (const u of mine) (byType[u.type] ||= []).push(u);
   for (const [type, list] of Object.entries(byType)) {
     const need = D.MERGE_NEED[D.UNIT_MAP[type].tier];
-    if (need && list.length >= need) { g.command(p.id, { t: 'merge', unit: list[0].id }); return; }
+    if (need && list.length >= need + 1) { g.command(p.id, { t: 'merge', unit: list[0].id }); return; }
   }
-  // 필살기: 요괴가 많은 곳
-  if (p.skillCd <= 0 && g.enemies.length >= 6) {
-    const e = g.enemies.reduce((best, x) => (!best || x.travel > best.travel ? x : best), null);
-    g.command(p.id, { t: 'skill', x: e.x, y: e.y });
+  // 스토리 이벤트: 정예 둘을 보냄 / 보스 스토리: 셋을 보냄
+  if (g.event && !mine.some((u) => u.field === 'ev')) g.command(p.id, { t: 'dispatch', field: 'ev', n: 2 });
+  const strong = mine.filter((u) => D.UNIT_MAP[u.type].tier >= 3).length;
+  const next = D.STORY.find((s) => g.storyState(p, s) === 'open');
+  if (!p.story.active && next && strong >= 4 + next.ch && p.story.cdUntil <= g.time) { if (!g.command(p.id, { t: 'story', id: next.id })) g.command(p.id, { t: 'dispatch', field: 'r' + p.idx, n: 3 }); }
+  // 필살기: 내 전장에서 가장 앞선 요괴
+  const front = g.enemies.filter((e) => e.field === 'm' + p.idx);
+  if (p.skillCd <= 0 && front.length >= 6) {
+    const e = front.reduce((best, x) => (!best || x.travel > best.travel ? x : best), null);
+    g.command(p.id, { t: 'skill', x: e.x, y: e.y, field: e.field });
   }
-  // 소환 우선, 자리가 차면 강화
   const cost = g.summonCost(p, false);
-  const cats0 = Object.keys(D.CATS);
   const cnt0 = {};
   for (const u of mine) cnt0[D.UNIT_MAP[u.type].cat] = (cnt0[D.UNIT_MAP[u.type].cat] || 0) + D.UNIT_MAP[u.type].tier;
-  const main = cats0.sort((a, b) => (cnt0[b] || 0) - (cnt0[a] || 0))[0];
+  const main = Object.keys(D.CATS).sort((a, b) => (cnt0[b] || 0) - (cnt0[a] || 0))[0];
   if (mine.length >= 12 && g.upgradeCost(p, main) <= cost * (1 + g.wave / 8) && p.gold >= g.upgradeCost(p, main)) { g.command(p.id, { t: 'upgrade', cat: main }); return; }
   if (p.gold >= cost && mine.length < D.ECON.maxUnits - 2) { g.command(p.id, { t: 'summon' }); return; }
   if (mine.length >= D.ECON.maxUnits - 2) {
-    // 약한 유닛 팔기 (같은 게 1개뿐인 일반 등급)
     const weak = mine.find((u) => D.UNIT_MAP[u.type].tier === 1 && byType[u.type].length === 1);
     if (weak) g.command(p.id, { t: 'sell', unit: weak.id });
   }
-  const cats = Object.keys(D.CATS);
-  const counts = {};
-  for (const u of mine) counts[D.UNIT_MAP[u.type].cat] = (counts[D.UNIT_MAP[u.type].cat] || 0) + D.UNIT_MAP[u.type].tier;
-  const cat = cats.sort((a, b) => (counts[b] || 0) - (counts[a] || 0))[0];
-  if (p.gold >= g.upgradeCost(p, cat) + (mine.length < D.ECON.maxUnits - 2 ? cost : 0)) g.command(p.id, { t: 'upgrade', cat });
+  if (p.gold >= g.upgradeCost(p, main) + (mine.length < D.ECON.maxUnits - 2 ? cost : 0)) g.command(p.id, { t: 'upgrade', cat: main });
 }
 
 module.exports = { Game, botAct, hpBase, DT };

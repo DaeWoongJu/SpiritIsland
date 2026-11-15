@@ -83,6 +83,8 @@ const LOOK = {
   h_flame: { wep: 'katana', extra: 'spiky' }, h_water: { wep: 'katana', extra: 'tail' }, h_thunder: { wep: 'katana', extra: 'spiky' },
   h_wind: { wep: 'katana', extra: 'spiky' }, h_moth: { wep: 'staff', extra: 'ears' }, h_stone: { wep: 'hammer', extra: 'bald' },
   h_sound: { wep: 'katana', extra: 'band' }, h_moon: { wep: 'bow', extra: 'tail' },
+  x_allstar: { wep: 'katana', extra: 'band' }, x_crimson: { wep: 'katana', extra: 'horns' }, x_spider: { wep: 'staff', extra: 'tail' }, x_snow: { wep: 'katana', extra: 'crown' },
+  x_inferno: { wep: 'katana', extra: 'spiky' }, x_abyss: { wep: 'bow', extra: 'hat' }, x_shadowlord: { wep: 'katana', extra: 'mask' }, x_dawn: { wep: 'staff', extra: 'crown' },
 };
 function lookOf(t) {
   const l = { ...(LOOK[t.id] || LOOK.novice) };
@@ -176,7 +178,7 @@ function weaponGeometry(kind, L, big) {
 function makeUnit(t, owner, cat) {
   const L = lookOf(t);
   const root = new THREE.Group();
-  const scale = t.hero ? 1.45 : 1.08 + t.tier * 0.06;
+  const scale = t.hidden ? 1.5 : t.hero ? 1.45 : 1.08 + t.tier * 0.06;
   // 받침: 등급 색 + 주인 색 테두리
   const tierCol = cat.tiers[t.tier - 1].color;
   const base = new THREE.Mesh(Cyl(0.38, 0.42, 0.07, 24), toon({ color: tierCol }));
@@ -196,7 +198,7 @@ function makeUnit(t, owner, cat) {
   // 무기 (오른손에서 휘두름)
   const pivot = new THREE.Group();
   pivot.position.set(-0.25, 0.32, 0.08);
-  const wg = weaponGeometry(L.wep, L, t.tier >= 4 || t.hero);
+  const wg = weaponGeometry(L.wep, L, t.tier >= 4);
   const wm = new THREE.Mesh(wg, VCOL); wm.castShadow = true;
   const wo = new THREE.Mesh(wg, OUTLINE);
   pivot.add(wm, wo);
@@ -206,7 +208,7 @@ function makeUnit(t, owner, cat) {
   // 높은 등급: 빛 + 후광
   let glow = null;
   if (t.tier >= 4 || t.hero) {
-    glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: t.hero ? L.fx : tierCol, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
+    glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: t.hero || t.hidden ? L.fx : tierCol, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
     glow.scale.setScalar(t.hero ? 1.6 : 1.3); glow.position.y = 0.5;
     root.add(glow);
   }
@@ -518,8 +520,8 @@ function fitCamera() {
   S.overlay.width = Math.round(w * S.dpr); S.overlay.height = Math.round(h * S.dpr);
   S.camera.aspect = w / h;
   S.camera.updateProjectionMatrix();
-  const dir = new THREE.Vector3(0, 0.95, 1).normalize();
-  const look = new THREE.Vector3(0, 0, 0.2);
+  const dir = new THREE.Vector3(0, 1.6, 1).normalize();
+  const look = new THREE.Vector3(0, 0, 0.3);
   const corners = [];
   for (const x of [-S.W / 2 - 0.3, S.W / 2 + 0.3]) for (const z of [-S.H / 2 - 0.3, S.H / 2 + 0.6]) for (const y of [0, 0.9]) corners.push(new THREE.Vector3(x, y, z));
   let lo = 5, hi = 80;
@@ -531,9 +533,33 @@ function fitCamera() {
     const ok = corners.every((c) => { const p = c.clone().project(S.camera); return Math.abs(p.x) <= 0.97 && Math.abs(p.y) <= 0.95; });
     if (ok) hi = d; else lo = d;
   }
-  S.camera.position.copy(look).addScaledVector(dir, hi);
+  S.fitDist = hi; S.dir = dir; S.look0 = look.clone();
+  applyZoom();
+}
+/** 마우스 휠 확대 (커서 위치를 중심으로) */
+function applyZoom() {
+  const z = S.zoom || 1;
+  const look = S.look0.clone().add(S.pan || new THREE.Vector3());
+  S.camera.position.copy(look).addScaledVector(S.dir, S.fitDist * z);
   S.camera.lookAt(look);
+  S.camera.updateMatrixWorld();
   S.camBase.copy(S.camera.position); S.camLook.copy(look);
+}
+function onWheel(e) {
+  if (!S.map) return;
+  e.preventDefault();
+  const before = pick(e.clientX, e.clientY);
+  S.zoom = Math.max(0.45, Math.min(1, (S.zoom || 1) * (e.deltaY > 0 ? 1.12 : 0.89)));
+  if (S.zoom >= 0.999) S.pan = new THREE.Vector3();
+  applyZoom();
+  const after = pick(e.clientX, e.clientY);
+  if (before && after && S.zoom < 0.999) {
+    S.pan = (S.pan || new THREE.Vector3()).add(new THREE.Vector3(before.fx - after.fx, 0, before.fy - after.fy));
+    const lim = (1 - S.zoom) * 0.5;
+    S.pan.x = Math.max(-S.W * lim, Math.min(S.W * lim, S.pan.x));
+    S.pan.z = Math.max(-S.H * lim, Math.min(S.H * lim, S.pan.z));
+    applyZoom();
+  }
 }
 
 // ───────── 파티클 · 효과 ─────────
@@ -632,6 +658,7 @@ function init(wrap, overlayCanvas) {
   S.aimMesh.rotation.x = -Math.PI / 2; S.aimMesh.visible = false;
   S.scene.add(S.hoverMesh, S.selTileMesh, S.rangeMesh, S.selRing, S.aimMesh);
   new ResizeObserver(() => fitCamera()).observe(wrap);
+  overlayCanvas.addEventListener('wheel', onWheel, { passive: false });
   S.ok = true;
   return true;
 }
@@ -696,7 +723,7 @@ function fx(f, app) {
     }
     case 'summon': case 'merge': case 'hero': {
       const [wx, wz] = tileToWorld(f[1], f[2]);
-      const tier = kind === 'hero' ? 6 : f[3];
+      const tier = kind === 'hero' ? f[3] || 6 : f[3];
       const col = S.cat.tiers[tier - 1].color;
       const pos = new THREE.Vector3(wx, 0.1, wz);
       shock(pos, col, tier >= 4 ? 2.2 : 1, 0.5);
@@ -723,6 +750,15 @@ function fx(f, app) {
     case 'heal': floatText(wp(f[1], f[2], 1.4), '💚 회복', '#80ff80', 20, 1); spark(wp(f[1], f[2], 0.5), '#60ff80', 14, 1, 0.3, 0.8, 2, -1); break;
     case 'brood': floatText(wp(f[1], f[2], 1.4), '새끼 소환!', '#ffa080', 18, 1); break;
     case 'mission': S.tints.push({ color: '#fff0a0', t: 0, life: 0.6 }); break;
+    case 'tele': {
+      const [wx, wz] = tileToWorld(f[1], f[2]);
+      const pos = new THREE.Vector3(wx, 0.1, wz);
+      const pillar = new THREE.Mesh(Cyl(0.3, 0.3, 3, 16, true), new THREE.MeshBasicMaterial({ color: '#a0e0ff', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      pillar.position.set(wx, 1.5, wz); S.dyn.add(pillar); S.rings.push({ m: pillar, t: 0, life: 0.5, pillar: true });
+      spark(pos.clone().setY(0.4), '#c0f0ff', 10, 1.2, 0.2, 0.5, 2.5, 0);
+      app.Sound.play('arrow');
+      break;
+    }
     default:
   }
 }
@@ -771,7 +807,7 @@ function render(app, now) {
   const rawDt = S.clock.getDelta();
   const dt = Math.min(0.05, rawDt);
   if (!document.hidden && rawDt < 1) autoQuality(rawDt);
-  const v = app.v;
+  const v = app.vf || app.v;
   const T = now / 1000;
   // ── 유닛 ──
   const seen = new Set();
@@ -932,7 +968,7 @@ function render(app, now) {
 
 function drawOverlay(app, now, dt) {
   const g = S.octx, W = S.overlay.width, H = S.overlay.height, k = S.dpr;
-  const v = app.v;
+  const v = app.vf || app.v;
   g.clearRect(0, 0, W, H);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   // 체력 막대
@@ -949,7 +985,7 @@ function drawOverlay(app, now, dt) {
   // 유닛 표시: 영웅 레벨, 합성 가능 ✦
   const ready = new Set();
   const cnt = {};
-  for (const u of v.units) if (u[1] === app.myIdx) cnt[u[2]] = (cnt[u[2]] || 0) + 1;
+  for (const u of app.v.units) if (u[1] === app.myIdx) cnt[u[2]] = (cnt[u[2]] || 0) + 1;
   for (const [id, n] of Object.entries(cnt)) { const need = app.cat.mergeNeed[app.unitMap[id].tier]; if (need && n >= need) ready.add(id); }
   for (const u of v.units) {
     const o = S.units.get(u[0]); if (!o) continue;

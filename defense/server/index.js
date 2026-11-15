@@ -23,7 +23,7 @@ const CATALOG = {
   tiers: D.TIERS, units: D.UNITS, cats: D.CATS, enemies: D.ENEMIES, bosses: D.BOSSES, miniboss: D.MINIBOSS, modifiers: D.MODIFIERS,
   leaders: D.LEADERS, blessings: D.BLESSINGS, difficulties: D.DIFFICULTIES, mergeNeed: D.MERGE_NEED, econ: { ...D.ECON, waveBonus: undefined, upgradeCost: undefined },
   summonOdds: D.SUMMON_ODDS, premiumOdds: D.PREMIUM_ODDS, waves: D.WAVES, waveTime: D.WAVE_TIME, bossTime: D.BOSS_TIME,
-  themes: M.THEMES, maps: M.MAPS.map(M.summary), colors: COLORS, missions: D.MISSIONS, heroLvDmg: D.HERO_LV_DMG,
+  themes: M.THEMES, maps: M.MAPS.map(M.summary), colors: COLORS, missions: D.MISSIONS, heroLvDmg: D.HERO_LV_DMG, recipes: D.RECIPES, items: D.ITEMS, story: D.STORY, events: D.EVENTS, storyTime: D.STORY_TIME, eventTime: D.EVENT_TIME,
 };
 
 // ───────────── HTTP ─────────────

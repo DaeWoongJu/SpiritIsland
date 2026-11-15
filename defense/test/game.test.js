@@ -23,7 +23,7 @@ test('맵이 충분히 많고, 모든 길이 이어져 있다', () => {
     }
     // 길 옆에 유닛을 세울 자리가 충분
     const g = new Game(roster(), { mapId: m.id === 'random' ? 'random' : m.id, seed: m.seed });
-    assert.ok(g.spots.filter((s) => s.d === 1).length >= 30, `${m.id}: 길 옆 자리 부족`);
+    assert.ok(g.F.m0.spots.filter((s) => s.d === 1).length >= 30, `${m.id}: 길 옆 자리 부족`);
   }
 });
 
@@ -49,7 +49,7 @@ test('소환 · 합성 · 판매 · 강화', () => {
   assert.strictEqual(p.upg.blade, 1);
   // 길 위에는 못 세움
   const [px, py] = g.map.pathTiles.find(([x, y]) => x >= 0 && y >= 0);
-  assert.strictEqual(typeof g.command('a', { t: 'summon', tile: [px, py] }), 'string');
+  assert.strictEqual(typeof g.command('a', { t: 'summon', tile: [px, py], field: 'm0' }), 'string');
   // 남의 유닛은 못 건드림
   assert.strictEqual(g.command('b', { t: 'sell', unit: g.units[0].id }), null);
 });
@@ -131,6 +131,63 @@ test('요괴가 양쪽 입구에서 나온다', () => {
   for (let i = 0; i < 160; i++) lp.tick();
   const starts = new Set(lp.enemies.map((e) => Math.round(e.dist - e.travel)));
   assert.ok(starts.size >= 2, '순환 맵도 반대편 입구에서');
+});
+
+test('조합법 · 히든 조합 (재료 아이템 필요)', () => {
+  const g = new Game(roster(1), { mapId: 'h-ring', seed: 11 });
+  const p = g.players[0];
+  p.gold = 1e5;
+  for (let i = 0; i < 3; i++) g.command('a', { t: 'summon' });
+  ['novice', 'novice', 'talisman'].forEach((t, i) => { g.units[i].type = t; });
+  assert.ok(g.craftable(p).includes('r_wave'));
+  const r = g.command('a', { t: 'craft', recipe: 'r_wave' });
+  assert.ok(r && r.ok);
+  assert.strictEqual(g.units.find((u) => u.id === r.ok).type, 'wave');
+  assert.strictEqual(g.units.length, 1);
+  // 히든: 그림자 + 화염 + 붉은 달 조각
+  g.command('a', { t: 'summon' });
+  g.units[0].type = 'shadow'; g.units[1].type = 'flame';
+  assert.strictEqual(typeof g.command('a', { t: 'craft', recipe: 'h_crimson' }), 'string', '재료 아이템이 없으면 안 됨');
+  p.items.moonshard = 1;
+  const h = g.command('a', { t: 'craft', recipe: 'h_crimson' });
+  assert.strictEqual(g.units.find((u) => u.id === h.ok).type, 'x_crimson');
+  assert.strictEqual(p.items.moonshard, 0);
+  assert.deepStrictEqual(g.discovered, ['h_crimson']);
+});
+
+test('각자 전장 · 보스 스토리 · 스토리 이벤트', () => {
+  const g = new Game(roster(2), { mapId: 'h-snake', seed: 12 });
+  assert.deepStrictEqual(g.fields.map((f) => f.id), ['m0', 'm1', 'r0', 'r1', 'ev']);
+  for (let i = 0; i < 300; i++) g.tick();
+  assert.ok(g.enemies.some((e) => e.field === 'm0') && g.enemies.some((e) => e.field === 'm1'), '두 전장에 요괴가 각각 나옴');
+  const p = g.players[0];
+  p.gold = 1e5;
+  for (let i = 0; i < 4; i++) g.command('a', { t: 'summon' });
+  assert.ok(g.units.every((u) => u.field === 'm0'));
+  // 남의 전장에는 못 둠
+  const s1 = g.autoSpot(1, 'm1');
+  assert.strictEqual(typeof g.command('a', { t: 'summon', tile: [s1.x, s1.y], field: 'm1' }), 'string');
+  // 스토리: 웨이브가 모자라면 잠김
+  assert.strictEqual(typeof g.command('a', { t: 'story', id: 's1' }), 'string');
+  g.wave = 4;
+  assert.strictEqual(g.command('a', { t: 'story', id: 's1' }), null);
+  assert.ok(g.enemies.some((e) => e.field === 'r0' && e.storyBoss === 's1'));
+  g.command('a', { t: 'dispatch', field: 'r0', n: 2 });
+  assert.strictEqual(g.units.filter((u) => u.field === 'r0').length, 2);
+  const boss = g.enemies.find((e) => e.storyBoss);
+  g.hurt(boss, boss.hp + 1, g.units.find((u) => u.field === 'r0'), { pierce: true });
+  assert.deepStrictEqual(p.story.cleared, ['s1']);
+  assert.strictEqual(p.items.moonshard, 1);
+  assert.ok(g.units.every((u) => u.field === 'm0'), '끝나면 유닛이 돌아옴');
+  // 이벤트: 12웨이브에 열림
+  g.nextPlan = g.planWave(12);
+  g.startWave();
+  assert.ok(g.event);
+  assert.strictEqual(g.command('a', { t: 'dispatch', field: 'ev', n: 1 }), null);
+  const eb = g.enemies.find((e) => e.eventBoss);
+  g.hurt(eb, eb.hp + 1, null, { by: 0, pierce: true });
+  assert.strictEqual(g.event, null);
+  assert.ok(g.players.every((x) => x.items.star === 1));
 });
 
 test('화면용 상태는 JSON으로 보낼 수 있다', () => {

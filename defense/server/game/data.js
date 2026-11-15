@@ -9,6 +9,7 @@ const TIERS = [
   { id: 4, name: '전설', color: '#f8a838' },
   { id: 5, name: '신화', color: '#f85878' },
   { id: 6, name: '영웅', color: '#48f0d8' }, // 미션으로만 얻는 고유 유닛
+  { id: 7, name: '히든', color: '#ff5ad8' }, // 히든 조합으로만 만드는 유닛
 ];
 
 /**
@@ -63,6 +64,103 @@ const HEROES = [
   { id: 'h_moon', tier: 6, hero: true, name: '달그림자 궁수 월하', icon: '🌙', cat: 'bow', dmg: 660, cd: 0.8, range: 6.0, crit: { chance: 0.35, mult: 3 }, multi: 2, desc: '초승달 화살. 35% 확률로 3배 치명타', look: { robe: '#28204a', haori: '#9888e8', hair: '#d8d8f8', fx: '#c8b8ff' } },
 ];
 UNITS.push(...HEROES);
+
+/** 히든 유닛 — 히든 조합으로만 만듦 (조합법은 처음엔 ??? 로 가려져 있음) */
+const HIDDEN_UNITS = [
+  { id: 'x_allstar', tier: 7, hidden: true, name: '만능 수련생 다온', icon: '🎒', cat: 'blade', dmg: 170, cd: 0.45, range: 2.6, multi: 2, slow: { pct: 0.2, dur: 1 }, desc: '다섯 수련생의 기술을 모두 익힌 신동', look: { robe: '#384868', haori: '#f8f0d8', hair: '#3a2010', fx: '#ffe8a0' } },
+  { id: 'x_crimson', tier: 7, hidden: true, name: '적월검귀 홍야', icon: '🩸', cat: 'blade', dmg: 1500, cd: 0.55, range: 2.2, splash: 1.6, execute: 0.15, burn: { dps: 300, dur: 3 }, desc: '붉은 달빛을 머금은 귀검. 약해진 요괴 즉사', look: { robe: '#401018', haori: '#e82838', hair: '#f8f0f0', fx: '#ff3050' } },
+  { id: 'x_spider', tier: 7, hidden: true, name: '거미실 인형사 사요', icon: '🕸️', cat: 'magic', dmg: 600, cd: 0.7, range: 3.8, multi: 4, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.15, dur: 1 }, desc: '실로 넷을 묶어 꼼짝 못 하게', look: { robe: '#f0f0f8', haori: '#8878b8', hair: '#f8f8ff', fx: '#e0d8ff' } },
+  { id: 'x_snow', tier: 7, hidden: true, name: '설화검희 은설', icon: '❄️', cat: 'blade', dmg: 1400, cd: 0.6, range: 2.2, splash: 1.8, slow: { pct: 0.6, dur: 2 }, stun: { chance: 0.2, dur: 1 }, desc: '눈꽃 검무로 넓게 얼립니다', look: { robe: '#e8f4ff', haori: '#88c8f8', hair: '#f8fcff', fx: '#c8f0ff' } },
+  { id: 'x_inferno', tier: 7, hidden: true, name: '업화검신 염제', icon: '☄️', cat: 'blade', dmg: 2200, cd: 0.8, range: 2.2, splash: 2.2, burn: { dps: 600, dur: 3 }, desc: '꺼지지 않는 불꽃으로 모든 것을 태웁니다', look: { robe: '#601008', haori: '#ff6a10', hair: '#ffd040', fx: '#ff8020' } },
+  { id: 'x_abyss', tier: 7, hidden: true, name: '심연의 낚시꾼 해무', icon: '🎣', cat: 'bow', dmg: 1200, cd: 0.4, range: 6.0, multi: 3, shred: 3, desc: '심연에서 건져 올린 작살. 셋을 꿰뚫고 방어 파괴', look: { robe: '#0a2840', haori: '#28a8a8', hair: '#103040', fx: '#40f0e0' } },
+  { id: 'x_shadowlord', tier: 7, hidden: true, name: '그림자 검성 무영', icon: '🌑', cat: 'blade', dmg: 1800, cd: 0.35, range: 2.2, chain: 3, execute: 0.2, pierceArmor: true, desc: '보이지 않는 검. 방어 무시 연쇄 베기', look: { robe: '#0a0a10', haori: '#302848', hair: '#000000', fx: '#a070ff' } },
+  { id: 'x_dawn', tier: 7, hidden: true, name: '새벽의 수호신 효명', icon: '🌅', cat: 'magic', dmg: 4000, cd: 0.7, range: 5.0, chain: 6, burn: { dps: 1000, dur: 3 }, aura: { as: 0.3, dmg: 0.3, r: 3.5 }, pierceArmor: true, desc: '긴 밤을 끝내는 새벽빛. 주변 아군 공속·피해 +30%', look: { robe: '#f8f0e0', haori: '#ffb040', hair: '#fff8e0', fx: '#ffe070' } },
+];
+UNITS.push(...HIDDEN_UNITS);
+
+/** 스토리 보스·이벤트에서 얻는 히든 조합 재료 */
+const ITEMS = {
+  moonshard: { name: '붉은 달 조각', icon: '🔴' },
+  silk: { name: '거미 실타래', icon: '🧶' },
+  ice: { name: '만년설 결정', icon: '💠' },
+  ember: { name: '꺼지지 않는 불씨', icon: '🕯️' },
+  pearl: { name: '심연의 진주', icon: '🦪' },
+  shade: { name: '그림자 조각', icon: '🖤' },
+  star: { name: '별의 파편', icon: '🌠' },
+};
+
+/**
+ * 조합법 — 재료(내 유닛·재료 아이템)를 모으면 정해진 유닛이 나옴.
+ * hidden: 처음엔 ??? 로 가려져 있고 누군가 만들면 공개 (hint만 보임)
+ */
+const RECIPES = [
+  // 희귀
+  { id: 'r_wave', out: 'wave', need: ['novice', 'novice', 'talisman'] },
+  { id: 'r_wind', out: 'wind', need: ['hunter', 'hunter', 'needle'] },
+  { id: 'r_frost', out: 'frost', need: ['talisman', 'talisman', 'hunter'] },
+  { id: 'r_spark', out: 'spark', need: ['powder', 'talisman', 'needle'] },
+  { id: 'r_monk', out: 'monk', need: ['novice', 'powder', 'powder'] },
+  // 에픽
+  { id: 'r_flame', out: 'flame', need: ['wave', 'monk', 'powder'] },
+  { id: 'r_spear', out: 'spear', need: ['spark', 'monk', 'novice'] },
+  { id: 'r_moon', out: 'moon', need: ['wind', 'wind', 'hunter'] },
+  { id: 'r_petal', out: 'petal', need: ['frost', 'wind', 'talisman'] },
+  { id: 'r_shadow', out: 'shadow', need: ['wave', 'needle', 'needle'] },
+  // 전설
+  { id: 'r_sun', out: 'sun', need: ['flame', 'flame', 'monk'] },
+  { id: 'r_storm', out: 'storm', need: ['moon', 'wind', 'spear'] },
+  { id: 'r_queen', out: 'queen', need: ['petal', 'frost', 'frost'] },
+  { id: 'r_thunder', out: 'thunder', need: ['spear', 'spark', 'spark'] },
+  // 신화
+  { id: 'r_emperor', out: 'emperor', need: ['sun', 'shadow', 'moon'] },
+  { id: 'r_fox', out: 'fox', need: ['queen', 'petal', 'flame'] },
+  { id: 'r_bird', out: 'bird', need: ['storm', 'thunder', 'moon'] },
+  // 히든
+  { id: 'h_allstar', out: 'x_allstar', hidden: true, need: ['novice', 'hunter', 'talisman', 'powder', 'needle'], hint: '다섯 갈래 수련의 길이 하나로 모이면…' },
+  { id: 'h_crimson', out: 'x_crimson', hidden: true, need: ['shadow', 'flame', '#moonshard'], hint: '그림자와 불꽃, 그리고 붉은 달의 밤 (보스 스토리 1장)' },
+  { id: 'h_spider', out: 'x_spider', hidden: true, need: ['petal', 'needle', 'needle', '#silk'], hint: '꽃잎과 독침을 거미줄로 엮으면… (2장)' },
+  { id: 'h_snow', out: 'x_snow', hidden: true, need: ['queen', 'wave', '#ice'], hint: '얼음의 여왕이 물결과 만년설을 만나면 (3장)' },
+  { id: 'h_inferno', out: 'x_inferno', hidden: true, need: ['sun', 'flame', '#ember'], hint: '태양에 꺼지지 않는 불씨를 더하면 (4장)' },
+  { id: 'h_abyss', out: 'x_abyss', hidden: true, need: ['storm', 'wave', '#pearl'], hint: '폭풍과 물결이 심연에 닿으면 (5장)' },
+  { id: 'h_shadowlord', out: 'x_shadowlord', hidden: true, need: ['shadow', 'shadow', 'shadow', '#shade'], hint: '그림자 셋과 그림자의 조각 (6장)' },
+  { id: 'h_dawn', out: 'x_dawn', hidden: true, need: ['emperor', 'fox', 'bird', '#star'], hint: '세 신화와 하늘의 별 조각 (스토리 이벤트)' },
+];
+const RECIPE_MAP = Object.fromEntries(RECIPES.map((r) => [r.id, r]));
+
+/** 보스 스토리 — 각자 자기 보스방에서 도전 (이전 장을 깨야 다음 장) */
+const STORY = [
+  { id: 's1', ch: 1, wave: 4, title: '붉은 달의 밤', boss: '도깨비 장군 적귀', icon: '👹', model: 'b_ogre', hp: 30, armor: 3, item: 'moonshard', gold: 200,
+    intro: '붉은 달이 뜬 밤, 마을 어귀 대숲에서 북소리가 울린다. "인간 따위가 내 길을 막느냐!" 도깨비 장군 적귀가 철퇴를 치켜든다.',
+    outro: '적귀가 쓰러지며 손에 쥐고 있던 붉은 달 조각을 떨어뜨렸다. 조각은 아직도 희미하게 빛난다…' },
+  { id: 's2', ch: 2, wave: 9, title: '안개 속 거미굴', boss: '거미 여왕 사라', icon: '🕷️', model: 'spider', hp: 40, armor: 5, item: 'silk', gold: 300,
+    intro: '실종된 나무꾼들을 찾아 들어간 안개 숲. 사방에 하얀 실이 늘어져 있다. "어서 오렴… 내 인형이 되어 주겠니?"',
+    outro: '거미 여왕이 사라진 자리에 질긴 은빛 실타래가 남았다. 나무꾼들은 무사히 마을로 돌아갔다.' },
+  { id: 's3', ch: 3, wave: 14, title: '얼어붙은 사당', boss: '설녀 빙화', icon: '🧊', model: 'wisp', hp: 50, armor: 6, item: 'ice', gold: 400,
+    intro: '한여름에 눈이 내리는 산사. 종소리 대신 차가운 웃음소리가 들린다. "이 겨울을 끝내고 싶다면 나를 녹여 보아라."',
+    outro: '빙화가 녹아내리자 산사에 봄바람이 불었다. 제단 위에 녹지 않는 만년설 결정 하나가 남았다.' },
+  { id: 's4', ch: 4, wave: 19, title: '불타는 다리', boss: '화염 귀신 염라귀', icon: '🔥', model: 'b_king', hp: 60, armor: 8, item: 'ember', gold: 500,
+    intro: '강 건너 마을로 가는 유일한 다리가 불길에 휩싸였다. 불꽃 속에서 거대한 그림자가 걸어 나온다. "재가 되어라!"',
+    outro: '불길이 잦아든 다리 위, 꺼지지 않는 작은 불씨가 반짝인다. 따뜻하지만 결코 꺼지지 않는다.' },
+  { id: 's5', ch: 5, wave: 24, title: '심연의 늪', boss: '늪의 주인 흑린', icon: '🐉', model: 'b_serpent', hp: 70, armor: 10, item: 'pearl', gold: 650,
+    intro: '검은 늪의 수면이 갈라지며 비늘 덮인 거대한 몸이 솟아오른다. "천 년을 잠들어 있었다. 너희가 나를 깨웠구나."',
+    outro: '흑린이 늪 깊이 가라앉고, 물 위로 어둡게 빛나는 심연의 진주가 떠올랐다.' },
+  { id: 's6', ch: 6, wave: 29, title: '그림자 무사', boss: '상현의 그림자 무사', icon: '🥷', model: 'armor', hp: 85, armor: 12, item: 'shade', gold: 800,
+    intro: '달 없는 밤, 발소리 없이 다가오는 검사가 있다. "요괴왕님의 명이다. 퇴마사의 목을 거두러 왔다."',
+    outro: '그림자 무사가 무릎을 꿇고 사라진다. "요괴왕의 성은… 새벽이 오기 전에…" 검은 조각 하나가 남았다.' },
+];
+const STORY_TIME = 90; // 보스방 제한 시간(초)
+const STORY_COOLDOWN = 20; // 실패 뒤 다시 도전까지(초)
+
+/** 스토리 이벤트 — 일정 웨이브에 열리는 공동 전장. 둘이 유닛을 보내 함께 잡음 */
+const EVENTS = [
+  { wave: 12, boss: '요괴 대장군 철귀', icon: '👺', model: 'mini', hp: 120, armor: 8,
+    intro: '요괴들의 진군을 이끄는 대장군 철귀가 나타났다! 각자의 전장을 지키면서, 정예를 이벤트 전장으로 보내 함께 쓰러뜨리자!' },
+  { wave: 24, boss: '하늘을 가르는 천둥지네', icon: '🐛', model: 'b_centi', hp: 150, armor: 12,
+    intro: '하늘이 갈라지며 천둥을 두른 거대 지네가 내려온다. 둘의 힘을 모아야 한다!' },
+  { wave: 36, boss: '요괴왕의 분신 흑염영', icon: '😈', model: 'b_king', hp: 180, armor: 16,
+    intro: '요괴왕이 자신의 분신을 보냈다. 이 분신을 쓰러뜨리면 요괴왕의 힘이 약해진다!' },
+];
+const EVENT_TIME = 100;
 const HERO_MAX_LV = 10;
 /** 영웅 레벨 (처치 수로 성장) */
 const heroLevel = (kills) => Math.min(HERO_MAX_LV, 1 + Math.floor(Math.sqrt(kills / 6)));
@@ -74,17 +172,17 @@ const HERO_LV_DMG = 0.12; // 레벨당 피해 +15%
  */
 const MISSIONS = [
   { id: 'kill1', name: '첫 사냥', icon: '🗡️', desc: '요괴 200마리 처치', stat: 'kills', goal: 200 },
-  { id: 'boss', name: '보스 사냥꾼', icon: '👹', desc: '보스 2마리 처치 (함께)', stat: 'bosses', goal: 2, team: true },
+  { id: 'boss', name: '보스 사냥꾼', icon: '👹', desc: '내 전장에서 보스 2마리 처치', stat: 'bosses', goal: 2 },
   { id: 'legend', name: '전설의 시작', icon: '🌟', desc: '전설 등급 유닛 만들기', stat: 'bestTier', goal: 4 },
   { id: 'upg', name: '수련', icon: '⚒️', desc: '강화 합계 15단계', stat: 'upgSum', goal: 15 },
-  { id: 'toad', name: '보물 사냥', icon: '🐸', desc: '보물 두꺼비 잡기 (함께)', stat: 'toads', goal: 1, team: true },
+  { id: 'toad', name: '보물 사냥', icon: '🐸', desc: '내 전장에서 보물 두꺼비 잡기', stat: 'toads', goal: 1 },
   { id: 'kill2', name: '백전노장', icon: '⚔️', desc: '요괴 700마리 처치', stat: 'kills', goal: 700 },
   { id: 'wave', name: '버텨라', icon: '🏯', desc: '25웨이브 도달 (함께)', stat: 'wave', goal: 25, team: true },
   { id: 'myth', name: '신화 탄생', icon: '🌈', desc: '신화 등급 유닛 만들기', stat: 'bestTier', goal: 5 },
 ];
 const UNIT_MAP = Object.fromEntries(UNITS.map((u) => [u.id, u]));
 const BY_TIER = {};
-for (const u of UNITS) if (!u.hero) (BY_TIER[u.tier] ||= []).push(u.id);
+for (const u of UNITS) if (!u.hero && !u.hidden) (BY_TIER[u.tier] ||= []).push(u.id);
 
 /** 같은 유닛 몇 개로 합성하는지 (등급별) */
 const MERGE_NEED = { 1: 3, 2: 3, 3: 3, 4: 2 };
@@ -118,7 +216,7 @@ const BOSSES = [
   { wave: 10, id: 'b_ogre', name: '도깨비 대장', icon: '👹', speed: 0.7, armor: 4, hpMul: 26, ability: 'rage', desc: '체력이 절반 이하면 빨라집니다' },
   { wave: 20, id: 'b_centi', name: '거대 지네', icon: '🐛', speed: 0.65, armor: 8, hpMul: 24, ability: 'brood', desc: '주기적으로 새끼를 낳습니다' },
   { wave: 30, id: 'b_serpent', name: '구렁이 여왕', icon: '🐉', speed: 0.6, armor: 12, hpMul: 22, ability: 'heal', desc: '주기적으로 체력을 회복합니다' },
-  { wave: 40, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 16, hpMul: 22, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
+  { wave: 40, id: 'b_king', name: '요괴왕 흑염', icon: '😈', speed: 0.55, armor: 16, hpMul: 15, ability: 'all', desc: '마지막 보스. 분노·소환·회복을 모두 씁니다' },
 ];
 const MINIBOSS = { name: '요괴 우두머리', icon: '👿', speed: 0.8, armor: 3, hpMul: 18 };
 
@@ -168,10 +266,10 @@ const DIFFICULTIES = [
 ];
 
 const ECON = {
-  startGold: 220,
+  startGold: 380,
   summonCost: 50,
   premiumCost: 180, // 고급 소환: 희귀 이상 보장
-  sellRate: [0, 25, 70, 200, 520, 1200, 0],
+  sellRate: [0, 25, 70, 200, 520, 1200, 0, 0],
   waveBonus: (w) => 50 + w * 6,
   upgradeCost: (lv) => 60 + lv * 45,
   upgradeStep: 0.12, // 강화 1단계마다 피해 +12%
@@ -189,6 +287,7 @@ const BOSS_TIME = 100; // 순환 맵에서 보스를 잡아야 하는 시간(초
 
 module.exports = {
   TIERS, UNITS, UNIT_MAP, BY_TIER, MERGE_NEED, CATS, ENEMIES, ENEMY_POOL, BOSSES, MINIBOSS, MODIFIERS,
+  HIDDEN_UNITS, ITEMS, RECIPES, RECIPE_MAP, STORY, STORY_TIME, STORY_COOLDOWN, EVENTS, EVENT_TIME,
   HEROES, HERO_MAX_LV, heroLevel, HERO_LV_DMG, MISSIONS,
   LEADERS, LEADER_MAP, BLESSINGS, BLESS_MAP, DIFFICULTIES, ECON, SUMMON_ODDS, PREMIUM_ODDS, WAVES, WAVE_TIME, BOSS_TIME,
 };
